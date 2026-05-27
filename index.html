@@ -3661,6 +3661,7 @@ function RequerimientosPlantaTab({ equipos, currentUser, flash, reqs, setReqs })
   }
 
   async function handleSubmit(){
+    if(saving) return;
     if(!area)       { flash("Selecciona un área","warn"); return; }
     if(!req.trim()) { flash("Escribe el requerimiento","warn"); return; }
     setSaving(true);
