@@ -1037,21 +1037,15 @@ async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, acept
 
 async function pushNotificacion(titulo, mensaje){
   try {
-    await fetch("https://onesignal.com/api/v1/notifications",{
+    await fetch(SUPA_URL+"/functions/v1/send-push",{
       method:"POST",
       headers:{
         "Content-Type":"application/json",
-        "Authorization":"Key "+OS_API_KEY
+        "Authorization":"Bearer "+SUPA_KEY
       },
-      body:JSON.stringify({
-        app_id: OS_APP_ID,
-        included_segments: ["All"],
-        headings: { en: titulo, es: titulo },
-        contents: { en: mensaje,  es: mensaje  },
-        web_push_topic: "req-planta",
-      })
+      body:JSON.stringify({ titulo, mensaje })
     });
-  } catch(e){ console.warn("OneSignal push error:",e); }
+  } catch(e){ console.warn("Push error:",e); }
 }
 
 async function registrarHistorial(tipo, descripcion, usuario) {
