@@ -1293,7 +1293,6 @@ function AlmacenApp({onBack}){
   const [toast,setToast]=useState(null);
   const [loading,setLoading]=useState(true);
   const [syncing,setSyncing]=useState(false);
-  const [reqsPlanta,setReqsPlanta]=useState([]);
 
   // Interceptar gesto/botón "atrás" cuando hay un modal abierto
   useEffect(()=>{
@@ -1473,20 +1472,6 @@ function AlmacenApp({onBack}){
         ws["!cols"]=[{wch:12},{wch:30},{wch:14},{wch:10},{wch:14},{wch:10},{wch:14},{wch:14}];
         XLSX.utils.book_append_sheet(wb,ws,"Inventario");
 
-      } else if(tab==="req_planta"){
-        const {data,error}=await sb.from("requerimientos_planta").select("*").order("created_at",{ascending:false});
-        if(error) throw error;
-        const rows=(data||[]).map(r=>({
-          "Fecha":fmtDate(r.created_at),
-          "Área":r.area||"",
-          "Equipo":r.equipo||"",
-          "Requerimiento":r.requerimiento||"",
-          "Solicitante":r.solicitante||"",
-          "Estado":r.estado||"pendiente"
-        }));
-        const ws=XLSX.utils.json_to_sheet(rows);
-        ws["!cols"]=[{wch:20},{wch:24},{wch:24},{wch:40},{wch:18},{wch:14}];
-        XLSX.utils.book_append_sheet(wb,ws,"Req. Planta");
       }
 
       XLSX.writeFile(wb,"Bussie_"+tab.charAt(0).toUpperCase()+tab.slice(1)+"_"+stamp+".xlsx");
@@ -1837,7 +1822,7 @@ function AlmacenApp({onBack}){
           </div>
         </div>
         <div className="seg-ctrl">
-          {[["panel","📊","Panel"],["inventario","📦","Inventario"],["equipos","🏭","Equipos"],["historial","📋","Historial"],["solicitudes","📨","Solicitudes"],["analisis","📈","Análisis"],["req_planta","🏗️","Req. Planta"],...(currentUser.role==="admin"?[["usuarios","🛡️","Usuarios"]]:[])].map(([k,ic,lb])=>(
+          {[["panel","📊","Panel"],["inventario","📦","Inventario"],["equipos","🏭","Equipos"],["historial","📋","Historial"],["solicitudes","📨","Solicitudes"],["analisis","📈","Análisis"],...(currentUser.role==="admin"?[["usuarios","🛡️","Usuarios"]]:[])].map(([k,ic,lb])=>(
             <button key={k} className={`seg-btn ${tab===k?"active":""}`} onClick={()=>{setTab(k);setOnlyAlerts(false);}}>
               <span style={{
                 width:28,height:28,borderRadius:8,flexShrink:0,
@@ -1904,7 +1889,7 @@ function AlmacenApp({onBack}){
         )}
 
         {/* PANEL */}
-        {tab==="panel" && <Panel items={items} movs={sorted} alerts={alerts} equipos={equipos} setTab={setTab} setOnlyAlerts={setOnlyAlerts} currentUser={currentUser} flash={flash} reloadHistorial={reloadHistorial} reqsPlanta={reqsPlanta}/>}
+        {tab==="panel" && <Panel items={items} movs={sorted} alerts={alerts} equipos={equipos} setTab={setTab} setOnlyAlerts={setOnlyAlerts} currentUser={currentUser} flash={flash} reloadHistorial={reloadHistorial}/>}
 
         {/* INVENTARIO */}
         {tab==="inventario" && (
@@ -2001,7 +1986,6 @@ function AlmacenApp({onBack}){
         {/* SOLICITUDES */}
         {tab==="solicitudes"&&<SolicitudesTab currentUser={currentUser} items={items} equipos={equipos} flash={flash} reloadHistorial={reloadHistorial}/>}
         {tab==="analisis"&&<AnalisisTab items={items} equipos={equipos}/>}
-        {tab==="req_planta"&&<RequerimientosPlantaTab equipos={equipos} currentUser={currentUser} flash={flash} reqs={reqsPlanta} setReqs={setReqsPlanta}/>}
       </div>
 
       {/* ── Mobile bottom tab bar ── */}
@@ -2013,7 +1997,6 @@ function AlmacenApp({onBack}){
           ["historial","📋","Historial"],
           ["solicitudes","📨","Solicitudes"],
           ["analisis","📈","Análisis"],
-          ["req_planta","🏗️","Planta"],
           ...(currentUser.role==="admin"?[["usuarios","🛡️","Usuarios"]]:[])
         ].map(([k,ic,lb])=>(
           <button key={k} className={`btab-btn ${tab===k?"btab-active":""}`}
@@ -4423,7 +4406,7 @@ function AnalisisTab({ items, equipos }) {
   );
 }
 
-function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash,reloadHistorial,reqsPlanta}){
+function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash,reloadHistorial}){
   const total=items.reduce((s,i)=>s+i.quantity,0);
 
   // Últimos movimientos — fetch propio para estar siempre actualizado
