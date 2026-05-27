@@ -7135,7 +7135,7 @@ function EntryDetail(props){
       )}
       {entry.pendientes.length>0&&(
         <Sec title="Pendientes" col="#C45200" icon="pend">
-          {entry.pendientes.map(function(p,i){return <ARow key={p.id} num={i+1} area={p.area} desc={p.desc} col="#C45200" badge={<PBadge p={p.p}/>}/>;}) }
+          {entry.pendientes.map(function(p,i){return <ARow key={p.id||i} num={i+1} area={p.equipo&&p.equipo.trim()?p.equipo:p.area} desc={p.desc} col="#C45200" badge={<PBadge p={p.p}/>}/>;}) }
         </Sec>
       )}
       {entry.obs&&(
@@ -7212,7 +7212,7 @@ function EntryExpanded({entry, onPrint}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:3}}>
                     <span style={{background:"#e8f0fb",color:NV,padding:"2px 8px",borderRadius:6,
-                      fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{p.area}</span>
+                      fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{p.equipo&&p.equipo.trim()?p.equipo:p.area}</span>
                     <span style={{background:PBG[p.p],color:PCOL[p.p],padding:"2px 8px",
                       borderRadius:6,fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{p.p}</span>
                   </div>
