@@ -1042,14 +1042,17 @@ async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, acept
 
 async function pushNotificacion(titulo, mensaje){
   try {
-    await fetch(SUPA_URL+"/functions/v1/send-push",{
+    console.log("🔔 Enviando push:", titulo, mensaje);
+    const res = await fetch(SUPA_URL+"/functions/v1/send-push",{
       method:"POST",
       headers:{
         "Content-Type":"application/json",
-        "Authorization":"Bearer "+SUPA_KEY
+        "Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15c3FraHR0ZHF1d2ljcnNqY21nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzQ5MDEzMywiZXhwIjoyMDkzMDY2MTMzfQ.U2aGwC7M4UUStATbwdF3bcL0sKmKtsUwmkUrg1_o0_8"
       },
       body:JSON.stringify({ titulo, mensaje })
     });
+    const data = await res.json();
+    console.log("🔔 Push response:", data);
   } catch(e){ console.warn("Push error:",e); }
 }
 
