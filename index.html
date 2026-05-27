@@ -963,7 +963,7 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── OneSignal push ─────────────────────────────────────────────────────────
 const OS_APP_ID  = "8ed5965d-96c5-4ba3-b710-4a1144a0e848";
-const OS_API_KEY = "os_v2_app_r3kzmxmwyvf2hnyqjiiujihijc6vz7uofqrumwuqbb5ptbayykw2hvchae6gbxcstzq5jihzf5l34xm6aipw24jjwbc73ajxj3fc5da";
+const OS_API_KEY = "os_v2_app_r3kzmxmwyvf2hnyqjiiujihijaa33laehctebluazqg3a6ovkhncz6nhg2xig32pyf3py5qy25bs4dqwizuxedbatrzs6mduewomchy";
 
 // ── Registrar cierre de req en Bitácora ───────────────────────────────────
 async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, aceptadoAt, cerradoAt){
@@ -1005,6 +1005,7 @@ async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, acept
       pendientes: estado==="cierre_parcial" ? [{
         desc: (trabajoRealizado ? trabajoRealizado+" — " : "")+"Requerimiento: "+req.requerimiento+" [CIERRE PARCIAL]",
         area: req.area,
+        equipo: req.equipo || "",
       }] : [],
       obs: "Registrado automáticamente desde Requerimientos Planta · Solicitado por: "+req.solicitante,
     };
@@ -7384,13 +7385,13 @@ function AnalisisView(props){
   entries.forEach(function(entry){
     entry.realizadas.forEach(function(r){
       var key = r.equipo && r.equipo.trim() ? r.equipo.trim() : null;
-      if(!key) return; // solo equipos, no áreas
+      if(!key) return;
       if(!eqMap[key])eqMap[key]={area:key,iv:0,min:0,pend:0,alta:0};
       eqMap[key].iv++;eqMap[key].min+=dm(r.hi,r.hf);
     });
     entry.pendientes.forEach(function(p){
       var key = p.equipo && p.equipo.trim() ? p.equipo.trim() : null;
-      if(!key) return; // solo equipos, no áreas
+      if(!key) return;
       if(!eqMap[key])eqMap[key]={area:key,iv:0,min:0,pend:0,alta:0};
       eqMap[key].pend++;if(p.p==="Alta")eqMap[key].alta++;
     });
