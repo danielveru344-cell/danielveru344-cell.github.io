@@ -976,6 +976,14 @@ async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, acept
     var turnoLabel = "Sin turno";
     try{
       var tlist = JSON.parse(localStorage.getItem("btk_tur")||"[]");
+      // Si no hay turnos en localStorage, intentar desde Supabase
+      if(!tlist||tlist.length===0){
+        var r = await fetch(SUPA_URL+"/rest/v1/bitacora_kv?key=eq.btk_tur",{
+          headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}
+        });
+        var d = await r.json();
+        if(d&&d.length>0&&d[0].value) tlist=d[0].value;
+      }
       var cm = new Date().getHours()*60+new Date().getMinutes();
       for(var i=0;i<tlist.length;i++){
         var m=tlist[i].match(/(\d+):(\d+)\s*[-–]\s*(\d+):(\d+)/);
