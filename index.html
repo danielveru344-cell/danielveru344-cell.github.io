@@ -33,7 +33,9 @@
     await OneSignal.init({
       appId: "8ed5965d-96c5-4ba3-b710-4a1144a0e848",
       safari_web_id: "web.onesignal.auto.05fed58c-1a2a-4bf1-97b0-0a5be0dd2565",
-      notifyButton: { enable: false }, // usamos nuestro propio trigger
+      serviceWorkerPath: "/bussie/OneSignalSDKWorker.js",
+      serviceWorkerParam: { scope: "/bussie/" },
+      notifyButton: { enable: false },
       allowLocalhostAsSecureOrigin: true,
     });
   });
