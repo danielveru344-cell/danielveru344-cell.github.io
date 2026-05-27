@@ -994,14 +994,15 @@ async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, acept
       turno:     turnoLabel,
       tecnico:   tecnico.code ? tecnico.code+" · "+tecnico.name : tecnico.name,
       origen:    "req_planta",
-      realizadas: estado==="resuelto" ? [{
+      realizadas: [{
         hi:     hhmm(aceptadoAt),
         hf:     hhmm(cerradoAt),
         equipo: req.equipo || "",
         area:   req.area,
-        desc:   (trabajoRealizado||"Requerimiento: "+req.requerimiento)+" [RESUELTO]",
+        desc:   (trabajoRealizado||"Requerimiento: "+req.requerimiento)
+                +" ["+(estado==="resuelto"?"RESUELTO":"CIERRE PARCIAL")+"]",
         tipo:   "correctivo",
-      }] : [],
+      }],
       pendientes: estado==="cierre_parcial" ? [{
         desc: (trabajoRealizado ? trabajoRealizado+" — " : "")+"Requerimiento: "+req.requerimiento+" [CIERRE PARCIAL]",
         area: req.area,
