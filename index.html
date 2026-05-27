@@ -982,8 +982,15 @@ async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, acept
           headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}
         });
         var d = await r.json();
-        if(d&&d.length>0&&d[0].value) tlist=d[0].value;
+        if(d&&d.length>0&&d[0].value){
+          var val = d[0].value;
+          // value puede venir como string JSON o como array
+          if(typeof val==="string") try{ val=JSON.parse(val); }catch(ex){}
+          if(Array.isArray(val)&&val.length>0) tlist=val;
+        }
       }
+      // Fallback a defaults si sigue vacío
+      if(!tlist||tlist.length===0) tlist=["Turno A (6:00-14:00)","Turno B (14:00-22:00)","Turno C (22:00-6:00)"];
       var cm = new Date().getHours()*60+new Date().getMinutes();
       for(var i=0;i<tlist.length;i++){
         var m=tlist[i].match(/(\d+):(\d+)\s*[-–]\s*(\d+):(\d+)/);
