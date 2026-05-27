@@ -997,9 +997,10 @@ async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, acept
       realizadas: [{
         hi:     hhmm(aceptadoAt),
         hf:     hhmm(cerradoAt),
-        equipo: req.equipo || "",
+        equipo: req.equipo ? req.equipo : req.area,
         area:   req.area,
-        desc:   (trabajoRealizado||"Requerimiento: "+req.requerimiento)
+        desc:   (req.equipo ? req.area+" — " : "")
+                +(trabajoRealizado||"Requerimiento: "+req.requerimiento)
                 +" ["+(estado==="resuelto"?"RESUELTO":"CIERRE PARCIAL")+"]",
         tipo:   "correctivo",
       }],
