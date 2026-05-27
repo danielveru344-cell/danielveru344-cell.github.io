@@ -975,30 +975,17 @@ async function registrarEnBitacora(req, tecnico, estado, trabajoRealizado, acept
     // Detectar turno desde localStorage de Bitácora
     var turnoLabel = "Sin turno";
     try{
-      var tlist = JSON.parse(localStorage.getItem("btk_tur")||"[]");
-      // Si no hay turnos en localStorage, intentar desde Supabase
-      if(!tlist||tlist.length===0){
-        var r = await fetch(SUPA_URL+"/rest/v1/bitacora_kv?key=eq.btk_tur",{
-          headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}
-        });
-        var d = await r.json();
-        if(d&&d.length>0&&d[0].value){
-          var val = d[0].value;
-          // value puede venir como string JSON o como array
-          if(typeof val==="string") try{ val=JSON.parse(val); }catch(ex){}
-          if(Array.isArray(val)&&val.length>0) tlist=val;
-        }
-      }
-      // Fallback a defaults si sigue vacío
-      if(!tlist||tlist.length===0) tlist=["Turno A (6:00-14:00)","Turno B (14:00-22:00)","Turno C (22:00-6:00)"];
-      var cm = new Date().getHours()*60+new Date().getMinutes();
-      for(var i=0;i<tlist.length;i++){
-        var m=tlist[i].match(/(\d+):(\d+)\s*[-–]\s*(\d+):(\d+)/);
-        if(m){
-          var s=parseInt(m[1])*60+parseInt(m[2]), e=parseInt(m[3])*60+parseInt(m[4]);
-          if(e>s){ if(cm>=s&&cm<e){ turnoLabel=tlist[i]; break; } }
-          else   { if(cm>=s||cm<e){ turnoLabel=tlist[i]; break; } }
-        }
+      var now = new Date();
+      var cm = now.getHours()*60 + now.getMinutes();
+      var TURNOS_STD = [
+        {label:"Turno A (6:00-14:00)",  s:6*60,   e:14*60},
+        {label:"Turno B (14:00-22:00)", s:14*60,  e:22*60},
+        {label:"Turno C (22:00-6:00)",  s:22*60,  e:6*60},
+      ];
+      for(var i=0;i<TURNOS_STD.length;i++){
+        var t=TURNOS_STD[i];
+        if(t.e>t.s){ if(cm>=t.s&&cm<t.e){ turnoLabel=t.label; break; } }
+        else        { if(cm>=t.s||cm<t.e){ turnoLabel=t.label; break; } }
       }
     }catch(ex){}
 
