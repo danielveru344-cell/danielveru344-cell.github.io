@@ -2096,6 +2096,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
   const [cotizModal,setCotizModal] = useState(null);
   const [proveedorInput,setProveedorInput] = useState("");
   const [entregaModal,setEntregaModal] = useState(null);
+  const [cantEntregada,setCantEntregada] = useState("");
   const [dispModal,setDispModal] = useState(null);       // modal marcar disponible
   const [dispProveedor,setDispProveedor] = useState(""); // proveedor del pedido
   const [dispRemision,setDispRemision] = useState("");   // número de remisión
@@ -2120,18 +2121,20 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
 
   // Entregada: se despacha al solicitante → SALIDA del almacén
   const handleEntrega = async (soli) => {
-    const cantSoli = soli.quantity||0;
+    const cant = parseInt(cantEntregada);
+    if(isNaN(cant)||cant<=0){flash("Ingresa la cantidad a entregar",false);return;}
     const art = items.find(i=>i.code===soli.item_code||i.name===soli.item_name);
     if(!art){flash("Artículo no encontrado en inventario",false);return;}
     if(registerMovement){
       await registerMovement(art,{
         type:"salida",
-        qty:cantSoli,
+        qty:cant,
         reason:`Entrega solicitud ${soli.consecutivo||("#"+soli.id)} · ${soli.solicitante_name||""}`,
       });
     }
     await cambiarEstado(soli,"entregada","",null);
     setEntregaModal(null);
+    setCantEntregada("");
   };
 
   const fetchSolis = async () => {
@@ -2383,7 +2386,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                     {acciones.map(e=>(
                       <button key={e.key} onClick={()=>{
                         if(e.key==="en_cotizacion"){ setCotizModal(s); setProveedorInput(""); return; }
-                        if(e.key==="entregada"){ setEntregaModal(s); return; }
+                        if(e.key==="entregada"){ setEntregaModal(s); setCantEntregada(String(s.quantity||"")); return; }
                         if(e.key==="entregada_almacen"){ setDispModal(s); setDispProveedor(s.proveedor||""); setDispRemision(""); setDispCantidad(String(s.quantity||"")); return; }
                         const msg = CONFIRM_MSG[e.key]||("¿Estás seguro de que deseas cambiar el estado a \""+e.label+"\"?");
                         if(!confirm(msg)) return;
@@ -2423,6 +2426,12 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
       {entregaModal&&(()=>{
         const soli=entregaModal;
         const cantSoli=soli.quantity||0;
+        const cant=parseInt(cantEntregada)||0;
+        const art=items.find(i=>i.code===soli.item_code||i.name===soli.item_name);
+        const stockActual=art?.quantity??null;
+        const stockFinal=stockActual!==null?stockActual-cant:null;
+        const bajoMinimo=stockFinal!==null&&art?.minStock>0&&stockFinal<art.minStock;
+        const sinStock=stockFinal!==null&&stockFinal<0;
         return(
           <div className="overlay" onClick={()=>setEntregaModal(null)}>
             <div className="sheet" onClick={e=>e.stopPropagation()}>
@@ -2435,19 +2444,50 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                     👤 {soli.solicitante_name}
                     {soli.equipo_name&&<> · 🔧 {soli.equipo_name}</>}
                   </div>
+                  <div style={{fontSize:12,color:"#636366"}}>Solicitado: <strong>{cantSoli} {soli.unidad||""}</strong>{stockActual!==null&&<> · Stock actual: <strong>{stockActual} {soli.unidad||""}</strong></>}</div>
                 </div>
-                <div style={{background:"var(--lighter)",borderRadius:10,padding:"12px 14px",border:"1px solid var(--border)",fontSize:13}}>
-                  <div style={{fontWeight:700,fontSize:11,color:"var(--navy)",textTransform:"uppercase",letterSpacing:1,fontFamily:"Montserrat,sans-serif",marginBottom:6}}>Movimiento a registrar</div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{background:"#FFDEDE",color:"#C0001A",borderRadius:6,padding:"2px 8px",fontWeight:700,fontSize:12}}>↓ Salida</span>
-                    <span>{cantSoli} {soli.unidad||""} → {soli.solicitante_name}</span>
+                <div>
+                  <div className="ios-input-label">Cantidad a entregar *</div>
+                  <input className="ios-input" type="number" min="1"
+                    placeholder={`Ej: ${cantSoli}`}
+                    value={cantEntregada}
+                    onChange={e=>setCantEntregada(e.target.value)}
+                    autoFocus/>
+                </div>
+                {cant>0&&(
+                  <div style={{background:"var(--lighter)",borderRadius:10,padding:"10px 14px",border:"1px solid var(--border)",fontSize:13}}>
+                    <div style={{fontWeight:700,fontSize:11,color:"var(--navy)",textTransform:"uppercase",letterSpacing:1,fontFamily:"Montserrat,sans-serif",marginBottom:6}}>Movimiento a registrar</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{background:"#FFDEDE",color:"#C0001A",borderRadius:6,padding:"2px 8px",fontWeight:700,fontSize:12}}>↓ Salida</span>
+                      <span>{cant} {soli.unidad||""} → {soli.solicitante_name}</span>
+                      {stockFinal!==null&&<span style={{marginLeft:"auto",fontWeight:700,color:sinStock?"#C0001A":bajoMinimo?"#C45200":"#1D7A3E"}}>Stock: {stockFinal}</span>}
+                    </div>
                   </div>
-                </div>
+                )}
+                {sinStock&&(
+                  <div style={{background:"#FFDEDE",borderRadius:10,padding:"10px 14px",display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <span style={{fontSize:18}}>🚫</span>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:13,color:"#C0001A"}}>Stock insuficiente</div>
+                      <div style={{fontSize:12,color:"#C0001A",marginTop:2}}>Solo hay {stockActual} {soli.unidad||"unidades"} disponibles.</div>
+                    </div>
+                  </div>
+                )}
+                {!sinStock&&bajoMinimo&&(
+                  <div style={{background:"#FFF0D9",borderRadius:10,padding:"10px 14px",display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <span style={{fontSize:18}}>⚠️</span>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:13,color:"#C45200"}}>Quedará por debajo del mínimo</div>
+                      <div style={{fontSize:12,color:"#C45200",marginTop:2}}>Stock final: {stockFinal} {soli.unidad||""} · Mínimo: {art.minStock} {soli.unidad||""}</div>
+                    </div>
+                  </div>
+                )}
                 <div style={{display:"flex",gap:10}}>
                   <button className="ios-btn ios-btn-gray" style={{flex:1}} onClick={()=>setEntregaModal(null)}>Cancelar</button>
-                  <button className="ios-btn ios-btn-blue" style={{flex:1}}
+                  <button className="ios-btn ios-btn-blue" style={{flex:1,background:sinStock?"#C7C7CC":bajoMinimo?"#C45200":undefined}}
+                    disabled={!cantEntregada||parseInt(cantEntregada)<=0||sinStock}
                     onClick={()=>handleEntrega(soli)}>
-                    ✅ Confirmar entrega
+                    {bajoMinimo?"⚠️ Entregar de todas formas":"✅ Confirmar entrega"}
                   </button>
                 </div>
               </div>
