@@ -2123,6 +2123,12 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
   const [search,setSearch] = useState("");
   const [cotizModal,setCotizModal] = useState(null);
   const [proveedorInput,setProveedorInput] = useState("");
+  const [proveedoresList,setProveedoresList] = useState([]); // lista de proveedores registrados
+
+  useEffect(()=>{
+    sb.from("proveedores").select("id,nombre").order("nombre")
+      .then(({data})=>{ if(data) setProveedoresList(data.map(p=>p.nombre)); });
+  },[]);
   const [entregaModal,setEntregaModal] = useState(null);
   const [cantEntregada,setCantEntregada] = useState("");
   const [dispModal,setDispModal] = useState(null);       // modal marcar disponible
@@ -2542,8 +2548,26 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
               </div>
               <div>
                 <div className="ios-input-label">Proveedor</div>
-                <input className="ios-input" placeholder="Nombre del proveedor…"
-                  value={dispProveedor} onChange={e=>setDispProveedor(e.target.value)}/>
+                {proveedoresList.length>0?(
+                  <>
+                    <select className="ios-input" value={dispProveedor}
+                      onChange={e=>setDispProveedor(e.target.value)}
+                      style={{appearance:"auto",color:dispProveedor?"#1C1C1E":"#8E8E93"}}>
+                      <option value="">Selecciona un proveedor…</option>
+                      {proveedoresList.map(p=><option key={p} value={p}>{p}</option>)}
+                      <option value="__otro__">✏️ Otro (escribir)</option>
+                    </select>
+                    {dispProveedor==="__otro__"&&(
+                      <input className="ios-input" style={{marginTop:8}}
+                        placeholder="Escribe el nombre del proveedor…"
+                        autoFocus
+                        onChange={e=>setDispProveedor(e.target.value==="__otro__"?"":e.target.value)}/>
+                    )}
+                  </>
+                ):(
+                  <input className="ios-input" placeholder="Nombre del proveedor…"
+                    value={dispProveedor} onChange={e=>setDispProveedor(e.target.value)}/>
+                )}
               </div>
               <div>
                 <div className="ios-input-label">Número de remisión</div>
@@ -2578,14 +2602,32 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
             <div style={{padding:"16px 20px 28px",display:"flex",flexDirection:"column",gap:14}}>
               <div>
                 <div className="ios-input-label">Proveedor con quien se cotiza *</div>
-                <input className="ios-input" placeholder="Nombre del proveedor…"
-                  value={proveedorInput} onChange={e=>setProveedorInput(e.target.value)}
-                  autoFocus/>
+                {proveedoresList.length>0?(
+                  <>
+                    <select className="ios-input" value={proveedorInput}
+                      onChange={e=>setProveedorInput(e.target.value)}
+                      style={{appearance:"auto",color:proveedorInput?"#1C1C1E":"#8E8E93"}}>
+                      <option value="">Selecciona un proveedor…</option>
+                      {proveedoresList.map(p=><option key={p} value={p}>{p}</option>)}
+                      <option value="__otro__">✏️ Otro (escribir)</option>
+                    </select>
+                    {proveedorInput==="__otro__"&&(
+                      <input className="ios-input" style={{marginTop:8}}
+                        placeholder="Escribe el nombre del proveedor…"
+                        autoFocus
+                        onChange={e=>setProveedorInput(e.target.value==="__otro__"?"":e.target.value)}/>
+                    )}
+                  </>
+                ):(
+                  <input className="ios-input" placeholder="Nombre del proveedor…"
+                    value={proveedorInput} onChange={e=>setProveedorInput(e.target.value)}
+                    autoFocus/>
+                )}
               </div>
               <div style={{display:"flex",gap:10}}>
                 <button className="ios-btn ios-btn-gray" style={{flex:1}} onClick={()=>setCotizModal(null)}>Cancelar</button>
                 <button className="ios-btn ios-btn-blue" style={{flex:1,background:"#7C3AED"}}
-                  disabled={!proveedorInput.trim()}
+                  disabled={!proveedorInput.trim()||proveedorInput==="__otro__"}
                   onClick={async()=>{
                     await cambiarEstado(cotizModal,"en_cotizacion",proveedorInput.trim());
                     setCotizModal(null);
@@ -3170,6 +3212,103 @@ function EmailConfigCard({ flash }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════
+//  PROVEEDORES CARD (usado dentro de UsuariosTab)
+// ═══════════════════════════════════════════════════════
+function ProveedoresCard({ flash }) {
+  const [proveedores, setProveedores] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [nuevo, setNuevo] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [editNombre, setEditNombre] = useState("");
+
+  const fetch = async () => {
+    setLoading(true);
+    const { data, error } = await sb.from("proveedores").select("*").order("nombre");
+    if (!error) setProveedores(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { fetch(); }, []);
+
+  const agregar = async () => {
+    const nombre = nuevo.trim();
+    if (!nombre) return;
+    setSaving(true);
+    const { data, error } = await sb.from("proveedores").insert([{ nombre }]).select().single();
+    setSaving(false);
+    if (error) { flash("Error: " + error.message, false); return; }
+    setProveedores(prev => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    setNuevo("");
+    flash("Proveedor agregado ✓");
+  };
+
+  const guardarEdicion = async (id) => {
+    const nombre = editNombre.trim();
+    if (!nombre) return;
+    const { error } = await sb.from("proveedores").update({ nombre }).eq("id", id);
+    if (error) { flash("Error: " + error.message, false); return; }
+    setProveedores(prev => prev.map(p => p.id === id ? { ...p, nombre } : p).sort((a, b) => a.nombre.localeCompare(b.nombre)));
+    setEditId(null);
+    flash("Proveedor actualizado ✓");
+  };
+
+  const eliminar = async (id, nombre) => {
+    if (!confirm(`¿Eliminar proveedor "${nombre}"?`)) return;
+    const { error } = await sb.from("proveedores").delete().eq("id", id);
+    if (error) { flash("Error: " + error.message, false); return; }
+    setProveedores(prev => prev.filter(p => p.id !== id));
+    flash("Proveedor eliminado");
+  };
+
+  return (
+    <div>
+      <div className="section-hdr" style={{ margin: "8px 0 10px" }}>🏪 Proveedores</div>
+      <div className="ios-card" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Agregar nuevo */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <input className="ios-input" style={{ flex: 1 }}
+            placeholder="Nombre del proveedor…"
+            value={nuevo} onChange={e => setNuevo(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && agregar()} />
+          <button className="ios-btn ios-btn-blue ios-btn-sm" style={{ flexShrink: 0 }}
+            disabled={!nuevo.trim() || saving}
+            onClick={agregar}>
+            {saving ? "…" : "+ Agregar"}
+          </button>
+        </div>
+
+        {/* Lista */}
+        {loading ? (
+          <div style={{ textAlign: "center", color: "#8E8E93", fontSize: 13, padding: 8 }}>Cargando…</div>
+        ) : proveedores.length === 0 ? (
+          <div style={{ textAlign: "center", color: "#C7C7CC", fontSize: 13, padding: 8 }}>Sin proveedores registrados</div>
+        ) : proveedores.map(p => (
+          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "0.5px solid rgba(60,60,67,0.08)" }}>
+            <span style={{ fontSize: 16 }}>🏪</span>
+            {editId === p.id ? (
+              <>
+                <input className="ios-input" style={{ flex: 1, padding: "6px 10px", fontSize: 13 }}
+                  value={editNombre} onChange={e => setEditNombre(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && guardarEdicion(p.id)}
+                  autoFocus />
+                <button className="ios-btn ios-btn-blue ios-btn-sm" onClick={() => guardarEdicion(p.id)}>✓</button>
+                <button className="ios-btn ios-btn-gray ios-btn-sm" onClick={() => setEditId(null)}>✕</button>
+              </>
+            ) : (
+              <>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "#1C1C1E" }}>{p.nombre}</span>
+                <button className="ios-btn ios-btn-gray ios-btn-sm" onClick={() => { setEditId(p.id); setEditNombre(p.nombre); }}>Editar</button>
+                <button className="ios-btn ios-btn-red ios-btn-sm" onClick={() => eliminar(p.id, p.nombre)}>✕</button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function UsuariosTab({ currentUserId, currentUsername, flash }) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3224,6 +3363,9 @@ function UsuariosTab({ currentUserId, currentUsername, flash }) {
 
       {/* ── Configuración de correo ── */}
       <EmailConfigCard flash={flash} />
+
+      {/* ── Proveedores ── */}
+      <ProveedoresCard flash={flash} />
 
       <div className="ios-card">
         {loading ? (
