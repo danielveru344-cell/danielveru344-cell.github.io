@@ -6490,13 +6490,13 @@ function ActivityCard({r,i,onRem,onUpd,isTime,aList,OTRA,maxT}){
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
         padding:"10px 14px",background:"#f9fafc",borderBottom:"1px solid rgba(13,47,92,0.07)"}}>
         <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:11,color:"#8a96a8",letterSpacing:.5}}>
-          ACTIVIDAD {pad(i+1)}
+          ACTIVIDAD
         </span>
-        <button onClick={onRem}
+        {onRem&&<button onClick={onRem}
           style={{background:"none",border:"none",cursor:"pointer",color:"#8a96a8",padding:4,
             borderRadius:6,display:"flex",alignItems:"center"}}>
           <Ico d={IC.x} sz={15}/>
-        </button>
+        </button>}
       </div>
       <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
         <div>
@@ -6661,63 +6661,64 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
   const [tecCode]=useState(matchCode);
   const [turno,setTurno]=useState(function(){return detectTurno();});
   const [fecha,setFecha]=useState(new Date().toISOString().slice(0,10));
-  const [obs,setObs]=useState("");
   const tecObj=tecMap[tecCode]||null;
   const isLocativo=tecObj&&tecObj.cargo==="Auxiliar de Mantenimiento Locativo";
   const isMetrologia=tecObj&&tecObj.cargo==="Técnico de Metrología";
   const baseList=isLocativo?locList:isMetrologia?(metEqs.length>0?metEqs:eqList):eqList;
   const aList=baseList.concat([OTRA]);
 
-  const [real,setReal]=useState([{id:gid(),area:aList[0],otraArea:"",desc:"",hi:"",hf:"",pendiente:false}]);
+  const emptyCard = function(){return {id:gid(),area:aList[0],otraArea:"",desc:"",hi:"",hf:"",pendiente:false};};
+  const [real,setReal]=useState([]);             // actividades ya confirmadas esta sesión
+  const [current,setCurrent]=useState(emptyCard); // tarjeta activa
 
-  // Cuando el técnico se loguea, resetear las áreas al primer valor correcto para su cargo
+  // Resetear área si cambia el cargo
   useEffect(function(){
     if(!tecObj) return;
     const newBase=isLocativo?locList:isMetrologia?(metEqs.length>0?metEqs:eqList):eqList;
     const first=(newBase.concat([OTRA]))[0];
-    setReal(function(r){return r.map(function(x){return Object.assign({},x,{area:first,otraArea:""});});});
-    setPend(function(p){return p.map(function(x){return Object.assign({},x,{area:first,otraArea:""});});});
+    setCurrent(function(c){return Object.assign({},c,{area:first,otraArea:"",desc:"",hi:"",hf:"",pendiente:false,id:gid()});});
+    setReal([]);
   },[tecObj]);
 
-  function addR(){setReal(function(r){return r.concat([{id:gid(),area:aList[0],otraArea:"",desc:"",hi:"",hf:"",pendiente:false}]);});}
-  function remR(id){setReal(function(r){return r.filter(function(x){return x.id!==id;});});}
-  function updR(id,k,v){setReal(function(r){return r.map(function(x){if(x.id===id){const n=Object.assign({},x);n[k]=v;return n;}return x;});});}
+  function updC(k,v){setCurrent(function(c){return Object.assign({},c,{[k]:v});});}
+
+  function agregarActividad(){
+    const r=current;
+    if(!r.desc.trim()){alert("Describe la actividad antes de agregar.");return;}
+    if(!r.hi||!r.hf){alert("Completa hora de inicio y fin.");return;}
+    if(r.hf<=r.hi){alert("Hora fin debe ser posterior a inicio.");return;}
+    const hoy=fecha===todayS();const now=nowT();
+    if(hoy&&r.hi>now){alert("Hora inicio no puede ser futura.");return;}
+    if(hoy&&r.hf>now){alert("Hora fin no puede ser futura.");return;}
+    // Verificar cruce con actividades ya guardadas
+    function toMin(t){const p=t.split(":");return parseInt(p[0])*60+parseInt(p[1]);}
+    const a1=toMin(r.hi),a2=toMin(r.hf);
+    for(var i=0;i<real.length;i++){
+      const b=real[i];
+      const b1=toMin(b.hi),b2=toMin(b.hf);
+      if(a1<b2&&b1<a2){
+        alert("⚠️ Se cruza con la actividad "+(i+1)+":\n"+b.hi+" – "+b.hf+" · "+b.desc.slice(0,40));
+        return;
+      }
+    }
+    setReal(function(prev){return prev.concat([Object.assign({},r,{area:resolveArea(r)})]);});
+    setCurrent(emptyCard());
+  }
+
+  function remReal(id){setReal(function(r){return r.filter(function(x){return x.id!==id;});});}
 
   function resolveArea(item){return item.area===OTRA?(item.otraArea.trim()||"Otra actividad"):item.area;}
 
   function doSave(){
     if(!tecNombreActivo){alert("No se pudo identificar al usuario.");return;}
-    const acts=real.filter(function(r){return r.desc.trim();}).map(function(r){return Object.assign({},r,{area:resolveArea(r)});});
-    if(acts.length===0){alert("⚠️ Debes registrar al menos una actividad realizada antes de guardar.");return;}
+    if(real.length===0){alert("⚠️ Debes agregar al menos una actividad antes de guardar.");return;}
     if(fecha>todayS()){alert("⚠️ La fecha del reporte no puede ser futura.");return;}
-    const now=nowT();const hoy=fecha===todayS();
-    for(let i=0;i<acts.length;i++){
-      const r=acts[i];
-      if(!r.hi||!r.hf){alert("Completa hora inicio y fin de:\n"+r.desc);return;}
-      if(r.hf<=r.hi){alert("Hora fin debe ser posterior a inicio.");return;}
-      if(hoy&&r.hi>now){alert("Hora inicio ("+r.hi+") no puede ser futura.");return;}
-      if(hoy&&r.hf>now){alert("Hora fin ("+r.hf+") no puede ser futura.");return;}
-    }
-    function toMin(t){const p=t.split(":");return parseInt(p[0])*60+parseInt(p[1]);}
-    for(let i=0;i<acts.length;i++){
-      for(let j=i+1;j<acts.length;j++){
-        const a=acts[i],b=acts[j];
-        const a1=toMin(a.hi),a2=toMin(a.hf),b1=toMin(b.hi),b2=toMin(b.hf);
-        if(a1<b2&&b1<a2){
-          alert("⚠️ Las actividades "+(i+1)+" y "+(j+1)+" se cruzan en el tiempo:\n\n"
-            +"  Actividad "+(i+1)+": "+a.hi+" – "+a.hf+"\n"
-            +"  Actividad "+(j+1)+": "+b.hi+" – "+b.hf+"\n\n"
-            +"Ajusta los horarios antes de guardar.");
-          return;
-        }
-      }
-    }
-    const pends=acts.filter(function(r){return r.pendiente;}).map(function(r){
+    const pends=real.filter(function(r){return r.pendiente;}).map(function(r){
       return {id:r.id,area:r.area,desc:r.desc,p:"Media"};
     });
     const tecLabel=tecCode?("M"+tecCode+" · "+tecNombreActivo):tecNombreActivo;
     onSave({id:gid(),createdAt:ts(),fecha:fecha,turno:turno,tecnico:tecLabel,
-      realizadas:acts,pendientes:pends,obs:obs.trim()});
+      realizadas:real,pendientes:pends,obs:""});
   }
   // ── Formulario de reporte ─────────────────────────────────────────────────
   const sty=tecObj?(CARGO_STY[tecObj.cargo]||{bg:"#e8f0fb",col:NV}):{bg:"#e8f0fb",col:NV};
@@ -6760,30 +6761,58 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
         </div>
       </div>
 
-      {/* Realizadas */}
-      <div>
-        <SecHdr label="Actividades realizadas" col="#1D7A3E"
-          count={real.filter(function(r){return r.desc.trim();}).length}
-          onAdd={addR} addLabel="Nueva actividad"/>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {real.map(function(r,i){return(
-            <ActivityCard key={r.id} r={r} i={i} isTime={true} aList={aList} OTRA={OTRA} maxT={maxT}
-              onRem={function(){remR(r.id);}}
-              onUpd={function(k,v){updR(r.id,k,v);}}/>
-          );})}
-        </div>
-      </div>
-
-      {/* Observaciones */}
+      {/* Tarjeta única activa */}
       <div>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-          <div style={{width:4,height:18,borderRadius:4,background:"#8a96a8"}}/>
-          <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:"#8a96a8",textTransform:"uppercase",letterSpacing:.5}}>Observaciones</span>
+          <div style={{width:4,height:18,borderRadius:4,background:"#1D7A3E"}}/>
+          <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:"#1D7A3E",textTransform:"uppercase",letterSpacing:.5}}>Actividad</span>
+          {real.length>0&&<span style={{background:"#1D7A3E",color:"#fff",borderRadius:20,fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 8px"}}>{real.length}</span>}
         </div>
-        <textarea className="inp" rows={3} style={{minHeight:72,resize:"vertical",fontSize:14}}
-          placeholder="Novedades del turno, incidentes, entregas especiales..."
-          value={obs} onChange={function(e){setObs(e.target.value);}}/>
+        <ActivityCard r={current} i={0} isTime={true} aList={aList} OTRA={OTRA} maxT={maxT}
+          onRem={null}
+          onUpd={function(k,v){updC(k,v);}}/>
+        <button className="btn btn-navy" onClick={agregarActividad}
+          style={{width:"100%",marginTop:10,padding:"12px",fontSize:14,borderRadius:12,
+            background:"#1D7A3E",borderColor:"#1D7A3E"}}>
+          + Agregar actividad
+        </button>
       </div>
+
+      {/* Visor de actividades registradas esta sesión */}
+      {real.length>0&&(
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <div style={{width:4,height:18,borderRadius:4,background:"#2d7dd2"}}/>
+            <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:"#2d7dd2",textTransform:"uppercase",letterSpacing:.5}}>Registradas esta sesión</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {real.map(function(r,i){
+              return(
+                <div key={r.id} style={{background:"#fff",borderRadius:12,
+                  border:"1.5px solid "+(r.pendiente?"rgba(196,82,0,0.3)":"rgba(13,47,92,0.10)"),
+                  padding:"10px 14px",display:"flex",alignItems:"flex-start",gap:10}}>
+                  <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:11,color:"#8a96a8",
+                    minWidth:22,flexShrink:0,paddingTop:2}}>{pad(i+1)}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:4,alignItems:"center"}}>
+                      <span style={{background:"#e8f0fb",color:NV,borderRadius:6,padding:"2px 8px",
+                        fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{r.area}</span>
+                      <span style={{background:"#dde8f8",color:"#2d7dd2",borderRadius:6,padding:"2px 8px",
+                        fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{r.hi} – {r.hf}</span>
+                      {r.pendiente&&<span style={{background:"#FFF0D9",color:"#C45200",borderRadius:6,
+                        padding:"2px 8px",fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>⏳ Pendiente</span>}
+                    </div>
+                    <p style={{margin:0,fontSize:13,color:NV,lineHeight:1.5}}>{r.desc}</p>
+                  </div>
+                  <button onClick={function(){remReal(r.id);}}
+                    style={{background:"none",border:"none",cursor:"pointer",color:"#c7d0dd",
+                      padding:2,flexShrink:0,lineHeight:1,fontSize:16}}>✕</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div style={{display:"flex",flexDirection:"column",gap:8,paddingBottom:8}}>
