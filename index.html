@@ -56,9 +56,25 @@
   window.getEmailConfig = function() {
     try {
       const raw = localStorage.getItem(EMAIL_CONFIG_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Migrar formato antiguo (un solo correo)
+        if(parsed.correo && !parsed.correos) {
+          parsed.correos = [
+            { email: parsed.correo, activo: true },
+            { email: "", activo: false }
+          ];
+        }
+        return parsed;
+      }
     } catch(e) {}
-    return { habilitado: true, correo: "victor.veru@bussie.com.co" };
+    return {
+      habilitado: true,
+      correos: [
+        { email: "victor.veru@bussie.com.co", activo: true },
+        { email: "", activo: false }
+      ]
+    };
   };
   window.setEmailConfig = function(cfg) {
     localStorage.setItem(EMAIL_CONFIG_KEY, JSON.stringify(cfg));
@@ -66,29 +82,23 @@
 
   window.notificarCompra = async function(soli) {
     const cfg = window.getEmailConfig();
-    if (!cfg.habilitado) {
-      console.log("📭 Notificación de correo desactivada.");
-      return;
-    }
-    if (!cfg.correo || !cfg.correo.includes("@")) {
-      console.warn("⚠️ Correo destino no configurado.");
-      return;
-    }
-    try {
-      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-        to_email:   cfg.correo,
-        item_name:  soli.item_name  || "—",
-        solicitante:soli.solicitante_name || "—",
-        equipo:     soli.equipo_name || "—",
-        cantidad:   soli.quantity   || "—",
-        unidad:     soli.unit       || "",
-        notas:      soli.notes      || "Sin notas",
-        fecha:      new Date().toLocaleString("es-CO",{timeZone:"America/Bogota"}),
-      });
-      console.log("✅ Correo enviado a", cfg.correo);
-    } catch(err) {
-      console.warn("⚠️ No se pudo enviar el correo:", err);
-    }
+    if (!cfg.habilitado) { console.log("📭 Notificación de correo desactivada."); return; }
+    const destinos = (cfg.correos||[]).filter(c => c.activo && c.email && c.email.includes("@"));
+    if (destinos.length === 0) { console.warn("⚠️ Sin correos destino activos."); return; }
+    const payload = {
+      item_name:   soli.item_name   || "—",
+      solicitante: soli.solicitante_name || "—",
+      equipo:      soli.equipo_name || "—",
+      cantidad:    soli.quantity    || "—",
+      unidad:      soli.unit        || "",
+      notas:       soli.notes       || "Sin notas",
+      fecha:       new Date().toLocaleString("es-CO",{timeZone:"America/Bogota"}),
+    };
+    await Promise.all(destinos.map(d =>
+      emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, { ...payload, to_email: d.email })
+        .then(()  => console.log("✅ Correo enviado a", d.email))
+        .catch(err => console.warn("⚠️ No se pudo enviar a", d.email, err))
+    ));
   };
 </script>
 <style>
@@ -3165,31 +3175,36 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
 
 // ── Tarjeta de configuración de correo ────────────────────────────────────────
 function EmailConfigCard({ flash }) {
-  const load = () => window.getEmailConfig ? window.getEmailConfig() : { habilitado: true, correo: "" };
-  const [cfg, setCfg]       = React.useState(load);
-  const [editCorreo, setEditCorreo] = React.useState(load().correo);
-  const [saved, setSaved]   = React.useState(false);
+  const load = () => window.getEmailConfig ? window.getEmailConfig() : { habilitado: true, correos: [{email:"",activo:true},{email:"",activo:false}] };
+  const [cfg, setCfg] = React.useState(load);
+  const [edits, setEdits] = React.useState(load().correos.map(c=>c.email));
 
-  const toggleHabilitado = () => {
+  const save = (next) => { setCfg(next); window.setEmailConfig(next); };
+
+  const toggleGlobal = () => {
     const next = { ...cfg, habilitado: !cfg.habilitado };
-    setCfg(next);
-    window.setEmailConfig(next);
-    flash(next.habilitado ? "Notificaciones de correo activadas ✓" : "Notificaciones de correo desactivadas");
+    save(next);
+    flash(next.habilitado ? "Notificaciones activadas ✓" : "Notificaciones desactivadas");
   };
 
-  const guardarCorreo = () => {
-    const correoTrim = editCorreo.trim();
-    if (!correoTrim.includes("@") || !correoTrim.includes(".")) {
-      flash("Ingresa un correo válido", false); return;
-    }
-    const next = { ...cfg, correo: correoTrim };
-    setCfg(next);
-    setEditCorreo(correoTrim);
-    window.setEmailConfig(next);
-    setSaved(true);
-    flash("Correo destino actualizado ✓");
-    setTimeout(() => setSaved(false), 2000);
+  const toggleCorreo = (i) => {
+    const correos = cfg.correos.map((c,idx) => idx===i ? {...c, activo:!c.activo} : c);
+    const next = {...cfg, correos};
+    save(next);
+    flash(correos[i].activo ? "Correo activado ✓" : "Correo desactivado");
   };
+
+  const guardarCorreo = (i) => {
+    const email = edits[i].trim();
+    if(!email){ flash("Ingresa un correo válido", false); return; }
+    if(!email.includes("@")||!email.includes(".")){ flash("Correo inválido", false); return; }
+    const correos = cfg.correos.map((c,idx) => idx===i ? {...c, email, activo:true} : c);
+    const next = {...cfg, correos};
+    save(next);
+    flash("Correo guardado ✓");
+  };
+
+  const activosCount = (cfg.correos||[]).filter(c=>c.activo&&c.email).length;
 
   return (
     <div className="ios-card" style={{ padding: 0, overflow: "hidden" }}>
@@ -3198,63 +3213,61 @@ function EmailConfigCard({ flash }) {
         <div style={{ width: 36, height: 36, borderRadius: 10, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, boxShadow: "0 1px 4px rgba(0,74,158,0.15)", flexShrink: 0 }}>📧</div>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: "Montserrat,sans-serif", fontWeight: 800, fontSize: 13, color: "#004A9E", textTransform: "uppercase", letterSpacing: 0.4 }}>Notificaciones por Correo</div>
-          <div style={{ fontSize: 11, color: "#5A7FA8", marginTop: 1 }}>Aviso automático al pasar solicitud a "Para Compra"</div>
+          <div style={{ fontSize: 11, color: "#5A7FA8", marginTop: 1 }}>
+            Aviso al pasar solicitud a "Para Compra"
+            {cfg.habilitado && activosCount>0 && <> · <strong>{activosCount} destinatario{activosCount>1?"s":""} activo{activosCount>1?"s":""}</strong></>}
+          </div>
         </div>
-        {/* Toggle switch */}
-        <button onClick={toggleHabilitado} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        {/* Toggle global */}
+        <button onClick={toggleGlobal} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: cfg.habilitado ? "#34C759" : "#8E8E93" }}>
             {cfg.habilitado ? "ACTIVO" : "INACTIVO"}
           </span>
-          <div style={{
-            width: 50, height: 28, borderRadius: 99, transition: "background 0.25s",
-            background: cfg.habilitado ? "#34C759" : "#D1D1D6",
-            position: "relative", flexShrink: 0, boxShadow: "inset 0 1px 3px rgba(0,0,0,0.15)"
-          }}>
-            <div style={{
-              position: "absolute", top: 3, left: cfg.habilitado ? 24 : 3,
-              width: 22, height: 22, borderRadius: "50%", background: "#fff",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left 0.22s cubic-bezier(0.4,0,0.2,1)"
-            }}/>
+          <div style={{ width: 50, height: 28, borderRadius: 99, transition: "background 0.25s", background: cfg.habilitado ? "#34C759" : "#D1D1D6", position: "relative", flexShrink: 0, boxShadow: "inset 0 1px 3px rgba(0,0,0,0.15)" }}>
+            <div style={{ position: "absolute", top: 3, left: cfg.habilitado ? 24 : 3, width: 22, height: 22, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left 0.22s cubic-bezier(0.4,0,0.2,1)" }}/>
           </div>
         </button>
       </div>
 
-      {/* Correo destino */}
-      <div style={{ padding: "14px 18px 16px", opacity: cfg.habilitado ? 1 : 0.45, transition: "opacity 0.2s" }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#8E8E93", marginBottom: 8 }}>
-          Correo destino
+      {/* Correos */}
+      <div style={{ padding: "14px 18px 16px", opacity: cfg.habilitado ? 1 : 0.45, transition: "opacity 0.2s", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#8E8E93" }}>
+          Correos destino
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input
-            type="email"
-            value={editCorreo}
-            onChange={e => setEditCorreo(e.target.value)}
-            disabled={!cfg.habilitado}
-            placeholder="ejemplo@empresa.com"
-            onKeyDown={e => e.key === "Enter" && cfg.habilitado && guardarCorreo()}
-            style={{
-              flex: 1, padding: "10px 13px", borderRadius: 10,
-              border: "1.5px solid #D1D1D6", fontSize: 14, fontFamily: "inherit",
-              background: cfg.habilitado ? "#fff" : "#F2F2F7",
-              color: "#1C1C1E", outline: "none", transition: "border-color 0.2s"
-            }}
-            onFocus={e => e.target.style.borderColor = "#004A9E"}
-            onBlur={e => e.target.style.borderColor = "#D1D1D6"}
-          />
-          <button
-            onClick={guardarCorreo}
-            disabled={!cfg.habilitado || editCorreo.trim() === cfg.correo}
-            className="ios-btn ios-btn-blue ios-btn-sm"
-            style={{ flexShrink: 0, opacity: (!cfg.habilitado || editCorreo.trim() === cfg.correo) ? 0.4 : 1, transition: "opacity 0.2s" }}
-          >
-            {saved ? "✓ Guardado" : "Guardar"}
-          </button>
-        </div>
-        {cfg.correo && (
-          <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 6 }}>
-            Enviando a: <strong style={{ color: "#004A9E" }}>{cfg.correo}</strong>
+        {(cfg.correos||[]).map((c, i) => (
+          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* Mini toggle individual */}
+              <button onClick={() => cfg.habilitado && c.email && toggleCorreo(i)}
+                disabled={!cfg.habilitado || !c.email}
+                style={{ background: "none", border: "none", cursor: c.email&&cfg.habilitado?"pointer":"default", padding: 0, flexShrink: 0 }}>
+                <div style={{ width: 36, height: 20, borderRadius: 99, background: c.activo&&c.email ? "#34C759" : "#D1D1D6", position: "relative", transition: "background 0.2s", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.12)" }}>
+                  <div style={{ position: "absolute", top: 2, left: c.activo&&c.email ? 17 : 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)", transition: "left 0.2s" }}/>
+                </div>
+              </button>
+              <input type="email" value={edits[i]}
+                onChange={e => { const ne=[...edits]; ne[i]=e.target.value; setEdits(ne); }}
+                disabled={!cfg.habilitado}
+                placeholder={i===0?"correo1@empresa.com":"correo2@empresa.com (opcional)"}
+                onKeyDown={e => e.key==="Enter" && cfg.habilitado && guardarCorreo(i)}
+                style={{ flex:1, padding:"9px 12px", borderRadius:10, border:"1.5px solid #D1D1D6", fontSize:13, fontFamily:"inherit", background:cfg.habilitado?"#fff":"#F2F2F7", color:"#1C1C1E", outline:"none" }}
+                onFocus={e=>e.target.style.borderColor="#004A9E"}
+                onBlur={e=>e.target.style.borderColor="#D1D1D6"}
+              />
+              <button onClick={() => guardarCorreo(i)}
+                disabled={!cfg.habilitado || edits[i].trim()===c.email}
+                className="ios-btn ios-btn-blue ios-btn-sm"
+                style={{ flexShrink:0, opacity:(!cfg.habilitado||edits[i].trim()===c.email)?0.4:1 }}>
+                Guardar
+              </button>
+            </div>
+            {c.email && (
+              <div style={{ fontSize: 11, color: c.activo ? "#1D7A3E" : "#8E8E93", paddingLeft: 44 }}>
+                {c.activo ? "✅ Activo" : "⏸ Inactivo"} · {c.email}
+              </div>
+            )}
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
