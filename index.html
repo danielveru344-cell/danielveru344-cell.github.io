@@ -6173,40 +6173,10 @@ function EqManager({title,col,icon,items,onSave,placeholder,emptyMsg}){
 // ── AdminPanel ────────────────────────────────────────────────────────────────
 function AdminPanel({eqs,tecs,metEqs,locEqs,turnos,entries,setEqs,setTecs,setMetEqs,setLocEqs,setTurnos,onDel,onLogout}){
   const [ne,setNe]=useState("");
-  // nuevo técnico
-  const [ntCode,setNtCode]=useState("");
-  const [ntName,setNtName]=useState("");
-  const [ntCargo,setNtCargo]=useState(CARGOS[1]);
-  const [ntUser,setNtUser]=useState("");
-  const [ntErr,setNtErr]=useState("");
-  // edición inline de cargo
-  const [editId,setEditId]=useState(null);
-  const [editCargo,setEditCargo]=useState("");
   // contraseña
   const [pmMode,setPmMode]=useState(false);
   const [op,setOp]=useState(""); const [np,setNp]=useState(""); const [np2,setNp2]=useState("");
   const [pmsg,setPmsg]=useState(null);
-
-  function addTec(){
-    const code=ntCode.trim();
-    const name=ntName.trim();
-    if(!code){setNtErr("Ingresa el código.");return;}
-    if(!name){setNtErr("Ingresa el nombre.");return;}
-    if(tecs.find(function(t){return t.code===code;})){setNtErr("Ese código ya existe.");return;}
-    const n=tecs.concat([{code:code,name:name,cargo:ntCargo,username:ntUser.trim().toLowerCase()}]);
-    setTecs(n);save(KS.tec,n);
-    setNtCode("");setNtName("");setNtCargo(CARGOS[1]);setNtUser("");setNtErr("");
-  }
-  function remTec(code){
-    if(!confirm("Eliminar técnico M"+code+"?"))return;
-    const n=tecs.filter(function(t){return t.code!==code;});
-    setTecs(n);save(KS.tec,n);
-  }
-  function startEdit(t){setEditId(t.code);setEditCargo(t.cargo);}
-  function saveEdit(code){
-    const n=tecs.map(function(t){return t.code===code?Object.assign({},t,{cargo:editCargo}):t;});
-    setTecs(n);save(KS.tec,n);setEditId(null);
-  }
 
   function chPass(){
     if(op!==lg(KS.p,PASS_DEF)){setPmsg({ok:false,m:"Contrasena actual incorrecta"});return;}
@@ -6268,74 +6238,6 @@ function AdminPanel({eqs,tecs,metEqs,locEqs,turnos,entries,setEqs,setTecs,setMet
               🗑 Borrar todos
             </button>
           )}
-        </div>
-      </SCard>
-
-      <SCard title="Técnicos" col="#2d7dd2" icon={IC.user}>
-        <div>
-          {tecs.length===0
-            ? <div style={{padding:"14px 16px",color:"#8a96a8",fontSize:13,textAlign:"center"}}>No hay técnicos registrados</div>
-            : tecs.map(function(t){
-              const sty=CARGO_STY[t.cargo]||{bg:"#e8f0fb",col:NV};
-              const isEditing=editId===t.code;
-              return (
-                <div key={t.code} style={{padding:"12px 16px",borderBottom:".5px solid rgba(13,47,92,0.08)"}}>
-                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-                    <div style={{display:"flex",flexDirection:"column",gap:5,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                        <span style={{background:NV,color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:11,padding:"2px 8px",borderRadius:5,letterSpacing:0.5,flexShrink:0}}>M{t.code}</span>
-                        <span style={{fontWeight:700,fontSize:14,color:NV}}>{t.name}</span>
-                      </div>
-                      {isEditing
-                        ? <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2}}>
-                            <select className="inp" style={{fontSize:12,padding:"5px 8px",flex:1}} value={editCargo}
-                              onChange={function(e){setEditCargo(e.target.value);}}>
-                              {CARGOS.map(function(c){return <option key={c}>{c}</option>;})}
-                            </select>
-                            <button className="btn btn-ok btn-sm" onClick={function(){saveEdit(t.code);}}>OK</button>
-                            <button className="btn btn-ghost btn-sm" onClick={function(){setEditId(null);}}>✕</button>
-                          </div>
-                        : <span style={{background:sty.bg,color:sty.col,padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{t.cargo}</span>
-                      }
-                    </div>
-                    {!isEditing&&(
-                      <div style={{display:"flex",gap:6,flexShrink:0}}>
-                        <button onClick={function(){startEdit(t);}}
-                          style={{background:"none",border:"1px solid rgba(13,47,92,0.2)",borderRadius:7,cursor:"pointer",color:NV,padding:"4px 10px",fontSize:12,fontFamily:"Montserrat",fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
-                          ✏ Cargo
-                        </button>
-                        <button onClick={function(){remTec(t.code);}} className="del-btn">
-                          <Ico d={IC.trash} sz={12}/>Quitar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          }
-        </div>
-        {/* Form agregar */}
-        <div style={{padding:"14px 16px",borderTop:"1px solid rgba(13,47,92,0.10)",display:"flex",flexDirection:"column",gap:10}}>
-          <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,color:"#8a96a8",textTransform:"uppercase",letterSpacing:1}}>Agregar técnico</div>
-          <div style={{display:"flex",gap:8}}>
-            <div style={{display:"flex",alignItems:"stretch",borderRadius:8,overflow:"hidden",border:"1.5px solid rgba(13,47,92,0.10)",background:"#f4f7fd",flex:"0 0 auto"}}>
-              <span style={{display:"flex",alignItems:"center",padding:"0 12px",background:NV,color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:14,flexShrink:0,userSelect:"none"}}>M</span>
-              <input className="inp" style={{border:"none",borderRadius:0,background:"transparent",width:80}}
-                placeholder="Código" value={ntCode}
-                onChange={function(e){setNtCode(e.target.value.replace(/\D/g,""));setNtErr("");}}
-                maxLength={10}/>
-            </div>
-            <input className="inp" style={{flex:1}} placeholder="Usuario de sesión (ej: ofonseca)" value={ntUser}
-              onChange={function(e){setNtUser(e.target.value);setNtErr("");}}/>
-          </div>
-          <input className="inp" placeholder="Nombre completo (ej: Oscar Fonseca)" value={ntName}
-            onChange={function(e){setNtName(e.target.value);setNtErr("");}}/>
-          <select className="inp" value={ntCargo} onChange={function(e){setNtCargo(e.target.value);}}>
-            {CARGOS.map(function(c){return <option key={c}>{c}</option>;})}
-          </select>
-          {ntErr&&<div style={{fontSize:12,color:"#C0001A",fontWeight:600}}>{ntErr}</div>}
-          <button className="btn btn-ok btn-sm" onClick={addTec} style={{alignSelf:"flex-end"}}>+ Agregar</button>
         </div>
       </SCard>
 
@@ -6675,6 +6577,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
   const [tecCode]=useState(matchCode);
   const [turno,setTurno]=useState(function(){return detectTurno();});
   const [fecha,setFecha]=useState(new Date().toISOString().slice(0,10));
+  const [tipo,setTipo]=useState(""); // "fallo" | "ajuste" | ""
   const tecObj=tecMap[tecCode]||null;
   // Cargo: prioridad al cargo del usuario logueado, fallback al tecObj
   const cargoActivo = (initialUser&&initialUser.cargo) || (tecObj&&tecObj.cargo) || "";
@@ -6753,7 +6656,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
       return {id:r.id,area:r.area,desc:r.desc,p:"Media"};
     });
     var tecLabel=tecCode?("M"+tecCode+" · "+tecNombreActivo):tecNombreActivo;
-    onSave({id:gid(),createdAt:ts(),fecha:fecha,turno:turno,tecnico:tecLabel,
+    onSave({id:gid(),createdAt:ts(),fecha:fecha,turno:turno,tipo:tipo,tecnico:tecLabel,
       realizadas:allReal,pendientes:pends,obs:""});
   }
   // ── Formulario de reporte ─────────────────────────────────────────────────
@@ -6779,7 +6682,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
         </div>
       </div>
 
-      {/* Fecha + Turno */}
+      {/* Fecha + Turno + Tipo */}
       <div style={{background:"#fff",border:"1.5px solid rgba(13,47,92,0.10)",borderRadius:16,overflow:"hidden"}}>
         <div style={{display:"flex"}}>
           <div style={{flex:1,padding:"12px 14px",borderRight:"1px solid rgba(13,47,92,0.08)"}}>
@@ -6787,12 +6690,28 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
             <input type="date" className="inp" value={fecha} style={{border:"none",padding:0,background:"transparent",fontSize:14,fontWeight:600,color:NV}}
               onChange={function(e){setFecha(e.target.value);}}/>
           </div>
-          <div style={{flex:1,padding:"12px 14px"}}>
+          <div style={{flex:1,padding:"12px 14px",borderRight:"1px solid rgba(13,47,92,0.08)"}}>
             <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",letterSpacing:.5,marginBottom:5}}>TURNO</div>
             <select className="inp" value={turno} style={{border:"none",padding:0,background:"transparent",fontSize:13,fontWeight:600,color:NV,width:"100%"}}
               onChange={function(e){setTurno(e.target.value);}}>
               {turnosList.map(function(t){return <option key={t}>{t}</option>;})}
             </select>
+          </div>
+          <div style={{flex:1,padding:"12px 14px"}}>
+            <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",letterSpacing:.5,marginBottom:5}}>TIPO</div>
+            <div style={{display:"flex",gap:5}}>
+              {[["fallo","🔴","#C0001A","#FFDEDE"],["ajuste","🔧","#004A9E","#D9ECFF"]].map(function(op){return(
+                <button key={op[0]} onClick={function(){setTipo(tipo===op[0]?"":op[0]);}}
+                  style={{flex:1,padding:"4px 0",borderRadius:8,border:"1.5px solid",cursor:"pointer",
+                    borderColor:tipo===op[0]?op[2]:"rgba(13,47,92,0.12)",
+                    background:tipo===op[0]?op[3]:"transparent",
+                    fontFamily:"Montserrat",fontWeight:700,fontSize:11,
+                    color:tipo===op[0]?op[2]:"#8a96a8",transition:"all .15s"}}>
+                  {op[1]}
+                </button>
+              );})}
+            </div>
+            {tipo&&<div style={{fontSize:10,color:"#8a96a8",marginTop:3,textAlign:"center",fontWeight:600,fontFamily:"Montserrat",textTransform:"uppercase"}}>{tipo}</div>}
           </div>
         </div>
       </div>
@@ -6969,6 +6888,12 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar}){
               <span>{e.turno}</span>
               <span style={{opacity:.4}}>·</span>
               <span>{fT(e.createdAt)}</span>
+              {e.tipo&&<><span style={{opacity:.4}}>·</span>
+                <span style={{background:e.tipo==="fallo"?"rgba(192,0,26,0.45)":"rgba(0,74,158,0.4)",
+                  color:e.tipo==="fallo"?"#fca5a5":"#93c5fd",
+                  padding:"1px 7px",borderRadius:20,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
+                  {e.tipo==="fallo"?"🔴 Fallo":"🔧 Ajuste"}
+                </span></>}
             </div>
           </div>
           <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
@@ -7156,8 +7081,9 @@ function ReportesView(props){
   const [trn,setTrn]=useState("Todos");
   const [ar,setAr]=useState("Todas");
   const [pr,setPr]=useState("Todas");
-  const [sp,setSp]=useState(false);
-  const [sv,setSv]=useState(false); // solo no verificados
+  const [sp,setSp]=useState(props.filtroInicial==="pendientes");
+  const [sv,setSv]=useState(false);
+  const [tp,setTp]=useState("todos"); // "todos"|"fallo"|"ajuste"|"sin_tipo" // solo no verificados
   const [de,setDe]=useState(""); const [ha,setHa]=useState("");
   const [exp,setExp]=useState({});
   const [sf,setSf]=useState(false);
@@ -7165,8 +7091,8 @@ function ReportesView(props){
   // sortBy opciones: fecha_desc|fecha_asc|persona_az|persona_za|turno_az|turno_za|horas_desc|horas_asc
 
   function toggleExp(id){const n=Object.assign({},exp);n[id]=!n[id];setExp(n);}
-  function reset(){setQ("");setTrn("Todos");setAr("Todas");setPr("Todas");setSp(false);setSv(false);setDe("");setHa("");setSortBy("fecha_desc");}
-  const fa=!!(q||trn!=="Todos"||ar!=="Todas"||pr!=="Todas"||sp||sv||de||ha||sortBy!=="fecha_desc");
+  function reset(){setQ("");setTrn("Todos");setAr("Todas");setPr("Todas");setSp(false);setSv(false);setTp("todos");setDe("");setHa("");setSortBy("fecha_desc");}
+  const fa=!!(q||trn!=="Todos"||ar!=="Todas"||pr!=="Todas"||sp||sv||tp!=="todos"||de||ha||sortBy!=="fecha_desc");
 
   const entries=props.entries;
   const allAreas=[];
@@ -7199,6 +7125,9 @@ function ReportesView(props){
     if(pr!=="Todas"&&!(e.pendientes||[]).some(function(p){return p.p===pr;}))return false;
     if(sp&&(e.pendientes||[]).length===0)return false;
     if(sv&&(e.confirmaciones||[]).length>0)return false;
+    if(tp==="fallo"&&e.tipo!=="fallo")return false;
+    if(tp==="ajuste"&&e.tipo!=="ajuste")return false;
+    if(tp==="sin_tipo"&&e.tipo)return false;
     if(de&&isoDay(e.createdAt)<de)return false;
     if(ha&&isoDay(e.createdAt)>ha)return false;
     return true;
@@ -7251,6 +7180,18 @@ function ReportesView(props){
           {/* Filtros existentes */}
           <div style={{borderTop:"1px solid rgba(13,47,92,0.08)",paddingTop:12,marginBottom:10}}>
             <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Filtrar</div>
+            <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+              {[["todos","Todos"],["fallo","🔴 Fallos"],["ajuste","🔧 Ajustes"],["sin_tipo","Sin tipo"]].map(function(op){return(
+                <button key={op[0]} onClick={function(){setTp(op[0]);}}
+                  style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",
+                    fontFamily:"Montserrat",fontWeight:700,fontSize:11,
+                    borderColor:tp===op[0]?(op[0]==="fallo"?"#C0001A":op[0]==="ajuste"?"#004A9E":NV):"rgba(13,47,92,0.12)",
+                    background:tp===op[0]?(op[0]==="fallo"?"#FFDEDE":op[0]==="ajuste"?"#D9ECFF":"var(--light)"):"#f4f7fd",
+                    color:tp===op[0]?(op[0]==="fallo"?"#C0001A":op[0]==="ajuste"?"#004A9E":NV):"#8a96a8"}}>
+                  {op[1]}
+                </button>
+              );})}
+            </div>
             <div className="fg3" style={{marginBottom:10}}>
               <BtkField label="Turno"><select className="inp" value={trn} onChange={function(e){setTrn(e.target.value);}}><option>Todos</option>{(props.turnos||TURNOS_DEF).map(function(t){return <option key={t}>{t}</option>;})}</select></BtkField>
               <BtkField label="Area"><select className="inp" value={ar} onChange={function(e){setAr(e.target.value);}}><option>Todas</option>{allAreas.map(function(a){return <option key={a}>{a}</option>;})}</select></BtkField>
@@ -7743,6 +7684,7 @@ function BitacoraApp({onBack, initialUser}){
   const [locEqs,setLocEqs]=useState(AREAS_LOC);
   const [turnos,setTurnos]=useState(TURNOS_DEF);
   const [tab,setTab]=useState("home");
+  const [filtroInicial,setFiltroInicial]=useState(null); // null | "pendientes"
   const [detail,setDetail]=useState(null);
   const [showPass,setShowPass]=useState(false);
   const [adminOk,setAdminOk]=useState(false);
@@ -7905,10 +7847,10 @@ function BitacoraApp({onBack, initialUser}){
         ):tab==="home"?(
           <div style={{display:"flex",flexDirection:"column",gap:18}}>
             <div className="stat-grid">
-              {[{lbl:"Reportes",val:entries.length,col:NV,ic:IC.docs,tab:"reportes"},
-                {lbl:"Pendientes",val:totP,col:"#C45200",ic:IC.alert,tab:"reportes"},
-                {lbl:"Prio. Alta",val:altaP,col:"#C0001A",ic:IC.alert,tab:"analisis"}].map(function(s){return(
-                <div key={s.lbl} className="stat-card" onClick={function(){setTab(s.tab);}}
+              {[{lbl:"Reportes",val:entries.length,col:NV,ic:IC.docs,accion:function(){setFiltroInicial(null);setTab("reportes");}},
+                {lbl:"Pendientes",val:totP,col:"#C45200",ic:IC.alert,accion:function(){setFiltroInicial("pendientes");setTab("reportes");}},
+                {lbl:"Prio. Alta",val:altaP,col:"#C0001A",ic:IC.alert,accion:function(){setTab("analisis");}}].map(function(s){return(
+                <div key={s.lbl} className="stat-card" onClick={s.accion}
                   style={{cursor:"pointer",transition:"transform .12s,box-shadow .12s"}}
                   onMouseEnter={function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(13,47,92,0.13)";}}
                   onMouseLeave={function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}}>
@@ -7916,7 +7858,7 @@ function BitacoraApp({onBack, initialUser}){
                   <div className="stat-val" style={{color:s.col,marginTop:8}}>{pad(s.val)}</div>
                   <div className="stat-lbl">{s.lbl}</div>
                   <div style={{fontSize:9,color:"#b0bac8",marginTop:4,fontFamily:"Montserrat",fontWeight:600,letterSpacing:.3}}>
-                    {s.tab==="reportes"?"VER REPORTES →":"VER ANÁLISIS →"}
+                    {s.lbl==="Prio. Alta"?"VER ANÁLISIS →":"VER REPORTES →"}
                   </div>
                 </div>
               );})}
@@ -7944,7 +7886,7 @@ function BitacoraApp({onBack, initialUser}){
             }
           </div>
         ):tab==="reportes"?(
-          <ReportesView entries={entries} turnos={turnos} onDetail={function(e){setDetail(e);}} initialUser={initialUser} onConfirmar={confirmarLectura}/>
+          <ReportesView entries={entries} turnos={turnos} onDetail={function(e){setDetail(e);}} initialUser={initialUser} onConfirmar={confirmarLectura} filtroInicial={filtroInicial} onClearFiltro={function(){setFiltroInicial(null);}}/>
         ):tab==="analisis"?(
           <AnalisisView entries={entries}/>
         ):tab==="nuevo"?(
