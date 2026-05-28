@@ -1551,17 +1551,19 @@ function AlmacenApp({onBack, initialUser}){
   // ── Items CRUD ──────────────────────────────────────────────────────────────
   const addItem = async (f) => {
     setSyncing(true);
+    // Generar código automático: REP-XXXX (4 dígitos, incremental por timestamp)
+    const autoCode = "REP-" + String(Date.now()).slice(-4).padStart(4,"0") + Math.floor(Math.random()*9+1);
     const {data,error} = await sb.from("articulos").insert([{
-      code:f.code, name:f.name, category:f.category,
+      code:autoCode, name:f.name, category:f.category,
       quantity:f.quantity, min_stock:f.minStock, unit:f.unit, location:f.location,
       equipos_asociados: f.equipos_asociados&&f.equipos_asociados.length>0
         ? f.equipos_asociados : null
     }]).select().single();
     setSyncing(false);
     if(error){flash("Error: "+error.message,false);return;}
-    setItems(prev=>[...prev,{...f,id:data.id}]);
+    setItems(prev=>[...prev,{...f,code:autoCode,id:data.id}]);
     flash("Artículo agregado ✓");
-    logH("alta_articulo","Artículo agregado: "+f.name+" ["+f.code+"]");
+    logH("alta_articulo","Artículo agregado: "+f.name+" ["+autoCode+"]");
   };
 
   const updateItem = async (id,upd) => {
@@ -2072,11 +2074,11 @@ function AlmacenApp({onBack, initialUser}){
 
 // ── Solicitudes ──────────────────────────────────────────────────────────────
 const ESTADOS = [
-  { key:"pendiente",         label:"Pendiente",              color:"#FFF0D9", text:"#C45200", icon:"🕐" },
+  { key:"pendiente",         label:"Pendiente",              color:"#FFF3CD", text:"#7A4800", icon:"🕐" },
   { key:"solicitada_compra", label:"Solicitada para compra", color:"#D9ECFF", text:"#004A9E", icon:"🛒" },
-  { key:"en_cotizacion",     label:"En cotización",          color:"#F3E8FF", text:"#7C3AED", icon:"💬", adminOnly:true },
+  { key:"en_cotizacion",     label:"En cotización",          color:"#CCF0F5", text:"#0A5A72", icon:"💬", adminOnly:true },
+  { key:"entregada_almacen", label:"Disponible",             color:"#E0E8F5", text:"#0D2F5C", icon:"📦" },
   { key:"entregada",         label:"Entregada",              color:"#D1F2E0", text:"#1D7A3E", icon:"✅" },
-  { key:"entregada_almacen", label:"Disponible",             color:"#E8F0FB", text:"#0D2F5C", icon:"📦" },
   { key:"rechazada",         label:"Rechazada",              color:"#FFDEDE", text:"#C0001A", icon:"❌" },
 ];
 
@@ -2393,7 +2395,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                 <span style={{fontSize:11,color:"#8E8E93"}}>👤 {s.solicitante_name}{s.proveedor&&<><span style={{color:"#C7C7CC"}}> · </span><span>🏪 {s.proveedor}</span></>}</span>
                 <span style={{fontSize:10,color:"#C7C7CC"}}>{fmtDate(s.created_at)}{s.updated_by?` · ${s.updated_by}`:""}</span>
               </div>
-              {s.status==="en_cotizacion"&&s.proveedor&&<div style={{fontSize:12,color:"#7C3AED",fontWeight:600}}>💬 Cotizando con: {s.proveedor}</div>}
+              {s.status==="en_cotizacion"&&s.proveedor&&<div style={{fontSize:12,color:"#0A5A72",fontWeight:600}}>💬 Cotizando con: {s.proveedor}</div>}
               {(s.status==="entregada_almacen"||s.status==="entregada")&&(s.proveedor||s.remision)&&(
                 <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:12}}>
                   {s.proveedor&&<span style={{background:"#E8F0FB",color:"#0D2F5C",borderRadius:6,padding:"2px 8px",fontWeight:600}}>🏪 {s.proveedor}</span>}
@@ -2626,7 +2628,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
               </div>
               <div style={{display:"flex",gap:10}}>
                 <button className="ios-btn ios-btn-gray" style={{flex:1}} onClick={()=>setCotizModal(null)}>Cancelar</button>
-                <button className="ios-btn ios-btn-blue" style={{flex:1,background:"#7C3AED"}}
+                <button className="ios-btn ios-btn-blue" style={{flex:1,background:"#0A5A72"}}
                   disabled={!proveedorInput.trim()||proveedorInput==="__otro__"}
                   onClick={async()=>{
                     await cambiarEstado(cotizModal,"en_cotizacion",proveedorInput.trim());
@@ -4111,10 +4113,10 @@ function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash
     alta_equipo:      {icon:"🔧", bg:"#D9ECFF", color:"#004A9E", label:"Alta equipo"},
     edicion_equipo:   {icon:"✏️", bg:"#E8F0FB", color:"#0D2F5C", label:"Edición equipo"},
     baja_equipo:      {icon:"🗑", bg:"#FFF0D9", color:"#C45200", label:"Baja equipo"},
-    nueva_solicitud:  {icon:"📋", bg:"#F3E8FF", color:"#7C3AED", label:"Solicitud"},
+    nueva_solicitud:  {icon:"📋", bg:"#CCF0F5", color:"#0A5A72", label:"Solicitud"},
     estado_solicitud: {icon:"🔄", bg:"#EDE9FE", color:"#5B21B6", label:"Estado sol."},
     baja_solicitud:   {icon:"🗑", bg:"#FFDEDE", color:"#C0001A", label:"Sol. eliminada"},
-    en_cotizacion:    {icon:"💬", bg:"#F3E8FF", color:"#7C3AED", label:"Cotización"},
+    en_cotizacion:    {icon:"💬", bg:"#CCF0F5", color:"#0A5A72", label:"Cotización"},
   };
   const [solisPend,setSolisPend]=React.useState([]);
   const [solisCompra,setSolisCompra]=React.useState([]);
@@ -4636,10 +4638,10 @@ function Historial(){
     alta_equipo:      {icon:"🔧", bg:"#D9ECFF", color:"#004A9E", label:"Alta equipo"},
     edicion_equipo:   {icon:"✏️", bg:"#E8F0FB", color:"#0D2F5C", label:"Edición equipo"},
     baja_equipo:      {icon:"🗑", bg:"#FFF0D9", color:"#C45200", label:"Baja equipo"},
-    nueva_solicitud:  {icon:"📋", bg:"#F3E8FF", color:"#7C3AED", label:"Nueva solicitud"},
+    nueva_solicitud:  {icon:"📋", bg:"#CCF0F5", color:"#0A5A72", label:"Nueva solicitud"},
     estado_solicitud: {icon:"🔄", bg:"#EDE9FE", color:"#5B21B6", label:"Cambio estado"},
     baja_solicitud:   {icon:"🗑", bg:"#FFDEDE", color:"#C0001A", label:"Solicitud eliminada"},
-    en_cotizacion:    {icon:"💬", bg:"#F3E8FF", color:"#7C3AED", label:"En cotización"},
+    en_cotizacion:    {icon:"💬", bg:"#CCF0F5", color:"#0A5A72", label:"En cotización"},
   };
   const CATEGORIAS = [
     {key:"todos",     label:"Todos"},
@@ -4832,7 +4834,7 @@ function EquiposCombobox({ equipos, selected, onChange }){
 }
 
 function AddModal({onClose,onSave,equipos}){
-  const [f,setF]=useState({code:"",name:"",category:"Mecánica",quantity:0,minStock:1,unit:"pza",location:"",equipos_asociados:[]});
+  const [f,setF]=useState({name:"",category:"Mecánica",quantity:0,minStock:1,unit:"pza",location:"",equipos_asociados:[]});
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
 
   return(
@@ -4842,7 +4844,11 @@ function AddModal({onClose,onSave,equipos}){
         <div className="sheet-title">Nuevo Artículo</div>
         <div style={{padding:"16px 20px 20px",display:"flex",flexDirection:"column",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <AlmField label="Código"><input className="ios-input" value={f.code} onChange={e=>s("code",e.target.value)} placeholder="REF-001"/></AlmField>
+            <AlmField label="Código">
+              <div style={{background:"rgba(120,120,128,0.08)",borderRadius:10,padding:"11px 14px",fontSize:14,color:"#8E8E93",fontStyle:"italic",display:"flex",alignItems:"center",gap:6}}>
+                <span>🔒</span><span>Se genera automáticamente</span>
+              </div>
+            </AlmField>
             <AlmField label="Ubicación"><input className="ios-input" value={f.location} onChange={e=>s("location",e.target.value)} placeholder="A-01"/></AlmField>
           </div>
           <AlmField label="Nombre del artículo"><input className="ios-input" value={f.name} onChange={e=>s("name",e.target.value)} placeholder="Ej: Correa dentada GT2"/></AlmField>
@@ -4875,7 +4881,7 @@ function AddModal({onClose,onSave,equipos}){
 
           <div style={{display:"flex",gap:10,marginTop:4}}>
             <button className="ios-btn ios-btn-gray" style={{flex:1,color:"#FF3B30"}} onClick={onClose}>Cancelar</button>
-            <button className="ios-btn ios-btn-blue" style={{flex:2}} onClick={()=>{if(!f.name||!f.code)return;onSave(f);}}>Guardar artículo</button>
+            <button className="ios-btn ios-btn-blue" style={{flex:2}} onClick={()=>{if(!f.name)return;onSave(f);}}>Guardar artículo</button>
           </div>
         </div>
       </div>
@@ -4981,7 +4987,11 @@ function EditModal({item,onClose,onSave,onDelete}){
         <div className="sheet-title">Editar Artículo</div>
         <div style={{padding:"16px 20px 20px",display:"flex",flexDirection:"column",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <AlmField label="Código"><input className="ios-input" value={f.code} onChange={e=>s("code",e.target.value)}/></AlmField>
+            <AlmField label="Código">
+              <div style={{background:"rgba(120,120,128,0.08)",borderRadius:10,padding:"11px 14px",fontSize:14,color:"#0D2F5C",fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+                <span>🔒</span><span>{item.code}</span>
+              </div>
+            </AlmField>
             <AlmField label="Ubicación"><input className="ios-input" value={f.location} onChange={e=>s("location",e.target.value)}/></AlmField>
           </div>
           <AlmField label="Nombre"><input className="ios-input" value={f.name} onChange={e=>s("name",e.target.value)}/></AlmField>
