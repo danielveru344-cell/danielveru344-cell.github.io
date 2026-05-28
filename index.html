@@ -954,7 +954,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 
 
 
-const { useState, useEffect, useMemo, useRef } = React;
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://mysqkhttdquwicrsjcmg.supabase.co";
@@ -1229,7 +1229,35 @@ function AlmacenApp({onBack, initialUser}){
     }
   },[modal]);
 
-  // ── Notification state ──────────────────────────────────────────────────────
+  // ── Expiración de sesión por inactividad (7 min) ────────────────────────────
+  const SESSION_TIMEOUT = 7 * 60 * 1000;
+  const sessionTimerRef = useRef(null);
+  const [sessionWarning, setSessionWarning] = useState(false); // aviso 1 min antes
+
+  const resetSessionTimer = useCallback(() => {
+    setSessionWarning(false);
+    if(sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
+    // Aviso a los 6 minutos
+    sessionTimerRef.current = setTimeout(() => {
+      setSessionWarning(true);
+      // Cierre definitivo 1 minuto después
+      sessionTimerRef.current = setTimeout(() => {
+        setCurrentUser(null); setItems([]); setMovs([]); setEquipos([]);
+        setSessionWarning(false);
+      }, 60 * 1000);
+    }, SESSION_TIMEOUT - 60 * 1000);
+  }, []);
+
+  useEffect(() => {
+    if(!currentUser) return;
+    const events = ["mousedown","mousemove","keydown","touchstart","scroll","click"];
+    events.forEach(ev => window.addEventListener(ev, resetSessionTimer, {passive:true}));
+    resetSessionTimer();
+    return () => {
+      events.forEach(ev => window.removeEventListener(ev, resetSessionTimer));
+      if(sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
+    };
+  }, [currentUser, resetSessionTimer]);
   const [notif,setNotif]=useState(null);          // {count,isNew}
   const [notifVisible,setNotifVisible]=useState(false);
   const [notifOut,setNotifOut]=useState(false);
@@ -2066,6 +2094,24 @@ function AlmacenApp({onBack, initialUser}){
             </div>
             <button className="notif-close" onClick={e=>{e.stopPropagation();dismissNotifCompra();}}>✕</button>
           </div>
+        </div>
+      )}
+
+      {/* ── Aviso sesión por expirar ── */}
+      {sessionWarning&&(
+        <div style={{position:"fixed",bottom:80,left:"50%",transform:"translateX(-50%)",
+          zIndex:9999,background:"#1C1C1E",color:"#fff",borderRadius:14,
+          padding:"12px 20px",display:"flex",alignItems:"center",gap:12,
+          boxShadow:"0 8px 32px rgba(0,0,0,0.35)",maxWidth:320,width:"calc(100% - 40px)"}}>
+          <span style={{fontSize:22,flexShrink:0}}>⏱️</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:13}}>Sesión por expirar</div>
+            <div style={{fontSize:12,color:"rgba(255,255,255,0.7)",marginTop:2}}>Tu sesión cerrará en 1 minuto por inactividad.</div>
+          </div>
+          <button onClick={resetSessionTimer} style={{background:"#0D2F5C",border:"none",borderRadius:8,
+            color:"#fff",fontWeight:700,fontSize:12,padding:"6px 12px",cursor:"pointer",flexShrink:0}}>
+            Continuar
+          </button>
         </div>
       )}
     </div>
@@ -4537,9 +4583,10 @@ function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash
                       <div style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                         {m.itemName||"—"}
                       </div>
-                      <div style={{fontSize:11,color:"#8E8E93",marginTop:1,display:"flex",gap:5,alignItems:"center"}}>
+                      <div style={{fontSize:11,color:"#8E8E93",marginTop:1,display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
                         <span style={{background:meta.bg,color:meta.color,borderRadius:4,padding:"1px 5px",fontWeight:700,fontSize:10}}>{meta.label}</span>
                         <span>{fmtDate(m.date)}</span>
+                        {m.reason&&<span style={{color:"#636366",fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>· {m.reason}</span>}
                       </div>
                     </div>
                   </div>
