@@ -2326,15 +2326,16 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
                 <span style={{fontWeight:600,color:"#1C1C1E"}}>×{s.quantity} {s.unidad||""}</span>
                 {s.item_code&&<><span style={{color:"#C7C7CC"}}>·</span><span style={{fontFamily:"monospace",fontSize:11,background:"#F2F2F7",padding:"1px 5px",borderRadius:4}}>{s.item_code}</span></>}
                 {s.equipo_name&&<><span style={{color:"#C7C7CC"}}>·</span><span>🔧 {s.equipo_name}</span></>}
-                {s.proveedor&&<><span style={{color:"#C7C7CC"}}>·</span><span>🏪 {s.proveedor}</span></>}
+                
               </div>
               {/* Solicitante + fecha */}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4}}>
-                <span style={{fontSize:11,color:"#8E8E93"}}>👤 {s.solicitante_name}</span>
+                <span style={{fontSize:11,color:"#8E8E93"}}>👤 {s.solicitante_name}{s.proveedor&&<><span style={{color:"#C7C7CC"}}> · </span><span>🏪 {s.proveedor}</span></>}</span>
                 <span style={{fontSize:10,color:"#C7C7CC"}}>{fmtDate(s.created_at)}{s.updated_by?` · ${s.updated_by}`:""}</span>
               </div>
-              {s.reason&&<div style={{fontSize:12,color:"#8E8E93",fontStyle:"italic",borderTop:"0.5px solid #F2F2F7",paddingTop:5}}>"{s.reason}"</div>}
               {s.status==="en_cotizacion"&&s.proveedor&&<div style={{fontSize:12,color:"#7C3AED",fontWeight:600}}>💬 Cotizando con: {s.proveedor}</div>}
+              {s.reason&&<div style={{fontSize:12,color:"#8E8E93",fontStyle:"italic",borderTop:"0.5px solid #F2F2F7",paddingTop:5}}>"{s.reason}"</div>}
+              
               {/* Acciones */}
               {(currentUser.role==="admin"||currentUser.role==="almacenista")&&(()=>{
                 const estadoActual = s.status||"pendiente";
@@ -2413,6 +2414,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
           </div>
         </div>
       )}
+
       {modal==="add"&&(
         <SolicitudModal items={items} equipos={equipos||[]} currentUser={currentUser} onClose={()=>setModal(null)}
           onSave={async(f)=>{
@@ -2449,6 +2451,8 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
     equipo_name: "",
     reason: "",
     proveedor: "",
+    tipo_mtto: "",   // "preventivo" | "correctivo"
+    nst: "",         // número solicitud de trabajo (solo correctivo)
     status: "pendiente",
     solicitante_id: currentUser.id,
     solicitante_name: currentUser.nombre||currentUser.username,
@@ -2489,13 +2493,33 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
   const handleSave=async()=>{
     // Si usarInventario y el usuario escribió en el buscador pero no seleccionó,
     // usamos lo que escribió como nombre libre
-    const nombreFinal = f.item_name || (usarInventario ? itemSearch.trim() : "");
+    const nombreFinal = f.item_name || itemSearch.trim();
     if(!nombreFinal){
-      setValidErr("Escribe o selecciona el artículo antes de enviar.");
+      setValidErr("Selecciona el artículo antes de enviar.");
       return;
     }
     if(!f.quantity||parseInt(f.quantity)<1){
       setValidErr("La cantidad debe ser mayor a 0.");
+      return;
+    }
+    if(!f.equipment||!f.equipment.trim()){
+      setValidErr("Selecciona el equipo o máquina.");
+      return;
+    }
+    if(tipoSolicitud==="locativo"&&(!f.equipo_name||!f.equipo_name.trim())){
+      setValidErr("Selecciona el área o ubicación.");
+      return;
+    }
+    if(tipoSolicitud==="apoyo_critico"&&(!f.equipo_name||!f.equipo_name.trim())){
+      setValidErr("Selecciona el equipo o sistema crítico.");
+      return;
+    }
+    if(!f.tipo_mtto){
+      setValidErr("Selecciona el tipo de mantenimiento.");
+      return;
+    }
+    if(f.tipo_mtto==="correctivo"&&(!f.nst||!f.nst.trim())){
+      setValidErr("Ingresa el N° de Solicitud de Trabajo.");
       return;
     }
     setValidErr("");
@@ -2506,6 +2530,8 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
         item_name: nombreFinal,
         quantity: parseInt(f.quantity)||1,
         tipo_material: tipoSolicitud,
+        tipo_mtto: f.tipo_mtto,
+        nst: f.nst||null,
       });
     } catch(e) {
       setValidErr("Error inesperado: "+e.message);
@@ -2548,21 +2574,8 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
             ))}
           </div>
 
-          {/* Toggle inventario / escribir — aplica a todos los tipos */}
-          <div style={{display:"flex",gap:8}}>
-            {[true,false].map(v=>(
-              <button key={String(v)} onClick={()=>setUsarInventario(v)} style={{
-                flex:1,padding:"10px",border:"1.5px solid",borderRadius:8,cursor:"pointer",
-                borderColor:usarInventario===v?"var(--navy)":"var(--border)",
-                background:usarInventario===v?"var(--light)":"#fff",
-                fontWeight:700,fontSize:12,color:usarInventario===v?"var(--navy)":"var(--gray)",
-                fontFamily:"Montserrat,sans-serif",textTransform:"uppercase"
-              }}>{v?"📦 Del inventario":"✏️ Escribir"}</button>
-            ))}
-          </div>
-
-          {usarInventario?(
-            <AlmField label="Artículo del inventario">
+          {/* Solo del inventario */}
+          <AlmField label="Artículo del inventario">
               <div style={{position:"relative"}}>
                 <input
                   className="ios-input"
@@ -2628,25 +2641,21 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
                 })()}
               </div>
             </AlmField>
-          ):(
-            <AlmField label={tipoSolicitud==="apoyo_critico"?"Recurso / Material requerido":"Nombre del artículo / repuesto"}>
-              <input className="ios-input" value={f.item_name}
-                onChange={e=>{s("item_name",e.target.value);s("item_id",null);s("item_code","");}}
-                placeholder={tipoSolicitud==="apoyo_critico"?"Ej: Cable 12AWG, Fusible 30A, Lubricante…":"Ej: Rodamiento 6205, Correa B45…"}/>
-            </AlmField>
-          )}
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <AlmField label="Cantidad">
               <input className="ios-input" type="number" min="1" value={f.quantity} onChange={e=>s("quantity",e.target.value)}/>
             </AlmField>
-            <AlmField label="Código (opcional)">
-              <input className="ios-input" value={f.item_code} onChange={e=>s("item_code",e.target.value)} placeholder="REF-001"/>
+            <AlmField label="Código">
+              <div className="ios-input" style={{background:"var(--light)",color:"var(--gray)",
+                fontWeight:600,userSelect:"none"}}>
+                {f.item_code||"—"}
+              </div>
             </AlmField>
           </div>
 
           {tipoSolicitud==="repuesto"?(
-            <AlmField label="Equipo / máquina (opcional)">
+            <AlmField label="Equipo / Máquina *">
               {/* Si ya hay equipo seleccionado, mostrar chip con X para limpiar */}
               {equipoSel&&equipoSel!=="otro"?(
                 <div style={{display:"flex",alignItems:"center",gap:8,background:"#e8f0fb",
@@ -2710,7 +2719,7 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
             </AlmField>
           ):tipoSolicitud==="locativo"?(
             /* ── Selector de ÁREA (modo locativo) ── */
-            <AlmField label="Área / Ubicación">
+            <AlmField label="Área / Ubicación *">
               {f.equipo_name?(
                 <div style={{display:"flex",alignItems:"center",gap:8,background:"#e8f5e9",
                   borderRadius:9,padding:"9px 13px",border:"1.5px solid rgba(30,140,60,0.2)"}}>
@@ -2763,7 +2772,7 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
             </AlmField>
           ):(
             /* ── Selector de EQUIPO (modo apoyo crítico) — igual que repuesto ── */
-            <AlmField label="Equipo / sistema crítico (opcional)">
+            <AlmField label="Equipo / Sistema crítico *">
               {equipoSel&&equipoSel!=="otro"?(
                 <div style={{display:"flex",alignItems:"center",gap:8,background:"#FFF0F0",
                   borderRadius:9,padding:"9px 13px",border:"1.5px solid rgba(192,0,26,0.2)"}}>
@@ -2826,14 +2835,37 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
             </AlmField>
           )}
 
-          <AlmField label="Proveedor sugerido (opcional)">
-            <input className="ios-input" value={f.proveedor} onChange={e=>s("proveedor",e.target.value)}
-              placeholder="Ej: Ingemati, Diseñox…"/>
-          </AlmField>
-
-          <AlmField label="Motivo / notas (opcional)">
-            <textarea className="ios-input" rows={2} value={f.reason} onChange={e=>s("reason",e.target.value)}
-              placeholder="Urgencia, especificaciones, contexto…" style={{resize:"none",lineHeight:1.5}}/>
+          <AlmField label="Tipo de mantenimiento *">
+            <div style={{display:"flex",gap:8}}>
+              {["preventivo","correctivo"].map(function(v){
+                var act = f.tipo_mtto===v;
+                return(
+                  <button key={v} type="button" onClick={function(){s("tipo_mtto",v); s("nst","");}}
+                    style={{flex:1,padding:"11px 8px",border:"1.5px solid",borderRadius:8,cursor:"pointer",
+                      borderColor:act?(v==="preventivo"?"#1A9647":"#C0001A"):"var(--border)",
+                      background:act?(v==="preventivo"?"#e8f5e9":"#FFF0F0"):"#fff",
+                      fontWeight:700,fontSize:12,fontFamily:"Montserrat,sans-serif",
+                      color:act?(v==="preventivo"?"#1A9647":"#C0001A"):"var(--gray)",
+                      textTransform:"uppercase",letterSpacing:.3}}>
+                    {v==="preventivo"?"🔧 Preventivo":"⚡ Correctivo"}
+                  </button>
+                );
+              })}
+            </div>
+            {f.tipo_mtto==="preventivo"&&f.equipo_name&&(
+              <div style={{marginTop:8,fontSize:12,color:"#1A9647",fontWeight:600,
+                background:"#e8f5e9",borderRadius:8,padding:"8px 12px"}}>
+                ✓ Asociado a: {f.equipo_name}
+              </div>
+            )}
+            {f.tipo_mtto==="correctivo"&&(
+              <div style={{marginTop:8}}>
+                <div className="ios-input-label">N° Solicitud de Trabajo</div>
+                <input className="ios-input" value={f.nst}
+                  onChange={function(e){s("nst",e.target.value);}}
+                  placeholder="Ej: NST-2026-0042"/>
+              </div>
+            )}
           </AlmField>
 
           {validErr&&(
