@@ -2299,7 +2299,16 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
             <div style={{flex:1,padding:"13px 14px",display:"flex",flexDirection:"column",gap:6}}>
               {/* Encabezado: nombre + badge */}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                <div style={{fontWeight:700,fontSize:15,color:"#1C1C1E",flex:1,minWidth:0}}>{s.item_name}</div>
+                <div style={{fontWeight:700,fontSize:15,color:"#1C1C1E",flex:1,minWidth:0}}>
+                  {s.consecutivo&&(
+                    <span style={{fontSize:11,fontWeight:800,color:"#fff",background:"var(--navy)",
+                      borderRadius:6,padding:"1px 7px",marginRight:6,letterSpacing:.3,
+                      fontFamily:"Montserrat,sans-serif",verticalAlign:"middle"}}>
+                      {s.consecutivo}
+                    </span>
+                  )}
+                  {s.item_name}
+                </div>
                 {estadoBadge(s.status||"pendiente")}
               </div>
               {/* Info secundaria */}
@@ -2408,13 +2417,15 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
         <SolicitudModal items={items} equipos={equipos||[]} currentUser={currentUser} onClose={()=>setModal(null)}
           onSave={async(f)=>{
             try {
-              // tipo_material aún no existe en la tabla — excluirlo del insert
+              // Generar consecutivo
+              const { data: consData } = await sb.rpc("siguiente_consecutivo_solicitud");
+              const consecutivo = consData || null;
+
               const {tipo_material, ...insertData} = f;
-              const {data,error}=await sb.from("solicitudes").insert([insertData]).select().single();
+              const {data,error}=await sb.from("solicitudes").insert([{...insertData, consecutivo}]).select().single();
               if(error) throw new Error(error.message);
-              // Reinyectar tipo_material localmente para que el filtro funcione en la sesión
               setSolis(prev=>[{...data, tipo_material}, ...prev]);
-              flash("✓ Solicitud enviada correctamente");
+              flash("✓ Solicitud enviada — "+consecutivo);
               registrarHistorial("nueva_solicitud", "Nueva solicitud: "+(f.item_name||f.item_code||"")+" × "+f.quantity, currentUser?.nombre||currentUser?.username||"Sistema").then(()=>reloadHistorial&&reloadHistorial());
               if(window._refreshPending) window._refreshPending();
               setModal(null);
@@ -5967,7 +5978,7 @@ function AnalCard(p){
 }
 
 // ── NewForm ───────────────────────────────────────────────────────────────────
-function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos}){
+function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
   const turnosList=turnos&&turnos.length>0?turnos:TURNOS_DEF;
   const eqList=eqs.length>0?eqs:AREAS_DEF;
   const locList=locEqs&&locEqs.length>0?locEqs:AREAS_LOC;
@@ -5987,17 +5998,27 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos}){
     return turnosList[0];
   }
 
-  const [tecCode,setTecCode]=useState("");
+  const tecMap={}; tecs.forEach(function(t){tecMap[t.code]=t;});
+
+  // Pre-seleccionar técnico desde usuario logueado
+  const initialCode = React.useMemo(function(){
+    if(!initialUser||!tecs.length) return "";
+    var nombre = (initialUser.nombre||"").toLowerCase();
+    var found = tecs.find(function(t){
+      return t.name && t.name.toLowerCase().includes(nombre.split(" ")[0]);
+    });
+    return found ? found.code : "";
+  }, [initialUser, tecs]);
+
+  const [tecCode,setTecCode]=useState(function(){ return initialCode||""; });
   const [manualMode,setManualMode]=useState(false);
   const [tecSearch,setTecSearch]=useState("");
-  const [pendingTec,setPendingTec]=useState(null); // tec esperando confirmación de código
+  const [pendingTec,setPendingTec]=useState(null);
   const [confirmCode,setConfirmCode]=useState("");
   const [confirmErr,setConfirmErr]=useState(false);
   const [turno,setTurno]=useState(function(){return detectTurno();});
   const [fecha,setFecha]=useState(new Date().toISOString().slice(0,10));
   const [obs,setObs]=useState("");
-
-  const tecMap={}; tecs.forEach(function(t){tecMap[t.code]=t;});
   const tecObj=tecMap[tecCode]||null;
   const tecName=tecObj?tecObj.name:"";
   const isLocativo=tecObj&&tecObj.cargo==="Auxiliar de Mantenimiento Locativo";
@@ -6953,7 +6974,7 @@ function AnalisisView(props){
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
-function BitacoraApp({onBack}){
+function BitacoraApp({onBack, initialUser}){
   const [entries,setEntries]=useState([]);
   const [eqs,setEqs]=useState(AREAS_DEF);
   const [tecs,setTecs]=useState([]);
@@ -7139,7 +7160,7 @@ function BitacoraApp({onBack}){
         ):tab==="analisis"?(
           <AnalisisView entries={entries}/>
         ):tab==="nuevo"?(
-          <NewForm onSave={doSave} onCancel={function(){setTab("home");}} eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos}/>
+          <NewForm onSave={doSave} onCancel={function(){setTab("home");}} eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos} initialUser={initialUser}/>
         ):tab==="admin"&&adminOk?(
           <AdminPanel eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos} entries={entries} setEqs={setEqs} setTecs={setTecs} setMetEqs={setMetEqs} setLocEqs={setLocEqs} setTurnos={setTurnos} onDel={doDel} onLogout={function(){setAdminOk(false);setTab("home");}}/>
         ):null}
