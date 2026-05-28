@@ -3952,6 +3952,262 @@ function AnalisisTab({ items, equipos }) {
     fetchAll();
   }, []);
 
+  if (loading) return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:60,color:"#8E8E93"}}>
+      <div style={{fontSize:36}}>📊</div>
+      <div style={{fontWeight:600}}>Calculando análisis…</div>
+    </div>
+  );
+
+  const { solis, movs } = data;
+  const now = new Date();
+
+  // ── Rango activo ─────────────────────────────────────────
+  const getRango = () => {
+    if(periodo==="custom") return { ini: desde?new Date(desde+"T00:00:00"):null, fin: hasta?new Date(hasta+"T23:59:59"):null };
+    const dias = periodo==="7d"?7:periodo==="30d"?30:90;
+    const ini = new Date(now); ini.setDate(ini.getDate()-dias);
+    return { ini, fin: now };
+  };
+  const { ini, fin } = getRango();
+  const inRango = (d) => {
+    if(!d) return false;
+    const dt = new Date(d);
+    if(ini && dt<ini) return false;
+    if(fin && dt>fin) return false;
+    return true;
+  };
+
+  const solisR  = solis.filter(s=>inRango(s.created_at));
+  const movsR   = movs.filter(m=>inRango(m.created_at));
+  const salidas  = movsR.filter(m=>m.type==="salida");
+  const entradas = movsR.filter(m=>m.type==="entrada");
+  const devols   = movsR.filter(m=>m.type==="devolucion");
+
+  // ── KPIs ─────────────────────────────────────────────────
+  const totalSolis       = solisR.length;
+  const solicitadaCompra = solisR.filter(s=>s.status==="solicitada_compra").length;
+  const totalSalidas     = salidas.reduce((s,m)=>s+(m.quantity||0),0);
+  const totalEntradas    = entradas.reduce((s,m)=>s+(m.quantity||0),0);
+  const totalDevols      = devols.reduce((s,m)=>s+(m.quantity||0),0);
+  const bajosStock = items.filter(i=>i.quantity<=i.minStock).length;
+  const sinStock   = items.filter(i=>i.quantity===0).length;
+  const saludPct   = items.length?Math.round(((items.length-bajosStock)/items.length)*100):100;
+
+  // ── Top materiales ───────────────────────────────────────
+  const soliByItem = {};
+  solisR.forEach(s=>{
+    const k=s.item_name||"Sin nombre";
+    if(!soliByItem[k]) soliByItem[k]={solicitudes:0,cantidad:0};
+    soliByItem[k].solicitudes++;
+    soliByItem[k].cantidad+=(s.quantity||0);
+  });
+  const topMateriales = Object.entries(soliByItem).sort((a,b)=>b[1].solicitudes-a[1].solicitudes).slice(0,topN);
+
+  // ── Top equipos ──────────────────────────────────────────
+  const solByEquipo = {};
+  solisR.forEach(s=>{ const k=s.equipo_name||s.equipo||""; if(k) solByEquipo[k]=(solByEquipo[k]||0)+1; });
+  const topEquipos = Object.entries(solByEquipo).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // ── Categorías ───────────────────────────────────────────
+  const catCount = {};
+  items.forEach(i=>{ catCount[i.category]=(catCount[i.category]||0)+1; });
+  const catData = Object.entries(catCount).sort((a,b)=>b[1]-a[1]);
+
+  // ── Actividad diaria ─────────────────────────────────────
+  const diasCount = periodo==="7d"?7:periodo==="30d"?14:30;
+  const diasArr = Array.from({length:diasCount},(_,i)=>{
+    const d=new Date(now); d.setDate(d.getDate()-(diasCount-1-i));
+    const key=d.toISOString().slice(0,10);
+    const label=diasCount<=7
+      ?d.toLocaleDateString("es-CO",{weekday:"short",timeZone:"America/Bogota"})
+      :d.toLocaleDateString("es-CO",{day:"numeric",month:"short",timeZone:"America/Bogota"});
+    const ent=entradas.filter(m=>m.created_at?.slice(0,10)===key).reduce((s,m)=>s+(m.quantity||0),0);
+    const sal=salidas.filter(m=>m.created_at?.slice(0,10)===key).reduce((s,m)=>s+(m.quantity||0),0);
+    return {label,ent,sal};
+  });
+  const maxDia = Math.max(...diasArr.map(d=>Math.max(d.ent,d.sal)),1);
+
+  const CAT_COLORS=["#0D2F5C","#2d7dd2","#34C759","#FF9500","#AF52DE","#FF3B30","#5AC8FA"];
+  const periodoLabel=periodo==="7d"?"7 días":periodo==="30d"?"30 días":periodo==="90d"?"90 días":"Personalizado";
+
+  const BarChart = ({data:rows,colorA="#0D2F5C",unitA=""}) => {
+    if(!rows.length) return <div style={{color:"#C7C7CC",fontSize:13,padding:"12px 0"}}>Sin datos en este período</div>;
+    const maxVal=Math.max(...rows.map(r=>typeof r[1]==="object"?r[1].solicitudes:r[1]),1);
+    return (
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {rows.map(([label,val],i)=>{
+          const vA=typeof val==="object"?val.solicitudes:val;
+          const vB=typeof val==="object"?val.cantidad:null;
+          return (
+            <div key={i}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,alignItems:"baseline"}}>
+                <span style={{fontSize:12,fontWeight:600,color:"#1C1C1E",maxWidth:"62%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
+                <span style={{fontSize:12,display:"flex",gap:8}}>
+                  <span style={{fontWeight:700,color:colorA}}>{vA}{unitA}</span>
+                  {vB!==null&&<span style={{color:"#8E8E93"}}>{vB} und.</span>}
+                </span>
+              </div>
+              <div style={{height:10,background:"#F2F2F7",borderRadius:5,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${(vA/maxVal)*100}%`,background:`linear-gradient(90deg,${colorA},${colorA}cc)`,borderRadius:5,transition:"width 0.6s cubic-bezier(0.25,0.46,0.45,0.94)"}}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const Card = ({title,icon,children,accent,action}) => (
+    <div className="ios-card" style={{padding:"16px 18px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+        <div style={{width:32,height:32,borderRadius:8,background:accent+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{icon}</div>
+        <div style={{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:12,color:"#0D2F5C",textTransform:"uppercase",letterSpacing:1,flex:1}}>{title}</div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+      {/* Selector período */}
+      <div className="ios-card" style={{padding:"12px 16px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#8E8E93",textTransform:"uppercase",letterSpacing:0.5,fontFamily:"Montserrat,sans-serif",flexShrink:0}}>Período</span>
+          <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
+            {[["7d","7 días"],["30d","30 días"],["90d","90 días"],["custom","Personalizado"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setPeriodo(k)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid",fontSize:12,fontWeight:600,cursor:"pointer",borderColor:periodo===k?"var(--navy)":"var(--border)",background:periodo===k?"var(--light)":"#fff",color:periodo===k?"var(--navy)":"#8E8E93"}}>{l}</button>
+            ))}
+          </div>
+        </div>
+        {periodo==="custom"&&(
+          <div style={{display:"flex",gap:10,marginTop:10}}>
+            <div style={{flex:1}}><div className="ios-input-label">Desde</div><input className="ios-input" type="date" value={desde} onChange={e=>setDesde(e.target.value)}/></div>
+            <div style={{flex:1}}><div className="ios-input-label">Hasta</div><input className="ios-input" type="date" value={hasta} onChange={e=>setHasta(e.target.value)}/></div>
+          </div>
+        )}
+      </div>
+
+      {/* KPIs */}
+      <div className="stat-scroll">
+        {[
+          {label:"Solicitudes",      value:totalSolis,        color:"#0D2F5C",                                                icon:"📨"},
+          {label:"Para compra",      value:solicitadaCompra,  color:solicitadaCompra>0?"#004A9E":"#34C759",                  icon:"🛒"},
+          {label:"Uds. consumidas",  value:totalSalidas,      color:"#FF3B30",                                               icon:"📤"},
+          {label:"Uds. ingresadas",  value:totalEntradas,     color:"#34C759",                                               icon:"📥"},
+          {label:"Devoluciones",     value:totalDevols,       color:"#b07d00",                                               icon:"↩"},
+          {label:"Bajo stock",       value:bajosStock,        color:bajosStock>0?"#FF9500":"#34C759",                        icon:"⚠️"},
+          {label:"Sin stock",        value:sinStock,          color:sinStock>0?"#FF3B30":"#34C759",                          icon:"🔴"},
+          {label:"Salud inventario", value:saludPct+"%",      color:saludPct>=80?"#34C759":saludPct>=60?"#FF9500":"#FF3B30",icon:"💚"},
+        ].map((k,i)=>(
+          <div key={i} className="stat-card" style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:2}}>
+            <div style={{fontSize:11,marginBottom:2}}>{k.icon}</div>
+            <div style={{fontSize:28,fontWeight:700,letterSpacing:-0.5,color:k.color,lineHeight:1}}>{k.value}</div>
+            <div style={{fontSize:10,color:"#8E8E93",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,fontFamily:"Montserrat,sans-serif"}}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Actividad */}
+      <Card title={`Actividad — ${periodoLabel}`} icon="📅" accent="#2d7dd2">
+        <div style={{display:"flex",alignItems:"flex-end",gap:diasCount>14?2:4,height:80,overflowX:"auto"}}>
+          {diasArr.map((d,i)=>(
+            <div key={i} style={{flex:"0 0 auto",minWidth:diasCount>14?12:18,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+              <div style={{width:"100%",display:"flex",flexDirection:"column",gap:1,height:64,justifyContent:"flex-end"}}>
+                <div title={`Entradas: ${d.ent}`} style={{width:"100%",height:`${(d.ent/maxDia)*50}%`,minHeight:d.ent?3:0,background:"#34C759",borderRadius:"3px 3px 0 0",transition:"height 0.5s"}}/>
+                <div title={`Salidas: ${d.sal}`} style={{width:"100%",height:`${(d.sal/maxDia)*50}%`,minHeight:d.sal?3:0,background:"#FF3B30",borderRadius:"3px 3px 0 0",transition:"height 0.5s"}}/>
+              </div>
+              {diasCount<=14&&<div style={{fontSize:9,color:"#8E8E93",fontWeight:600,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{d.label}</div>}
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:16,marginTop:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,borderRadius:2,background:"#34C759"}}/><span style={{fontSize:11,color:"#8E8E93"}}>Entradas</span></div>
+          <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,borderRadius:2,background:"#FF3B30"}}/><span style={{fontSize:11,color:"#8E8E93"}}>Salidas</span></div>
+        </div>
+      </Card>
+
+      {/* Materiales más solicitados */}
+      <Card title="Materiales más solicitados" icon="📦" accent="#0D2F5C"
+        action={<div style={{display:"flex",gap:4,alignItems:"center"}}>
+          <span style={{fontSize:11,color:"#8E8E93"}}>Top</span>
+          {[5,10,15].map(n=>(
+            <button key={n} onClick={()=>setTopN(n)} style={{padding:"3px 8px",borderRadius:6,border:"1.5px solid",fontSize:11,fontWeight:700,cursor:"pointer",borderColor:topN===n?"var(--navy)":"var(--border)",background:topN===n?"var(--navy)":"#fff",color:topN===n?"#fff":"#8E8E93"}}>{n}</button>
+          ))}
+        </div>}>
+        <BarChart data={topMateriales} colorA="#0D2F5C" unitA=" sol."/>
+        <div style={{display:"flex",gap:16,marginTop:10,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,borderRadius:2,background:"#0D2F5C"}}/><span style={{fontSize:11,color:"#8E8E93"}}>Nº solicitudes</span></div>
+          <span style={{fontSize:11,color:"#C7C7CC"}}>+ cantidad total solicitada</span>
+        </div>
+      </Card>
+
+      {/* Equipos */}
+      {topEquipos.length>0&&(
+        <Card title="Equipos con más solicitudes" icon="🏭" accent="#0D2F5C">
+          <BarChart data={topEquipos} colorA="#0D2F5C" unitA=" sol."/>
+        </Card>
+      )}
+
+      {/* Categorías */}
+      <Card title="Artículos por categoría" icon="🗂️" accent="#2d7dd2">
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {catData.map(([cat,count],i)=>{
+            const pct=Math.round((count/items.length)*100);
+            return (
+              <div key={i}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{fontSize:12,fontWeight:600,color:"#3C3C43",display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{width:8,height:8,borderRadius:"50%",background:CAT_COLORS[i%CAT_COLORS.length],display:"inline-block"}}/>
+                    {cat}
+                  </span>
+                  <span style={{fontSize:12,color:"#8E8E93"}}>{count} art. · <strong style={{color:CAT_COLORS[i%CAT_COLORS.length]}}>{pct}%</strong></span>
+                </div>
+                <div style={{height:6,background:"#F2F2F7",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:CAT_COLORS[i%CAT_COLORS.length],borderRadius:3,transition:"width 0.6s"}}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Balance */}
+      <Card title="Balance stock" icon="⚖️" accent="#34C759">
+        {(()=>{
+          const total=totalEntradas+totalSalidas+totalDevols||1;
+          const entPct=Math.round((totalEntradas/total)*100);
+          const devPct=Math.round((totalDevols/total)*100);
+          const salPct=100-entPct-devPct;
+          return (
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{height:20,borderRadius:10,overflow:"hidden",display:"flex"}}>
+                <div style={{width:`${entPct}%`,background:"#34C759",transition:"width 0.6s"}}/>
+                <div style={{width:`${devPct}%`,background:"#b07d00",transition:"width 0.6s"}}/>
+                <div style={{width:`${salPct}%`,background:"#FF3B30",transition:"width 0.6s"}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+                {[["#34C759","Entradas",entPct],["#b07d00","Devoluciones",devPct],["#FF3B30","Salidas",salPct]].map(([c,l,p])=>(
+                  <div key={l} style={{display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{width:10,height:10,borderRadius:2,background:c}}/>
+                    <span style={{fontSize:12,color:"#8E8E93"}}>{l} <strong style={{color:c}}>{p}%</strong></span>
+                  </div>
+                ))}
+              </div>
+              <div style={{textAlign:"center",fontSize:12,color:"#C7C7CC"}}>
+                {totalEntradas===0&&totalSalidas===0&&totalDevols===0?"Sin movimientos en este período":`${totalEntradas} entradas · ${totalDevols} devoluciones · ${totalSalidas} salidas`}
+              </div>
+            </div>
+          );
+        })()}
+      </Card>
+
+    </div>
+  );
+}
+
 function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash,reloadHistorial}){
   const total=items.reduce((s,i)=>s+i.quantity,0);
 
