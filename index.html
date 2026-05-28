@@ -2632,28 +2632,34 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                   placeholder={`Ej: ${dispModal.quantity}`}
                   value={dispCantidad} onChange={e=>setDispCantidad(e.target.value)} autoFocus/>
               </div>
-              <div>
+              <div style={{position:"relative"}}>
                 <div className="ios-input-label">Proveedor</div>
-                {proveedoresList.length>0?(
-                  <>
-                    <select className="ios-input" value={dispProveedor}
-                      onChange={e=>setDispProveedor(e.target.value)}
-                      style={{appearance:"auto",color:dispProveedor?"#1C1C1E":"#8E8E93"}}>
-                      <option value="">Selecciona un proveedor…</option>
-                      {proveedoresList.map(p=><option key={p} value={p}>{p}</option>)}
-                      <option value="__otro__">✏️ Otro (escribir)</option>
-                    </select>
-                    {dispProveedor==="__otro__"&&(
-                      <input className="ios-input" style={{marginTop:8}}
-                        placeholder="Escribe el nombre del proveedor…"
-                        autoFocus
-                        onChange={e=>setDispProveedor(e.target.value==="__otro__"?"":e.target.value)}/>
-                    )}
-                  </>
-                ):(
-                  <input className="ios-input" placeholder="Nombre del proveedor…"
-                    value={dispProveedor} onChange={e=>setDispProveedor(e.target.value)}/>
-                )}
+                {(()=>{
+                  const filtrados=proveedoresList.filter(p=>p.toLowerCase().includes(dispProveedor.toLowerCase()));
+                  const exacto=proveedoresList.some(p=>p.toLowerCase()===dispProveedor.toLowerCase().trim());
+                  return(
+                    <>
+                      <input className="ios-input" placeholder="Buscar proveedor…"
+                        value={dispProveedor} onChange={e=>setDispProveedor(e.target.value)}/>
+                      {dispProveedor&&!exacto&&filtrados.length>0&&(
+                        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:10,background:"#fff",borderRadius:10,
+                          boxShadow:"0 4px 20px rgba(0,0,0,0.15)",border:"1px solid var(--border)",maxHeight:160,overflowY:"auto",marginTop:4}}>
+                          {filtrados.map(p=>(
+                            <div key={p} onClick={()=>setDispProveedor(p)}
+                              style={{padding:"10px 14px",fontSize:14,cursor:"pointer",borderBottom:"0.5px solid rgba(60,60,67,0.08)",display:"flex",alignItems:"center",gap:8}}
+                              onMouseEnter={e=>e.currentTarget.style.background="#F2F2F7"}
+                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              <span>🏪</span>{p}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {dispProveedor&&!exacto&&filtrados.length===0&&(
+                        <div style={{fontSize:12,color:"#8E8E93",marginTop:4}}>Sin coincidencias — puedes continuar sin proveedor</div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
               <div>
                 <div className="ios-input-label">Número de remisión</div>
