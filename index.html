@@ -6918,11 +6918,21 @@ function EntryDetail(props){
 }
 
 // ── EntryCard ─────────────────────────────────────────────────────────────────
-function EntryExpanded({entry, onPrint}){
+function EntryExpanded({entry, onPrint, initialUser, onConfirmar}){
   const e=entry;
-  const hiA=e.pendientes.filter(function(p){return p.p==="Alta";}).length;
+  const hiA=(e.pendientes||[]).filter(function(p){return p.p==="Alta";}).length;
+  const confs=e.confirmaciones||[];
+  const puedeConfirmar=initialUser&&(initialUser.role==="admin"||initialUser.role==="solicitante");
+  const yaConfirmó=puedeConfirmar&&confs.some(function(c){return c.username===initialUser.username;});
+
+  function fmtConf(iso){
+    var d=new Date(iso);
+    return d.toLocaleDateString("es-CO",{day:"2-digit",month:"short",timeZone:"America/Bogota"})
+      +" "+d.toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit",timeZone:"America/Bogota"});
+  }
+
   return(
-    <div style={{background:"#fff",borderRadius:16,border:"1.5px solid rgba(13,47,92,0.10)",
+    <div style={{background:"#fff",borderRadius:16,border:"1.5px solid "+(confs.length>0?"rgba(29,122,62,0.25)":"rgba(13,47,92,0.10)"),
       boxShadow:"0 2px 14px rgba(13,47,92,0.07)",overflow:"hidden"}}>
       {/* Header */}
       <div style={{background:NV,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
@@ -6939,12 +6949,15 @@ function EntryExpanded({entry, onPrint}){
             {e.realizadas.length>0&&<span style={{background:"rgba(29,122,62,0.35)",color:"#6ee7a0",
               padding:"2px 7px",borderRadius:8,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
               {e.realizadas.length} real.</span>}
-            {e.pendientes.length>0&&<span style={{background:"rgba(196,82,0,0.35)",color:"#fdba74",
+            {(e.pendientes||[]).length>0&&<span style={{background:"rgba(196,82,0,0.35)",color:"#fdba74",
               padding:"2px 7px",borderRadius:8,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
               {e.pendientes.length} pend.</span>}
             {hiA>0&&<span style={{background:"rgba(192,0,26,0.35)",color:"#fca5a5",
               padding:"2px 7px",borderRadius:8,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
               {hiA} alta</span>}
+            {confs.length>0&&<span style={{background:"rgba(29,122,62,0.45)",color:"#6ee7a0",
+              padding:"2px 7px",borderRadius:8,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
+              ✓ {confs.length} leído{confs.length>1?"s":""}</span>}
           </div>
         </div>
       </div>
@@ -6964,6 +6977,8 @@ function EntryExpanded({entry, onPrint}){
                       fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{r.area}</span>
                     {r.hi&&r.hf&&<span style={{background:"#dde8f8",color:"#2d7dd2",padding:"2px 8px",
                       borderRadius:6,fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{r.hi} – {r.hf}</span>}
+                    {r.pendiente&&<span style={{background:"#FFF0D9",color:"#C45200",padding:"2px 8px",
+                      borderRadius:6,fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>⏳ Pendiente</span>}
                   </div>
                   {r.desc&&<div style={{fontSize:13,color:NV,lineHeight:1.5}}>{r.desc}</div>}
                 </div>
@@ -6971,7 +6986,7 @@ function EntryExpanded({entry, onPrint}){
             );})}
           </div>
         )}
-        {e.pendientes.length>0&&(
+        {(e.pendientes||[]).length>0&&(
           <div>
             <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,color:"#C45200",
               textTransform:"uppercase",letterSpacing:1,marginBottom:7}}>⏳ Pendientes</div>
@@ -6999,6 +7014,46 @@ function EntryExpanded({entry, onPrint}){
             <div style={{fontSize:13,color:"#555",lineHeight:1.6}}>{e.obs}</div>
           </div>
         )}
+
+        {/* ── Confirmaciones de lectura ── */}
+        {(confs.length>0||puedeConfirmar)&&(
+          <div style={{borderTop:"1px solid rgba(13,47,92,0.07)",paddingTop:10}}>
+            <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,color:"#8a96a8",
+              textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Revisado por</div>
+            {confs.length>0&&(
+              <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:puedeConfirmar?10:0}}>
+                {confs.map(function(c,i){
+                  var ini=c.nombre.split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase();
+                  return(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:26,height:26,borderRadius:8,background:"#D1F2E0",
+                        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{color:"#1D7A3E",fontFamily:"Montserrat",fontWeight:800,fontSize:10}}>{ini}</span>
+                      </div>
+                      <span style={{fontWeight:600,fontSize:13,color:NV,flex:1}}>{c.nombre}</span>
+                      <span style={{fontSize:11,color:"#8a96a8",flexShrink:0}}>{fmtConf(c.fecha)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {puedeConfirmar&&!yaConfirmó&&onConfirmar&&(
+              <button onClick={function(){onConfirmar(e.id);}}
+                style={{width:"100%",padding:"9px",borderRadius:10,border:"1.5px solid #1D7A3E",
+                  background:"#D1F2E0",color:"#1D7A3E",cursor:"pointer",
+                  fontFamily:"Montserrat",fontWeight:800,fontSize:12,letterSpacing:.3,
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <span style={{fontSize:15}}>✓</span> Confirmar lectura
+              </button>
+            )}
+            {puedeConfirmar&&yaConfirmó&&(
+              <div style={{display:"flex",alignItems:"center",gap:6,color:"#1D7A3E",fontSize:12,fontWeight:700,fontFamily:"Montserrat"}}>
+                <span>✓</span><span>Ya confirmaste este reporte</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {onPrint&&(
           <button onClick={function(){onPrint(e);}}
             style={{background:"none",border:"1px solid rgba(13,47,92,0.15)",borderRadius:8,
@@ -7055,6 +7110,7 @@ function ReportesView(props){
   const [ar,setAr]=useState("Todas");
   const [pr,setPr]=useState("Todas");
   const [sp,setSp]=useState(false);
+  const [sv,setSv]=useState(false); // solo no verificados
   const [de,setDe]=useState(""); const [ha,setHa]=useState("");
   const [exp,setExp]=useState({});
   const [sf,setSf]=useState(false);
@@ -7062,8 +7118,8 @@ function ReportesView(props){
   // sortBy opciones: fecha_desc|fecha_asc|persona_az|persona_za|turno_az|turno_za|horas_desc|horas_asc
 
   function toggleExp(id){const n=Object.assign({},exp);n[id]=!n[id];setExp(n);}
-  function reset(){setQ("");setTrn("Todos");setAr("Todas");setPr("Todas");setSp(false);setDe("");setHa("");setSortBy("fecha_desc");}
-  const fa=!!(q||trn!=="Todos"||ar!=="Todas"||pr!=="Todas"||sp||de||ha||sortBy!=="fecha_desc");
+  function reset(){setQ("");setTrn("Todos");setAr("Todas");setPr("Todas");setSp(false);setSv(false);setDe("");setHa("");setSortBy("fecha_desc");}
+  const fa=!!(q||trn!=="Todos"||ar!=="Todas"||pr!=="Todas"||sp||sv||de||ha||sortBy!=="fecha_desc");
 
   const entries=props.entries;
   const allAreas=[];
@@ -7095,6 +7151,7 @@ function ReportesView(props){
     if(ar!=="Todas"&&!e.realizadas.some(function(r){return r.area===ar;})&&!(e.pendientes||[]).some(function(p){return p.area===ar;}))return false;
     if(pr!=="Todas"&&!(e.pendientes||[]).some(function(p){return p.p===pr;}))return false;
     if(sp&&(e.pendientes||[]).length===0)return false;
+    if(sv&&(e.confirmaciones||[]).length>0)return false;
     if(de&&isoDay(e.createdAt)<de)return false;
     if(ha&&isoDay(e.createdAt)>ha)return false;
     return true;
@@ -7157,10 +7214,14 @@ function ReportesView(props){
               <BtkField label="Hasta"><input type="date" className="inp" value={ha} onChange={function(e){setHa(e.target.value);}}/></BtkField>
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
             <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"#8a96a8",fontWeight:500}}>
               <input type="checkbox" checked={sp} onChange={function(e){setSp(e.target.checked);}} style={{accentColor:NV,width:16,height:16}}/>
               Solo con pendientes
+            </label>
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"#C0001A",fontWeight:600}}>
+              <input type="checkbox" checked={sv} onChange={function(e){setSv(e.target.checked);}} style={{accentColor:"#C0001A",width:16,height:16}}/>
+              Sin verificar
             </label>
             <button className="btn btn-ghost btn-sm" onClick={reset} style={{marginLeft:"auto"}}>Limpiar</button>
           </div>
@@ -7202,7 +7263,7 @@ function ReportesView(props){
                     <div key={d}>
                       <div className="day-sep"><div className="day-line"/><span className="day-lbl">{fD(d+"T12:00:00")}</span><span style={{background:"#e8f0fb",color:NV,padding:"1px 9px",borderRadius:10,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[d].length}</span><div className="day-line"/></div>
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {gmap[d].map(function(e){return <EntryExpanded key={e.id} entry={e} onPrint={function(){window.print();}}/>;}) }
+                        {gmap[d].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onPrint={function(){window.print();}}/>;}) }
                       </div>
                     </div>
                   );})}
@@ -7233,7 +7294,7 @@ function ReportesView(props){
                           <span style={{background:"#e8f0fb",color:NV,padding:"2px 10px",borderRadius:20,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[k].length} reporte{gmap[k].length>1?"s":""}</span>
                         </div>
                         <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                          {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} onPrint={function(){window.print();}}/>;}) }
+                          {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onPrint={function(){window.print();}}/>;}) }
                         </div>
                       </div>
                     );
@@ -7263,7 +7324,7 @@ function ReportesView(props){
                         <span style={{background:"#FFF0D9",color:"#C45200",padding:"2px 10px",borderRadius:20,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[k].length} reporte{gmap[k].length>1?"s":""}</span>
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} onPrint={function(){window.print();}}/>;}) }
+                        {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onPrint={function(){window.print();}}/>;}) }
                       </div>
                     </div>
                   );})}
@@ -7274,7 +7335,7 @@ function ReportesView(props){
             // horas_desc / horas_asc — lista plana
             return(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {fil.map(function(e){return <EntryExpanded key={e.id} entry={e} onPrint={function(){window.print();}}/>;}) }
+                {fil.map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onPrint={function(){window.print();}}/>;}) }
               </div>
             );
           })()
@@ -7704,6 +7765,26 @@ function BitacoraApp({onBack, initialUser}){
     });
     setTab("home");
   }
+
+  function confirmarLectura(entryId){
+    if(!initialUser) return;
+    setEntries(function(prev){
+      const n=prev.map(function(e){
+        if(e.id!==entryId) return e;
+        const conf=e.confirmaciones||[];
+        // No duplicar si ya confirmó este usuario
+        if(conf.some(function(c){return c.username===initialUser.username;})) return e;
+        const nueva={
+          username: initialUser.username,
+          nombre:   initialUser.nombre||initialUser.username,
+          fecha:    new Date().toISOString()
+        };
+        return Object.assign({},e,{confirmaciones:conf.concat([nueva])});
+      });
+      save(KS.e,n);
+      return n;
+    });
+  }
   function doDel(id){
     setEntries(function(p){
       const n=p.filter(function(e){return e.id!==id;});
@@ -7803,13 +7884,13 @@ function BitacoraApp({onBack, initialUser}){
                   <div style={{fontSize:14,fontWeight:500}}>No hay reportes aun. Crea el primero!</div>
                 </div>
               :<div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {entries.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);}).slice(0,5).map(function(e){return <EntryExpanded key={e.id} entry={e} onPrint={function(en){window.print();}}/>;}) }
+                  {entries.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);}).slice(0,5).map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={initialUser} onConfirmar={confirmarLectura} onPrint={function(en){window.print();}}/>;}) }
                   {entries.length>5&&<button onClick={function(){setTab("reportes");}} style={{background:"#fff",border:"1.5px dashed rgba(13,47,92,0.15)",borderRadius:12,padding:13,cursor:"pointer",color:"#8a96a8",fontFamily:"Montserrat",fontSize:12,fontWeight:700,width:"100%"}}>Ver los {entries.length-5} restantes</button>}
                 </div>
             }
           </div>
         ):tab==="reportes"?(
-          <ReportesView entries={entries} turnos={turnos} onDetail={function(e){setDetail(e);}}/>
+          <ReportesView entries={entries} turnos={turnos} onDetail={function(e){setDetail(e);}} initialUser={initialUser} onConfirmar={confirmarLectura}/>
         ):tab==="analisis"?(
           <AnalisisView entries={entries}/>
         ):tab==="nuevo"?(
