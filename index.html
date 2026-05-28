@@ -6711,14 +6711,31 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
 
   function doSave(){
     if(!tecNombreActivo){alert("No se pudo identificar al usuario.");return;}
-    if(real.length===0){alert("⚠️ Debes agregar al menos una actividad antes de guardar.");return;}
     if(fecha>todayS()){alert("⚠️ La fecha del reporte no puede ser futura.");return;}
-    const pends=real.filter(function(r){return r.pendiente;}).map(function(r){
+    // Intentar agregar la tarjeta actual si tiene contenido
+    var allReal=real.slice();
+    if(current.desc.trim()){
+      var r=current;
+      if(!r.hi||!r.hf){alert("Completa hora de inicio y fin de la actividad.");return;}
+      if(r.hf<=r.hi){alert("Hora fin debe ser posterior a inicio.");return;}
+      var hoy=fecha===todayS();var now=nowT();
+      if(hoy&&r.hi>now){alert("Hora inicio no puede ser futura.");return;}
+      if(hoy&&r.hf>now){alert("Hora fin no puede ser futura.");return;}
+      function toMin(t){var p=t.split(":");return parseInt(p[0])*60+parseInt(p[1]);}
+      var a1=toMin(r.hi),a2=toMin(r.hf);
+      for(var i=0;i<allReal.length;i++){
+        var b=allReal[i];var b1=toMin(b.hi),b2=toMin(b.hf);
+        if(a1<b2&&b1<a2){alert("⚠️ Se cruza con la actividad "+(i+1)+":\n"+b.hi+" – "+b.hf+" · "+b.desc.slice(0,40));return;}
+      }
+      allReal=allReal.concat([Object.assign({},r,{area:resolveArea(r)})]);
+    }
+    if(allReal.length===0){alert("⚠️ Completa al menos una actividad antes de guardar.");return;}
+    var pends=allReal.filter(function(r){return r.pendiente;}).map(function(r){
       return {id:r.id,area:r.area,desc:r.desc,p:"Media"};
     });
-    const tecLabel=tecCode?("M"+tecCode+" · "+tecNombreActivo):tecNombreActivo;
+    var tecLabel=tecCode?("M"+tecCode+" · "+tecNombreActivo):tecNombreActivo;
     onSave({id:gid(),createdAt:ts(),fecha:fecha,turno:turno,tecnico:tecLabel,
-      realizadas:real,pendientes:pends,obs:""});
+      realizadas:allReal,pendientes:pends,obs:""});
   }
   // ── Formulario de reporte ─────────────────────────────────────────────────
   const sty=tecObj?(CARGO_STY[tecObj.cargo]||{bg:"#e8f0fb",col:NV}):{bg:"#e8f0fb",col:NV};
@@ -6766,16 +6783,19 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
           <div style={{width:4,height:18,borderRadius:4,background:"#1D7A3E"}}/>
           <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:"#1D7A3E",textTransform:"uppercase",letterSpacing:.5}}>Actividad</span>
-          {real.length>0&&<span style={{background:"#1D7A3E",color:"#fff",borderRadius:20,fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 8px"}}>{real.length}</span>}
+          {real.length>0&&<span style={{background:"#1D7A3E",color:"#fff",borderRadius:20,fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 8px"}}>{real.length} registrada{real.length>1?"s":""}</span>}
         </div>
         <ActivityCard r={current} i={0} isTime={true} aList={aList} OTRA={OTRA} maxT={maxT}
           onRem={null}
           onUpd={function(k,v){updC(k,v);}}/>
-        <button className="btn btn-navy" onClick={agregarActividad}
-          style={{width:"100%",marginTop:10,padding:"12px",fontSize:14,borderRadius:12,
-            background:"#1D7A3E",borderColor:"#1D7A3E"}}>
-          + Agregar actividad
-        </button>
+        {real.length>0&&(
+          <button onClick={agregarActividad}
+            style={{background:"none",border:"none",cursor:"pointer",color:"#2d7dd2",
+              fontFamily:"Montserrat",fontWeight:700,fontSize:12,padding:"8px 0",
+              textDecoration:"underline",display:"block",marginTop:6}}>
+            + Agregar otra actividad
+          </button>
+        )}
       </div>
 
       {/* Visor de actividades registradas esta sesión */}
