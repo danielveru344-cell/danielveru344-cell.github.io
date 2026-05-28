@@ -100,6 +100,29 @@
         .catch(err => console.warn("⚠️ No se pudo enviar a", d.email, err))
     ));
   };
+
+  window.notificarSolicitante = async function(tipo, soli, emailDestino) {
+    if(!emailDestino || !emailDestino.includes("@")) return;
+    const esConfirmacion = tipo === "confirmacion";
+    const payload = {
+      to_email:    emailDestino,
+      item_name:   soli.item_name   || "—",
+      solicitante: soli.solicitante_name || soli.solicitante || "—",
+      cantidad:    soli.quantity    || "—",
+      unidad:      soli.unit        || "",
+      equipo:      soli.equipo_name || "—",
+      notas:       esConfirmacion
+        ? "Tu solicitud fue recibida y está siendo procesada."
+        : "Tu material ya está disponible en almacén. Pasa a recogerlo.",
+      fecha:       new Date().toLocaleString("es-CO",{timeZone:"America/Bogota"}),
+    };
+    try {
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, payload);
+      console.log("✅ Notificación solicitante enviada a:", emailDestino);
+    } catch(err) {
+      console.warn("⚠️ No se pudo notificar al solicitante:", err);
+    }
+  };
 </script>
 <style>
 :root{
@@ -1409,7 +1432,7 @@ function AlmacenApp({onBack, initialUser}){
         XLSX.utils.book_append_sheet(wb,ws,"Equipos");
 
       } else if(tab==="usuarios"){
-        const {data,error}=await sb.from("usuarios").select("id,username,nombre,role,activo,created_at").order("created_at");
+        const {data,error}=await sb.from("usuarios").select("id,username,nombre,role,activo,email,created_at").order("created_at");
         if(error) throw error;
         const rows=(data||[]).map(u=>({
           "Usuario":u.username, "Nombre":u.nombre,
@@ -2269,6 +2292,11 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
     if(nuevoEstado==="solicitada_compra" && typeof window.notificarCompra==="function"){
       window.notificarCompra({...soli, solicitante_name: soli.solicitante_name||currentUser.username});
     }
+    // Notificar al solicitante cuando su pedido está disponible
+    if(nuevoEstado==="entregada_almacen" && typeof window.notificarSolicitante==="function"){
+      sb.from("usuarios").select("email").eq("username", soli.solicitante_username||soli.solicitante_name||"").single()
+        .then(({data})=>{ if(data?.email) window.notificarSolicitante("disponible", soli, data.email); });
+    }
     registrarHistorial("estado_solicitud", `Solicitud: ${soli.item_name||""} → ${e.label}${proveedor?" · Proveedor: "+proveedor:""}${remision?" · Rem: "+remision:""}`, currentUser?.nombre||currentUser?.username||"Sistema").then(()=>reloadHistorial&&reloadHistorial());
     if(window._refreshPending) window._refreshPending();
   };
@@ -2652,49 +2680,53 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
         </div>
       )}
 
-      {cotizModal&&(
-        <div className="overlay" onClick={()=>setCotizModal(null)}>
+      {cotizModal&&(()=>{
+        const filtrados = proveedoresList.filter(p=>p.toLowerCase().includes(proveedorInput.toLowerCase()));
+        const exacto = proveedoresList.some(p=>p.toLowerCase()===proveedorInput.toLowerCase().trim());
+        return(
+        <div className="overlay" onClick={()=>{ setCotizModal(null); setProveedorInput(""); }}>
           <div className="sheet" onClick={e=>e.stopPropagation()} style={{maxHeight:"auto"}}>
             <div className="sheet-handle"/>
             <div className="sheet-title">💬 En cotización</div>
             <div style={{padding:"16px 20px 28px",display:"flex",flexDirection:"column",gap:14}}>
-              <div>
+              <div style={{position:"relative"}}>
                 <div className="ios-input-label">Proveedor con quien se cotiza *</div>
-                {proveedoresList.length>0?(
-                  <>
-                    <select className="ios-input" value={proveedorInput}
-                      onChange={e=>setProveedorInput(e.target.value)}
-                      style={{appearance:"auto",color:proveedorInput?"#1C1C1E":"#8E8E93"}}>
-                      <option value="">Selecciona un proveedor…</option>
-                      {proveedoresList.map(p=><option key={p} value={p}>{p}</option>)}
-                      <option value="__otro__">✏️ Otro (escribir)</option>
-                    </select>
-                    {proveedorInput==="__otro__"&&(
-                      <input className="ios-input" style={{marginTop:8}}
-                        placeholder="Escribe el nombre del proveedor…"
-                        autoFocus
-                        onChange={e=>setProveedorInput(e.target.value==="__otro__"?"":e.target.value)}/>
-                    )}
-                  </>
-                ):(
-                  <input className="ios-input" placeholder="Nombre del proveedor…"
-                    value={proveedorInput} onChange={e=>setProveedorInput(e.target.value)}
-                    autoFocus/>
+                <input className="ios-input" placeholder="Buscar proveedor…"
+                  value={proveedorInput} onChange={e=>setProveedorInput(e.target.value)}
+                  autoFocus/>
+                {proveedorInput&&!exacto&&filtrados.length>0&&(
+                  <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:10,background:"#fff",borderRadius:10,boxShadow:"0 4px 20px rgba(0,0,0,0.15)",border:"1px solid var(--border)",maxHeight:180,overflowY:"auto",marginTop:4}}>
+                    {filtrados.map(p=>(
+                      <div key={p} onClick={()=>setProveedorInput(p)}
+                        style={{padding:"11px 14px",fontSize:14,cursor:"pointer",borderBottom:"0.5px solid rgba(60,60,67,0.08)",display:"flex",alignItems:"center",gap:8}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#F2F2F7"}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <span>🏪</span>{p}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {proveedorInput&&!exacto&&filtrados.length===0&&(
+                  <div style={{fontSize:12,color:"#C0001A",marginTop:4}}>No hay coincidencias. Registra el proveedor en Usuarios primero.</div>
+                )}
+                {exacto&&proveedorInput&&(
+                  <div style={{fontSize:12,color:"#1D7A3E",marginTop:4}}>✓ {proveedorInput}</div>
                 )}
               </div>
               <div style={{display:"flex",gap:10}}>
-                <button className="ios-btn ios-btn-gray" style={{flex:1}} onClick={()=>setCotizModal(null)}>Cancelar</button>
+                <button className="ios-btn ios-btn-gray" style={{flex:1}} onClick={()=>{ setCotizModal(null); setProveedorInput(""); }}>Cancelar</button>
                 <button className="ios-btn ios-btn-blue" style={{flex:1,background:"#0A5A72"}}
-                  disabled={!proveedorInput.trim()||proveedorInput==="__otro__"}
+                  disabled={!exacto}
                   onClick={async()=>{
                     await cambiarEstado(cotizModal,"en_cotizacion",proveedorInput.trim());
-                    setCotizModal(null);
+                    setCotizModal(null); setProveedorInput("");
                   }}>Confirmar</button>
               </div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {modal==="add"&&(
         <SolicitudModal items={items} equipos={equipos||[]} currentUser={currentUser} onClose={()=>setModal(null)}
@@ -2711,6 +2743,10 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
               flash("✓ Solicitud enviada — "+consecutivo);
               registrarHistorial("nueva_solicitud", "Nueva solicitud: "+(f.item_name||f.item_code||"")+" × "+f.quantity, currentUser?.nombre||currentUser?.username||"Sistema").then(()=>reloadHistorial&&reloadHistorial());
               if(window._refreshPending) window._refreshPending();
+              // Notificar confirmación al solicitante
+              if(typeof window.notificarSolicitante==="function" && currentUser?.email){
+                window.notificarSolicitante("confirmacion", {...data, solicitante_name: currentUser.nombre||currentUser.username}, currentUser.email);
+              }
               setModal(null);
             } catch(e) {
               flash("Error al guardar: "+e.message, false);
@@ -3452,10 +3488,11 @@ function UsuariosTab({ currentUserId, currentUsername, flash }) {
                   {!u.activo && <span style={{ background: "#FFDEDE", color: "#C0001A", borderRadius: 8, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>Inactivo</span>}
                   {u.id === currentUserId && <span style={{ background: "#D9ECFF", color: "#004A9E", borderRadius: 8, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>Tú</span>}
                 </div>
-                <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 2, display: "flex", gap: 5, alignItems: "center" }}>
+                <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 2, display: "flex", gap: 5, alignItems: "center", flexWrap:"wrap" }}>
                   <span>@{u.username}</span>
                   <span>·</span>
                   <span className={`role-badge role-${u.role}`} style={{ fontSize: 10, padding: "1px 6px" }}>{ROLE_LABEL[u.role]}</span>
+                  {u.email&&<><span>·</span><span style={{color:"#004A9E"}}>✉️ {u.email}</span></>}
                   {isAdminRoot && <span style={{ fontSize: 10, color: "#C45200" }}>🔒 Protegido</span>}
                 </div>
               </div>
@@ -3495,7 +3532,7 @@ function UsuariosTab({ currentUserId, currentUsername, flash }) {
               setUsuarios(prev => [...prev, data]);
               flash("Usuario creado ✓");
             } else {
-              const upd = { nombre: f.nombre, role: f.role, activo: f.activo };
+              const upd = { nombre: f.nombre, email: f.email ?? null, role: f.role, activo: f.activo };
               if (f.password) upd.password = f.password;
               const { error } = await sb.from("usuarios").update(upd).eq("id", sel.id);
               if (error) { flash("Error: " + error.message, false); return; }
@@ -3782,6 +3819,7 @@ function UsuarioModal({ usuario, currentUsername, onClose, onSave }) {
     username: usuario?.username || "",
     password: "",
     nombre: usuario?.nombre || "",
+    email: usuario?.email || "",
     role: usuario?.role || "solicitante",
     activo: usuario?.activo ?? true,
   });
@@ -3796,6 +3834,7 @@ function UsuarioModal({ usuario, currentUsername, onClose, onSave }) {
       username: f.username.trim().toLowerCase(),
       password: passwordBlocked ? undefined : f.password,
       nombre: f.nombre,
+      email: f.email.trim() || null,
       role: f.role,
       activo: f.activo,
     };
@@ -3812,6 +3851,11 @@ function UsuarioModal({ usuario, currentUsername, onClose, onSave }) {
 
           <AlmField label="Nombre completo">
             <input className="ios-input" value={f.nombre} onChange={e => s("nombre", e.target.value)} placeholder="Ej: Juan López" />
+          </AlmField>
+
+          <AlmField label="Correo electrónico">
+            <input className="ios-input" type="email" value={f.email} onChange={e => s("email", e.target.value)}
+              placeholder="juan@empresa.com (opcional)" />
           </AlmField>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -4905,8 +4949,8 @@ function AddModal({onClose,onSave,equipos}){
         <div style={{padding:"16px 20px 20px",display:"flex",flexDirection:"column",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <AlmField label="Código">
-              <div style={{background:"rgba(120,120,128,0.08)",borderRadius:10,padding:"11px 14px",fontSize:14,color:"#8E8E93",fontStyle:"italic",display:"flex",alignItems:"center",gap:6}}>
-                <span>🔒</span><span>Se genera automáticamente</span>
+              <div style={{background:"rgba(120,120,128,0.08)",borderRadius:10,padding:"11px 14px",fontSize:14,color:"#8E8E93"}}>
+                Se asigna al guardar
               </div>
             </AlmField>
             <AlmField label="Ubicación"><input className="ios-input" value={f.location} onChange={e=>s("location",e.target.value)} placeholder="A-01"/></AlmField>
