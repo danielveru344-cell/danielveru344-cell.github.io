@@ -2155,7 +2155,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
   const pendientes=conteos["pendiente"]||0;
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div className="section-hdr" style={{margin:0}}>📋 Solicitudes de Repuestos</div>
         <button className="ios-btn ios-btn-blue ios-btn-sm" onClick={()=>setModal("add")}>
@@ -2169,16 +2169,16 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
         const compra = conteos["solicitada_compra"]||0;
         const entregadas = conteos["entregada"]||0;
         const cardPend = (
-          <div key="pend" className="stat-card" style={{padding:"12px 14px",cursor:"pointer"}}
+          <div key="pend" className="stat-card" style={{padding:"10px 12px",cursor:"pointer"}}
             onClick={()=>setFiltroEstado(filtroEstado==="pendiente"?"todos":"pendiente")}>
-            <div className="stat-value" style={{fontSize:26,color:pend>0?"#C45200":"#34C759"}}>{pend}</div>
+            <div className="stat-value" style={{fontSize:22,color:pend>0?"#C45200":"#34C759"}}>{pend}</div>
             <div className="stat-label">Pendientes{pend>0?" →":""}</div>
           </div>
         );
         const cardCompra = (
-          <div key="compra" className="stat-card" style={{padding:"12px 14px",cursor:"pointer"}}
+          <div key="compra" className="stat-card" style={{padding:"10px 12px",cursor:"pointer"}}
             onClick={()=>setFiltroEstado(filtroEstado==="solicitada_compra"?"todos":"solicitada_compra")}>
-            <div className="stat-value" style={{fontSize:26,color:compra>0?"#004A9E":"#34C759"}}>{compra}</div>
+            <div className="stat-value" style={{fontSize:22,color:compra>0?"#004A9E":"#34C759"}}>{compra}</div>
             <div className="stat-label">Para compra{compra>0?" →":""}</div>
           </div>
         );
@@ -2187,12 +2187,12 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
           <div className="soli-stat-scroll">
             {primero}
             {segundo}
-            <div className="stat-card" style={{padding:"12px 14px"}}>
-              <div className="stat-value" style={{fontSize:26,color:"#1D7A3E"}}>{entregadas}</div>
+            <div className="stat-card" style={{padding:"10px 12px"}}>
+              <div className="stat-value" style={{fontSize:22,color:"#1D7A3E"}}>{entregadas}</div>
               <div className="stat-label">Entregadas</div>
             </div>
-            <div className="stat-card" style={{padding:"12px 14px"}}>
-              <div className="stat-value" style={{fontSize:26,color:"#1C1C1E"}}>{solis.length}</div>
+            <div className="stat-card" style={{padding:"10px 12px"}}>
+              <div className="stat-value" style={{fontSize:22,color:"#1C1C1E"}}>{solis.length}</div>
               <div className="stat-label">Total</div>
             </div>
           </div>
@@ -2207,75 +2207,58 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
       </div>
 
       {/* ── Filtros ── */}
-      <div style={{
-        background:"#fff",borderRadius:14,
-        border:"1px solid rgba(13,47,92,0.09)",
-        boxShadow:"0 1px 6px rgba(13,47,92,0.06)",
-        overflow:"hidden",
-      }}>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {/* Fila 1: Tipo */}
-        <div style={{padding:"10px 12px 8px",borderBottom:"0.5px solid rgba(13,47,92,0.07)"}}>
-          <div style={{fontSize:9,fontWeight:800,color:"#8E8E93",letterSpacing:1.4,textTransform:"uppercase",fontFamily:"Montserrat,sans-serif",marginBottom:7}}>Tipo</div>
-          <div style={{display:"flex",gap:6}}>
-            {[
-              ["todos",       null,   "Todos"],
-              ["repuesto",    "🔧",   "Repuesto"],
-              ["locativo",    "🏢",   "Locativo"],
-              ["apoyo_critico","⚡",  "Apoyo Crítico"],
-            ].map(([val,ic,lbl])=>{
-              const cnt=val==="todos"?solis.length:solis.filter(s=>(s.tipo_material||"repuesto")===val).length;
-              const isActive=filtroTipo===val;
-              const activeBg=val==="apoyo_critico"?"#C0001A":val==="locativo"?"#1A6B38":"#0D2F5C";
-              return(
-                <button key={val} onClick={()=>setFiltroTipo(val)} style={{
-                  flex:1,border:"none",cursor:"pointer",
-                  padding:"8px 4px",borderRadius:8,
-                  background:isActive?activeBg:"rgba(13,47,92,0.05)",
-                  color:isActive?"#fff":"#636366",
-                  fontSize:10,fontWeight:700,fontFamily:"Montserrat,sans-serif",
-                  textTransform:"uppercase",letterSpacing:0.2,
-                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,
-                  transition:"all 0.15s",lineHeight:1.3,
-                }}>
-                  {ic&&<span style={{fontSize:15,lineHeight:1,display:"block"}}>{ic}</span>}
-                  <span style={{textAlign:"center",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{lbl}</span>
-                  {cnt>0&&<span style={{
-                    fontSize:9,fontWeight:800,lineHeight:1,
-                    color:isActive?"rgba(255,255,255,0.75)":"#8E8E93",
-                  }}>{cnt}</span>}
-                </button>
-              );
-            })}
-          </div>
+        <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:2}}>
+          {[
+            ["todos",       null,   "Todos"],
+            ["repuesto",    "🔧",   "Repuesto"],
+            ["locativo",    "🏢",   "Locativo"],
+            ["apoyo_critico","⚡",  "Apoyo Crítico"],
+          ].map(([val,ic,lbl])=>{
+            const cnt=val==="todos"?solis.length:solis.filter(s=>(s.tipo_material||"repuesto")===val).length;
+            const isActive=filtroTipo===val;
+            const activeBg=val==="apoyo_critico"?"#C0001A":val==="locativo"?"#1A6B38":"#0D2F5C";
+            return(
+              <button key={val} onClick={()=>setFiltroTipo(val)} style={{
+                border:"none",cursor:"pointer",flexShrink:0,
+                padding:"5px 11px",borderRadius:20,
+                background:isActive?activeBg:"rgba(13,47,92,0.06)",
+                color:isActive?"#fff":"#636366",
+                fontSize:11,fontWeight:700,fontFamily:"Montserrat,sans-serif",
+                display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",
+              }}>
+                {ic&&<span>{ic}</span>}
+                <span>{lbl}</span>
+                {cnt>0&&<span style={{fontSize:9,opacity:.75}}>{cnt}</span>}
+              </button>
+            );
+          })}
         </div>
-
         {/* Fila 2: Estado */}
-        <div style={{padding:"10px 12px 10px"}}>
-          <div style={{fontSize:9,fontWeight:800,color:"#8E8E93",letterSpacing:1.4,textTransform:"uppercase",fontFamily:"Montserrat,sans-serif",marginBottom:7}}>Estado</div>
-          <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:2}}>
-            <button onClick={()=>setFiltroEstado("todos")} style={{
-              border:"none",cursor:"pointer",padding:"5px 10px",borderRadius:14,flexShrink:0,
-              background:filtroEstado==="todos"?"#0D2F5C":"rgba(13,47,92,0.06)",
-              color:filtroEstado==="todos"?"#fff":"#636366",fontSize:11,fontWeight:700,
-              fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap",
-            }}>Todos{solis.length>0?` · ${solis.length}`:""}</button>
-            {ESTADOS.map(e=>{
-              const cnt=conteos[e.key]||0;
-              const isActive=filtroEstado===e.key;
-              return(
-                <button key={e.key} onClick={()=>setFiltroEstado(e.key)} style={{
-                  border:"none",cursor:"pointer",padding:"5px 10px",borderRadius:14,flexShrink:0,
-                  background:isActive?e.text:"rgba(13,47,92,0.06)",
-                  color:isActive?"#fff":"#636366",fontSize:11,fontWeight:700,
-                  fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap",
-                  display:"flex",alignItems:"center",gap:3,
-                }}>
-                  <span>{e.icon}</span>
-                  <span>{e.label}{cnt>0?` · ${cnt}`:""}</span>
-                </button>
-              );
-            })}
-          </div>
+        <div style={{display:"flex",gap:5,overflowX:"auto",paddingBottom:2}}>
+          <button onClick={()=>setFiltroEstado("todos")} style={{
+            border:"none",cursor:"pointer",padding:"5px 10px",borderRadius:14,flexShrink:0,
+            background:filtroEstado==="todos"?"#0D2F5C":"rgba(13,47,92,0.06)",
+            color:filtroEstado==="todos"?"#fff":"#636366",fontSize:11,fontWeight:700,
+            fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap",
+          }}>Todos{solis.length>0?` · ${solis.length}`:""}</button>
+          {ESTADOS.map(e=>{
+            const cnt=conteos[e.key]||0;
+            const isActive=filtroEstado===e.key;
+            return(
+              <button key={e.key} onClick={()=>setFiltroEstado(e.key)} style={{
+                border:"none",cursor:"pointer",padding:"5px 10px",borderRadius:14,flexShrink:0,
+                background:isActive?e.text:"rgba(13,47,92,0.06)",
+                color:isActive?"#fff":"#636366",fontSize:11,fontWeight:700,
+                fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap",
+                display:"flex",alignItems:"center",gap:3,
+              }}>
+                <span>{e.icon}</span>
+                <span>{e.label}{cnt>0?` · ${cnt}`:""}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -2285,7 +2268,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
       ):filtered.length===0?(
         <div style={{padding:40,textAlign:"center",color:"#8E8E93"}}>Sin solicitudes</div>
       ):(
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {filtered.map(s=>{
           const estado = ESTADOS.find(e=>e.key===(s.status||"pendiente"))||ESTADOS[0];
           return(
@@ -2298,10 +2281,10 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
           }}>
             {/* Barra de color izquierda según estado */}
             <div style={{width:5,flexShrink:0,background:estado.text,borderRadius:"14px 0 0 14px"}}/>
-            <div style={{flex:1,padding:"13px 14px",display:"flex",flexDirection:"column",gap:6}}>
+            <div style={{flex:1,padding:"10px 12px",display:"flex",flexDirection:"column",gap:4}}>
               {/* Encabezado: nombre + badge */}
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                <div style={{fontWeight:700,fontSize:15,color:"#1C1C1E",flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#1C1C1E",flex:1,minWidth:0}}>
                   {s.consecutivo&&(
                     <span style={{fontSize:11,fontWeight:800,color:"#fff",background:"var(--navy)",
                       borderRadius:6,padding:"1px 7px",marginRight:6,letterSpacing:.3,
