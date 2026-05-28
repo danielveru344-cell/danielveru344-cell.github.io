@@ -1538,7 +1538,9 @@ function AlmacenApp({onBack, initialUser}){
     setSyncing(true);
     const {data,error} = await sb.from("articulos").insert([{
       code:f.code, name:f.name, category:f.category,
-      quantity:f.quantity, min_stock:f.minStock, unit:f.unit, location:f.location
+      quantity:f.quantity, min_stock:f.minStock, unit:f.unit, location:f.location,
+      equipos_asociados: f.equipos_asociados&&f.equipos_asociados.length>0
+        ? f.equipos_asociados : null
     }]).select().single();
     setSyncing(false);
     if(error){flash("Error: "+error.message,false);return;}
@@ -1940,7 +1942,7 @@ function AlmacenApp({onBack, initialUser}){
 
       {/* MODALS */}
       {modal==="add"&&(
-        <AddModal onClose={()=>setModal(null)} onSave={async item=>{
+        <AddModal equipos={equipos||[]} onClose={()=>setModal(null)} onSave={async item=>{
           await addItem(item);
           setModal(null);
         }}/>
@@ -2046,7 +2048,7 @@ const ESTADOS = [
   { key:"solicitada_compra", label:"Solicitada para compra", color:"#D9ECFF", text:"#004A9E", icon:"🛒" },
   { key:"en_cotizacion",     label:"En cotización",          color:"#F3E8FF", text:"#7C3AED", icon:"💬", adminOnly:true },
   { key:"entregada",         label:"Entregada",              color:"#D1F2E0", text:"#1D7A3E", icon:"✅" },
-  { key:"entregada_almacen", label:"Entregada al almacén",   color:"#E8F0FB", text:"#0D2F5C", icon:"📦" },
+  { key:"entregada_almacen", label:"Disponible",             color:"#E8F0FB", text:"#0D2F5C", icon:"📦" },
   { key:"rechazada",         label:"Rechazada",              color:"#FFDEDE", text:"#C0001A", icon:"❌" },
 ];
 
@@ -2060,7 +2062,7 @@ const TRANSICIONES_ALMACENISTA = {
 const CONFIRM_MSG = {
   solicitada_compra: "¿Estás seguro de que deseas solicitar esta compra?",
   en_cotizacion:     "¿Estás seguro de que deseas pasar esta solicitud a cotización?",
-  entregada_almacen: "¿Estás seguro de que deseas registrar la entrega al almacén?",
+  entregada_almacen: "¿Estás seguro de que deseas marcar como Disponible?",
   entregada:         "¿Estás seguro de que deseas marcar esta solicitud como entregada?",
   rechazada:         "¿Estás seguro de que deseas RECHAZAR esta solicitud?",
 };
@@ -4419,9 +4421,21 @@ function AlmField({label,children}){
   );
 }
 
-function AddModal({onClose,onSave}){
-  const [f,setF]=useState({code:"",name:"",category:"Mecánica",quantity:0,minStock:1,unit:"pza",location:""});
+function AddModal({onClose,onSave,equipos}){
+  const [f,setF]=useState({code:"",name:"",category:"Mecánica",quantity:0,minStock:1,unit:"pza",location:"",equipos_asociados:[]});
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
+
+  function toggleEquipo(eq){
+    setF(function(p){
+      var cur = p.equipos_asociados||[];
+      var exists = cur.some(function(e){ return e.id===eq.id; });
+      return {...p, equipos_asociados: exists
+        ? cur.filter(function(e){ return e.id!==eq.id; })
+        : [...cur, {id:eq.id, name:eq.name||eq.model||""}]
+      };
+    });
+  }
+
   return(
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
@@ -4449,6 +4463,34 @@ function AddModal({onClose,onSave}){
             <AlmField label="Cantidad inicial"><input className="ios-input" type="number" min="0" value={f.quantity} onChange={e=>s("quantity",parseInt(e.target.value)||0)}/></AlmField>
             <AlmField label="Stock mínimo"><input className="ios-input" type="number" min="0" value={f.minStock} onChange={e=>s("minStock",parseInt(e.target.value)||0)}/></AlmField>
           </div>
+
+          {equipos&&equipos.length>0&&(
+            <AlmField label="Equipos asociados (opcional)">
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,maxHeight:150,overflowY:"auto",
+                padding:"8px",background:"var(--lighter)",borderRadius:8,
+                border:"1.5px solid var(--border)"}}>
+                {equipos.map(function(eq){
+                  var sel=(f.equipos_asociados||[]).some(function(e){return e.id===eq.id;});
+                  return(
+                    <button key={eq.id} type="button" onClick={function(){toggleEquipo(eq);}}
+                      style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",
+                        fontSize:11,fontWeight:700,fontFamily:"Montserrat,sans-serif",
+                        borderColor:sel?"var(--navy)":"var(--border)",
+                        background:sel?"var(--navy)":"#fff",
+                        color:sel?"#fff":"var(--gray)"}}>
+                      {eq.icon||"⚙️"} {eq.name||eq.model||"Equipo"}
+                    </button>
+                  );
+                })}
+              </div>
+              {(f.equipos_asociados||[]).length>0&&(
+                <div style={{fontSize:11,color:"var(--accent)",marginTop:4,fontWeight:600}}>
+                  ✓ {(f.equipos_asociados||[]).length} equipo(s) seleccionado(s)
+                </div>
+              )}
+            </AlmField>
+          )}
+
           <div style={{display:"flex",gap:10,marginTop:4}}>
             <button className="ios-btn ios-btn-gray" style={{flex:1,color:"#FF3B30"}} onClick={onClose}>Cancelar</button>
             <button className="ios-btn ios-btn-blue" style={{flex:2}} onClick={()=>{if(!f.name||!f.code)return;onSave(f);}}>Guardar artículo</button>
