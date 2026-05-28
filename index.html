@@ -2819,7 +2819,7 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
       setValidErr("La cantidad debe ser mayor a 0.");
       return;
     }
-    if(!f.equipment||!f.equipment.trim()){
+    if(!f.equipo_name||!f.equipo_name.trim()){
       setValidErr("Selecciona el equipo o máquina.");
       return;
     }
