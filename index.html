@@ -91,7 +91,7 @@
       equipo:      soli.equipo_name || "—",
       cantidad:    soli.quantity    || "—",
       unidad:      soli.unit        || "",
-      notas:       soli.notes       || "Sin notas",
+      notas:       (soli.consecutivo ? "Solicitud: " + soli.consecutivo + "\n" : "") + (soli.notes || "Sin notas"),
       fecha:       new Date().toLocaleString("es-CO",{timeZone:"America/Bogota"}),
     };
     await Promise.all(destinos.map(d =>
@@ -104,6 +104,7 @@
   window.notificarSolicitante = async function(tipo, soli, emailDestino) {
     if(!emailDestino || !emailDestino.includes("@")) return;
     const esConfirmacion = tipo === "confirmacion";
+    const numSoli = soli.consecutivo || ("#" + (soli.id||"").toString().slice(-4));
     const payload = {
       to_email:    emailDestino,
       item_name:   soli.item_name   || "—",
@@ -111,9 +112,9 @@
       cantidad:    soli.quantity    || "—",
       unidad:      soli.unit        || "",
       equipo:      soli.equipo_name || "—",
-      notas:       esConfirmacion
+      notas:       "Solicitud: " + numSoli + "\n" + (esConfirmacion
         ? "Tu solicitud fue recibida y está siendo procesada."
-        : "Tu material ya está disponible en almacén. Pasa a recogerlo.",
+        : "Tu material ya está disponible en almacén. Pasa a recogerlo."),
       fecha:       new Date().toLocaleString("es-CO",{timeZone:"America/Bogota"}),
     };
     try {
