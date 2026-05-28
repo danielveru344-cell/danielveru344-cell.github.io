@@ -1907,7 +1907,7 @@ function AlmacenApp({onBack, initialUser}){
         {tab==="usuarios"&&currentUser.role==="admin"&&<UsuariosTab currentUserId={currentUser.id} currentUsername={currentUser.username} flash={flash}/>}
 
         {/* SOLICITUDES */}
-        {tab==="solicitudes"&&<SolicitudesTab currentUser={currentUser} items={items} equipos={equipos} flash={flash} reloadHistorial={reloadHistorial}/>}
+        {tab==="solicitudes"&&<SolicitudesTab currentUser={currentUser} items={items} equipos={equipos} flash={flash} reloadHistorial={reloadHistorial} registerMovement={registerMovement}/>}
         {tab==="analisis"&&<AnalisisTab items={items} equipos={equipos}/>}
       </div>
 
@@ -2086,7 +2086,7 @@ function estadoBadge(key){
   );
 }
 
-function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial }){
+function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, registerMovement }){
   const [solis,setSolis]   = useState([]);
   const [loading,setLoading] = useState(true);
   const [modal,setModal]   = useState(null);
@@ -2095,6 +2095,42 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
   const [search,setSearch] = useState("");
   const [cotizModal,setCotizModal] = useState(null);
   const [proveedorInput,setProveedorInput] = useState("");
+  const [entregaModal,setEntregaModal] = useState(null);
+  const [cantRecibida,setCantRecibida] = useState("");
+  const [dispModal,setDispModal] = useState(null);       // modal marcar disponible
+  const [dispProveedor,setDispProveedor] = useState(""); // proveedor del pedido
+  const [dispRemision,setDispRemision] = useState("");   // número de remisión
+
+  const handleEntrega = async (soli) => {
+    const cant = parseInt(cantRecibida);
+    if(isNaN(cant)||cant<0){flash("Ingresa una cantidad válida",false);return;}
+    const cantSoli = soli.quantity||0;
+    // Buscar artículo en inventario por code o name
+    const art = items.find(i=>i.code===soli.item_code||i.name===soli.item_name);
+    if(!art){flash("Artículo no encontrado en inventario",false);return;}
+    // 1. Salida hacia el solicitante
+    if(registerMovement){
+      await registerMovement(art,{
+        type:"salida",
+        qty:cantSoli,
+        reason:`Entrega solicitud ${soli.consecutivo||("#"+soli.id)} · ${soli.solicitante_name||""}`,
+      });
+      // 2. Si llegó más de lo solicitado → entrada del excedente
+      if(cant>cantSoli){
+        const excedente = cant-cantSoli;
+        const artActualizado = {...art, quantity: art.quantity-cantSoli};
+        await registerMovement(artActualizado,{
+          type:"entrada",
+          qty:excedente,
+          reason:`Excedente solicitud ${soli.consecutivo||("#"+soli.id)}`,
+        });
+      }
+    }
+    // 3. Actualizar estado solicitud
+    await cambiarEstado(soli,"entregada","",cant);
+    setEntregaModal(null);
+    setCantRecibida("");
+  };
 
   const fetchSolis = async () => {
     setLoading(true);
@@ -2114,29 +2150,29 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
     if(soli) registrarHistorial("baja_solicitud", "Solicitud eliminada: "+(soli.item_name||"")+" · "+soli.solicitante_name, currentUser?.nombre||currentUser?.username||"Sistema").then(()=>reloadHistorial&&reloadHistorial());
   };
 
-  const cambiarEstado = async (soli,nuevoEstado,proveedor="") => {
+  const cambiarEstado = async (soli,nuevoEstado,proveedor="",cantRec=null,remision="") => {
     const upd = {
       status: nuevoEstado,
       updated_by: currentUser.username,
       updated_at: new Date().toISOString()
     };
     if(proveedor) upd.proveedor = proveedor;
+    if(cantRec !== null) upd.cantidad_recibida = cantRec;
+    if(remision) upd.remision = remision;
     let {error} = await sb.from("solicitudes").update(upd).eq("id",soli.id);
     if(error){
-      // Si falla con columnas extra, intentar solo con status
       const fallback={status:nuevoEstado};
       if(proveedor) fallback.proveedor=proveedor;
       const res2 = await sb.from("solicitudes").update(fallback).eq("id",soli.id);
       if(res2.error){flash("Error: "+res2.error.message,false);return;}
     }
-    setSolis(prev=>prev.map(s=>s.id===soli.id?{...s,status:nuevoEstado,updated_by:currentUser.username,...(proveedor?{proveedor}:{})}:s));
+    setSolis(prev=>prev.map(s=>s.id===soli.id?{...s,status:nuevoEstado,updated_by:currentUser.username,...(proveedor?{proveedor}:{}),...(cantRec!==null?{cantidad_recibida:cantRec}:{}),...(remision?{remision}:{})}:s));
     const e=ESTADOS.find(x=>x.key===nuevoEstado);
     flash("Estado: "+e.label);
-    // ── Notificación por correo al pasar a "Solicitada para compra" ──
     if(nuevoEstado==="solicitada_compra" && typeof window.notificarCompra==="function"){
       window.notificarCompra({...soli, solicitante_name: soli.solicitante_name||currentUser.username});
     }
-    registrarHistorial("estado_solicitud", `Solicitud: ${soli.item_name||""} → ${e.label}${proveedor?" · Proveedor: "+proveedor:""}`, currentUser?.nombre||currentUser?.username||"Sistema").then(()=>reloadHistorial&&reloadHistorial());
+    registrarHistorial("estado_solicitud", `Solicitud: ${soli.item_name||""} → ${e.label}${proveedor?" · Proveedor: "+proveedor:""}${remision?" · Rem: "+remision:""}`, currentUser?.nombre||currentUser?.username||"Sistema").then(()=>reloadHistorial&&reloadHistorial());
     if(window._refreshPending) window._refreshPending();
   };
 
@@ -2319,6 +2355,12 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
                 <span style={{fontSize:10,color:"#C7C7CC"}}>{fmtDate(s.created_at)}{s.updated_by?` · ${s.updated_by}`:""}</span>
               </div>
               {s.status==="en_cotizacion"&&s.proveedor&&<div style={{fontSize:12,color:"#7C3AED",fontWeight:600}}>💬 Cotizando con: {s.proveedor}</div>}
+              {(s.status==="entregada_almacen"||s.status==="entregada")&&(s.proveedor||s.remision)&&(
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:12}}>
+                  {s.proveedor&&<span style={{background:"#E8F0FB",color:"#0D2F5C",borderRadius:6,padding:"2px 8px",fontWeight:600}}>🏪 {s.proveedor}</span>}
+                  {s.remision&&<span style={{background:"#FFF8E1",color:"#7A5200",borderRadius:6,padding:"2px 8px",fontWeight:600}}>🧾 Rem. {s.remision}</span>}
+                </div>
+              )}
               {s.reason&&<div style={{fontSize:12,color:"#8E8E93",fontStyle:"italic",borderTop:"0.5px solid #F2F2F7",paddingTop:5}}>"{s.reason}"</div>}
               
               {/* Acciones */}
@@ -2338,10 +2380,12 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {acciones.map(e=>(
                       <button key={e.key} onClick={()=>{
+                        if(e.key==="en_cotizacion"){ setCotizModal(s); setProveedorInput(""); return; }
+                        if(e.key==="entregada"){ setEntregaModal(s); setCantRecibida(String(s.quantity||"")); return; }
+                        if(e.key==="entregada_almacen"){ setDispModal(s); setDispProveedor(s.proveedor||""); setDispRemision(""); return; }
                         const msg = CONFIRM_MSG[e.key]||("¿Estás seguro de que deseas cambiar el estado a \""+e.label+"\"?");
                         if(!confirm(msg)) return;
-                        if(e.key==="en_cotizacion"){ setCotizModal(s); setProveedorInput(""); }
-                        else cambiarEstado(s,e.key);
+                        cambiarEstado(s,e.key);
                       }} style={{
                         border:"none",borderRadius:7,background:e.color,
                         color:e.text,fontSize:11,fontWeight:700,padding:"5px 11px",cursor:"pointer",
@@ -2373,6 +2417,108 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial })
         </div>
       )}
       <div style={{textAlign:"center",fontSize:13,color:"#C7C7CC"}}>{filtered.length} solicitud{filtered.length!==1?"es":""}</div>
+
+      {entregaModal&&(()=>{
+        const soli=entregaModal;
+        const cantSoli=soli.quantity||0;
+        const cant=parseInt(cantRecibida)||0;
+        const excedente=cant>cantSoli?cant-cantSoli:0;
+        const desdeDisponible=(soli.status||"pendiente")==="entregada_almacen";
+        return(
+          <div className="overlay" onClick={()=>setEntregaModal(null)}>
+            <div className="sheet" onClick={e=>e.stopPropagation()}>
+              <div className="sheet-handle"/>
+              <div className="sheet-title">📦 Registrar Entrega</div>
+              <div style={{padding:"16px 20px 28px",display:"flex",flexDirection:"column",gap:14}}>
+                {/* Info solicitud */}
+                <div style={{background:"var(--light)",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:4}}>
+                  <div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>{soli.item_name}</div>
+                  <div style={{fontSize:12,color:"#636366"}}>
+                    👤 {soli.solicitante_name}
+                    {soli.equipo_name&&<> · 🔧 {soli.equipo_name}</>}
+                  </div>
+                  <div style={{fontSize:12,color:"#636366"}}>Cantidad solicitada: <strong>{cantSoli} {soli.unidad||""}</strong></div>
+                </div>
+
+                {/* Campo cantidad recibida */}
+                <div>
+                  <div className="ios-input-label">{desdeDisponible?"Cantidad recibida del proveedor *":"Cantidad entregada *"}</div>
+                  <input className="ios-input" type="number" min="0"
+                    placeholder={`Ej: ${cantSoli}`}
+                    value={cantRecibida}
+                    onChange={e=>setCantRecibida(e.target.value)}
+                    autoFocus/>
+                  {desdeDisponible&&<div style={{fontSize:11,color:"var(--gray)",marginTop:4}}>
+                    Si llegaron más de lo solicitado, el excedente se ingresará al almacén automáticamente.
+                  </div>}
+                </div>
+
+                {/* Preview de movimientos */}
+                {cant>0&&(
+                  <div style={{background:"var(--lighter)",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:6,border:"1px solid var(--border)"}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"var(--navy)",textTransform:"uppercase",letterSpacing:1,fontFamily:"Montserrat,sans-serif"}}>Movimientos a registrar</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13}}>
+                      <span style={{background:"#FFDEDE",color:"#C0001A",borderRadius:6,padding:"2px 8px",fontWeight:700,fontSize:12}}>↓ Salida</span>
+                      <span>{cantSoli} {soli.unidad||""} → {soli.solicitante_name}</span>
+                    </div>
+                    {excedente>0&&(
+                      <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13}}>
+                        <span style={{background:"#D1F2E0",color:"#1D7A3E",borderRadius:6,padding:"2px 8px",fontWeight:700,fontSize:12}}>↑ Entrada</span>
+                        <span>{excedente} {soli.unidad||""} → Almacén (excedente)</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{display:"flex",gap:10}}>
+                  <button className="ios-btn ios-btn-gray" style={{flex:1}} onClick={()=>setEntregaModal(null)}>Cancelar</button>
+                  <button className="ios-btn ios-btn-blue" style={{flex:1}}
+                    disabled={!cantRecibida||parseInt(cantRecibida)<0}
+                    onClick={()=>handleEntrega(soli)}>
+                    ✅ Confirmar entrega
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {dispModal&&(
+        <div className="overlay" onClick={()=>setDispModal(null)}>
+          <div className="sheet" onClick={e=>e.stopPropagation()}>
+            <div className="sheet-handle"/>
+            <div className="sheet-title">📦 Marcar como Disponible</div>
+            <div style={{padding:"16px 20px 28px",display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{background:"var(--light)",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:3}}>
+                <div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>{dispModal.item_name}</div>
+                <div style={{fontSize:12,color:"#636366"}}>×{dispModal.quantity} {dispModal.unidad||""} · 👤 {dispModal.solicitante_name}</div>
+              </div>
+              <div>
+                <div className="ios-input-label">Proveedor que entregó</div>
+                <input className="ios-input" placeholder="Nombre del proveedor…"
+                  value={dispProveedor} onChange={e=>setDispProveedor(e.target.value)}/>
+              </div>
+              <div>
+                <div className="ios-input-label">Número de remisión</div>
+                <input className="ios-input" placeholder="Ej: REM-2024-001"
+                  value={dispRemision} onChange={e=>setDispRemision(e.target.value)}/>
+              </div>
+              <div style={{fontSize:12,color:"var(--gray)"}}>
+                Ambos campos son opcionales. Puedes continuar sin llenarlos.
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <button className="ios-btn ios-btn-gray" style={{flex:1}} onClick={()=>setDispModal(null)}>Cancelar</button>
+                <button className="ios-btn ios-btn-blue" style={{flex:1}}
+                  onClick={async()=>{
+                    await cambiarEstado(dispModal,"entregada_almacen",dispProveedor.trim(),null,dispRemision.trim());
+                    setDispModal(null);
+                  }}>📦 Disponible</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {cotizModal&&(
         <div className="overlay" onClick={()=>setCotizModal(null)}>
