@@ -1206,6 +1206,7 @@ function AlmacenApp({onBack, initialUser}){
   const [movs,setMovs]=useState([]);
   const [historial,setHistorial]=useState([]);
   const [equipos,setEquipos]=useState([]);
+  const [proveedoresPorItem,setProveedoresPorItem]=useState({});
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("Todas");
   const [onlyAlerts,setOnlyAlerts]=useState(false);
@@ -1435,6 +1436,20 @@ function AlmacenApp({onBack, initialUser}){
         type:r.type, quantity:r.quantity, newQty:r.new_qty, reason:r.reason,
         date:r.created_at
       }))); });
+    sb.from("solicitudes").select("item_code,item_name,proveedor")
+      .not("proveedor","is",null).neq("proveedor","")
+      .in("status",["entregada_almacen","entregada"])
+      .then(({data})=>{
+        if(!data) return;
+        const map={};
+        data.forEach(s=>{
+          const key=s.item_code||s.item_name;
+          if(!key||!s.proveedor) return;
+          if(!map[key]) map[key]=[];
+          if(!map[key].includes(s.proveedor)) map[key].push(s.proveedor);
+        });
+        setProveedoresPorItem(map);
+      });
   };
 
   useEffect(()=>{ if(currentUser) fetchAll(); },[currentUser]);
@@ -1852,7 +1867,7 @@ function AlmacenApp({onBack, initialUser}){
                 <table className="tbl">
                   <thead>
                     <tr>
-                      {["Código","Nombre","Categoría","Stock","Mín","Ubic.","Estado",""].map(h=>(
+                      {["Código","Nombre","Categoría","Stock","Mín","Ubic.","Proveedores","Estado",""].map(h=>(
                         <th key={h}>{h}</th>
                       ))}
                     </tr>
@@ -1873,6 +1888,19 @@ function AlmacenApp({onBack, initialUser}){
                           <td style={{color:"#8E8E93",fontSize:13}}>{item.minStock}</td>
                           <td><span className="loc-pill">{item.location}</span></td>
                           <td>
+                            {(()=>{
+                              const provs=proveedoresPorItem[item.code]||proveedoresPorItem[item.name]||[];
+                              if(provs.length===0) return <span style={{color:"#C7C7CC",fontSize:12}}>—</span>;
+                              return(
+                                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                                  {provs.map(p=>(
+                                    <span key={p} style={{background:"#E8F0FB",color:"#0D2F5C",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>🏪 {p}</span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                          <td>
                             <span className={`badge badge-${st}`}>
                               <span style={{width:6,height:6,borderRadius:"50%",background:stDot[st],display:"inline-block"}}></span>
                               {stLabel[st]}
@@ -1880,7 +1908,7 @@ function AlmacenApp({onBack, initialUser}){
                           </td>
                           <td>
                             <div style={{display:"flex",gap:6}}>
-                              {currentUser.role!=="solicitante"&&<button className="ios-btn ios-btn-gray ios-btn-sm" onClick={()=>openMovement(item)}>Mov.</button>}
+                              {currentUser.role!=="solicitante"&&<button className="ios-btn ios-btn-gray ios-btn-sm" onClick={()=>openMovement(item)}>Ajuste</button>}
                               {currentUser.role!=="solicitante"&&<button className="ios-btn ios-btn-gray ios-btn-sm" style={{color:"#8E8E93"}} onClick={()=>openEdit(item)}>•••</button>}
                             </div>
                           </td>
@@ -4725,7 +4753,7 @@ function MovModal({item,onClose,onSave}){
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
         <div className="sheet-handle"/>
-        <div className="sheet-title">Registrar Movimiento</div>
+        <div className="sheet-title">Ajuste de inventario</div>
         <div style={{padding:"12px 20px 20px",display:"flex",flexDirection:"column",gap:16}}>
 
           {/* Item info */}
@@ -4783,13 +4811,15 @@ function MovModal({item,onClose,onSave}){
             </div>
           </div>
 
-          <AlmField label="Motivo (opcional)">
+          <AlmField label="Motivo *">
             <input className="ios-input" placeholder={type==="devolucion"?"Ej: Sobrante de producción…":"Ej: Mantenimiento preventivo…"} value={reason} onChange={e=>setReason(e.target.value)}/>
           </AlmField>
 
           <div style={{display:"flex",gap:10}}>
             <button className="ios-btn ios-btn-gray" style={{flex:1,color:"#8E8E93"}} onClick={onClose}>Cancelar</button>
-            <button className="ios-btn ios-btn-blue" style={{flex:2,background:type==="devolucion"?"#b07d00":undefined}} onClick={()=>onSave({type,qty,reason})}>
+            <button className="ios-btn ios-btn-blue" style={{flex:2,background:type==="devolucion"?"#b07d00":undefined}}
+              disabled={!reason.trim()}
+              onClick={()=>onSave({type,qty,reason})}>
               {type==="entrada"?"Registrar Entrada":type==="devolucion"?"Registrar Devolución":"Registrar Salida"}
             </button>
           </div>
