@@ -3492,6 +3492,7 @@ function UsuariosTab({ currentUserId, currentUsername, flash }) {
                   <span>@{u.username}</span>
                   <span>·</span>
                   <span className={`role-badge role-${u.role}`} style={{ fontSize: 10, padding: "1px 6px" }}>{ROLE_LABEL[u.role]}</span>
+                  {u.cargo&&<><span>·</span><span style={{background:"#F2F2F7",color:"#3C3C43",borderRadius:6,padding:"1px 7px",fontSize:10,fontWeight:600}}>{u.cargo}</span></>}
                   {u.email&&<><span>·</span><span style={{color:"#004A9E"}}>✉️ {u.email}</span></>}
                   {isAdminRoot && <span style={{ fontSize: 10, color: "#C45200" }}>🔒 Protegido</span>}
                 </div>
@@ -3532,7 +3533,7 @@ function UsuariosTab({ currentUserId, currentUsername, flash }) {
               setUsuarios(prev => [...prev, data]);
               flash("Usuario creado ✓");
             } else {
-              const upd = { nombre: f.nombre, email: f.email ?? null, role: f.role, activo: f.activo };
+              const upd = { nombre: f.nombre, email: f.email ?? null, cargo: f.cargo ?? null, role: f.role, activo: f.activo };
               if (f.password) upd.password = f.password;
               const { error } = await sb.from("usuarios").update(upd).eq("id", sel.id);
               if (error) { flash("Error: " + error.message, false); return; }
@@ -3820,6 +3821,7 @@ function UsuarioModal({ usuario, currentUsername, onClose, onSave }) {
     password: "",
     nombre: usuario?.nombre || "",
     email: usuario?.email || "",
+    cargo: usuario?.cargo || "",
     role: usuario?.role || "solicitante",
     activo: usuario?.activo ?? true,
   });
@@ -3835,6 +3837,7 @@ function UsuarioModal({ usuario, currentUsername, onClose, onSave }) {
       password: passwordBlocked ? undefined : f.password,
       nombre: f.nombre,
       email: f.email.trim() || null,
+      cargo: f.cargo || null,
       role: f.role,
       activo: f.activo,
     };
@@ -3856,6 +3859,16 @@ function UsuarioModal({ usuario, currentUsername, onClose, onSave }) {
           <AlmField label="Correo electrónico">
             <input className="ios-input" type="email" value={f.email} onChange={e => s("email", e.target.value)}
               placeholder="juan@empresa.com (opcional)" />
+          </AlmField>
+
+          <AlmField label="Cargo">
+            <select className="ios-input" value={f.cargo} onChange={e => s("cargo", e.target.value)}
+              style={{color: f.cargo ? "#1C1C1E" : "#8E8E93"}}>
+              <option value="">Sin cargo asignado</option>
+              {(typeof CARGOS_SISTEMA !== "undefined" ? CARGOS_SISTEMA : ["Administrador","Coordinador","Técnico de Mantenimiento","Técnico Electricista","Técnico de Metrología","Auxiliar de Mantenimiento Locativo"]).map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </AlmField>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -5774,6 +5787,7 @@ const NV="#0D2F5C";
 
 // ── Cargos de técnicos ────────────────────────────────────────────────────────
 const CARGOS=["Auxiliar de Mantenimiento Locativo","Técnico de Mantenimiento","Técnico Electricista","Técnico de Metrología"];
+const CARGOS_SISTEMA=["Administrador","Coordinador","Técnico de Mantenimiento","Técnico Electricista","Técnico de Metrología","Auxiliar de Mantenimiento Locativo"];
 const CARGO_STY={
   "Auxiliar de Mantenimiento Locativo":{bg:"#FFF0D9",col:"#C45200"},
   "Técnico de Mantenimiento":{bg:"#e8f0fb",col:"#0D2F5C"},
@@ -6662,8 +6676,10 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
   const [turno,setTurno]=useState(function(){return detectTurno();});
   const [fecha,setFecha]=useState(new Date().toISOString().slice(0,10));
   const tecObj=tecMap[tecCode]||null;
-  const isLocativo=tecObj&&tecObj.cargo==="Auxiliar de Mantenimiento Locativo";
-  const isMetrologia=tecObj&&tecObj.cargo==="Técnico de Metrología";
+  // Cargo: prioridad al cargo del usuario logueado, fallback al tecObj
+  const cargoActivo = (initialUser&&initialUser.cargo) || (tecObj&&tecObj.cargo) || "";
+  const isLocativo  = cargoActivo==="Auxiliar de Mantenimiento Locativo";
+  const isMetrologia= cargoActivo==="Técnico de Metrología";
   const baseList=isLocativo?locList:isMetrologia?(metEqs.length>0?metEqs:eqList):eqList;
   const aList=baseList.concat([OTRA]);
 
@@ -6738,8 +6754,8 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
       realizadas:allReal,pendientes:pends,obs:""});
   }
   // ── Formulario de reporte ─────────────────────────────────────────────────
-  const sty=tecObj?(CARGO_STY[tecObj.cargo]||{bg:"#e8f0fb",col:NV}):{bg:"#e8f0fb",col:NV};
-  const cargoLabel=tecObj?tecObj.cargo:"";
+  const sty=cargoActivo?(CARGO_STY[cargoActivo]||{bg:"#e8f0fb",col:NV}):{bg:"#e8f0fb",col:NV};
+  const cargoLabel=cargoActivo;
   const maxT=fecha===todayS()?nowT():undefined;
   const initials=tecNombreActivo.split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase();
 
@@ -7701,6 +7717,7 @@ function BitacoraApp({onBack, initialUser}){
   const [adminOk,setAdminOk]=useState(false);
   const [loading,setLoading]=useState(true);
   const [sync,setSync]=useState(null);
+  const [confToast,setConfToast]=useState(null); // {nombre, fecha}
 
   useEffect(function(){
     async function init(){
@@ -7768,22 +7785,28 @@ function BitacoraApp({onBack, initialUser}){
 
   function confirmarLectura(entryId){
     if(!initialUser) return;
+    const ahora = new Date();
     setEntries(function(prev){
       const n=prev.map(function(e){
         if(e.id!==entryId) return e;
         const conf=e.confirmaciones||[];
-        // No duplicar si ya confirmó este usuario
         if(conf.some(function(c){return c.username===initialUser.username;})) return e;
         const nueva={
           username: initialUser.username,
           nombre:   initialUser.nombre||initialUser.username,
-          fecha:    new Date().toISOString()
+          fecha:    ahora.toISOString()
         };
         return Object.assign({},e,{confirmaciones:conf.concat([nueva])});
       });
       save(KS.e,n);
       return n;
     });
+    // Mostrar toast
+    setConfToast({
+      nombre: initialUser.nombre||initialUser.username,
+      fecha:  ahora.toLocaleString("es-CO",{timeZone:"America/Bogota",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})
+    });
+    setTimeout(function(){setConfToast(null);}, 4000);
   }
   function doDel(id){
     setEntries(function(p){
@@ -7909,6 +7932,27 @@ function BitacoraApp({onBack, initialUser}){
             </button>
           );})}
         </nav>
+      )}
+
+      {/* Toast de confirmación de lectura */}
+      {confToast&&(
+        <div style={{
+          position:"fixed",bottom:80,right:16,zIndex:9999,
+          background:"#1C1C1E",color:"#fff",borderRadius:14,
+          padding:"10px 14px",maxWidth:260,
+          boxShadow:"0 8px 28px rgba(0,0,0,0.35)",
+          animation:"slideInRight .25s ease",
+          display:"flex",gap:10,alignItems:"flex-start"
+        }}>
+          <style>{`@keyframes slideInRight{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}`}</style>
+          <span style={{fontSize:20,flexShrink:0,marginTop:1}}>✅</span>
+          <div>
+            <div style={{fontWeight:700,fontSize:13,fontFamily:"Montserrat"}}>Reporte verificado</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:3,lineHeight:1.4}}>
+              {confToast.nombre}<br/>{confToast.fecha}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
