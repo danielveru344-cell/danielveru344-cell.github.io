@@ -6163,6 +6163,7 @@ function AdminPanel({eqs,tecs,metEqs,locEqs,turnos,entries,setEqs,setTecs,setMet
   const [ntCode,setNtCode]=useState("");
   const [ntName,setNtName]=useState("");
   const [ntCargo,setNtCargo]=useState(CARGOS[1]);
+  const [ntUser,setNtUser]=useState("");
   const [ntErr,setNtErr]=useState("");
   // edición inline de cargo
   const [editId,setEditId]=useState(null);
@@ -6178,9 +6179,9 @@ function AdminPanel({eqs,tecs,metEqs,locEqs,turnos,entries,setEqs,setTecs,setMet
     if(!code){setNtErr("Ingresa el código.");return;}
     if(!name){setNtErr("Ingresa el nombre.");return;}
     if(tecs.find(function(t){return t.code===code;})){setNtErr("Ese código ya existe.");return;}
-    const n=tecs.concat([{code:code,name:name,cargo:ntCargo}]);
+    const n=tecs.concat([{code:code,name:name,cargo:ntCargo,username:ntUser.trim().toLowerCase()}]);
     setTecs(n);save(KS.tec,n);
-    setNtCode("");setNtName("");setNtCargo(CARGOS[1]);setNtErr("");
+    setNtCode("");setNtName("");setNtCargo(CARGOS[1]);setNtUser("");setNtErr("");
   }
   function remTec(code){
     if(!confirm("Eliminar técnico M"+code+"?"))return;
@@ -6303,14 +6304,18 @@ function AdminPanel({eqs,tecs,metEqs,locEqs,turnos,entries,setEqs,setTecs,setMet
         {/* Form agregar */}
         <div style={{padding:"14px 16px",borderTop:"1px solid rgba(13,47,92,0.10)",display:"flex",flexDirection:"column",gap:10}}>
           <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,color:"#8a96a8",textTransform:"uppercase",letterSpacing:1}}>Agregar técnico</div>
-          <div style={{display:"flex",alignItems:"stretch",borderRadius:8,overflow:"hidden",border:"1.5px solid rgba(13,47,92,0.10)",background:"#f4f7fd"}}>
-            <span style={{display:"flex",alignItems:"center",padding:"0 12px",background:NV,color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:14,flexShrink:0,userSelect:"none"}}>M</span>
-            <input className="inp" style={{border:"none",borderRadius:0,background:"transparent",flex:"0 0 100px"}}
-              placeholder="Código" value={ntCode}
-              onChange={function(e){setNtCode(e.target.value.replace(/\D/g,""));setNtErr("");}}
-              maxLength={10}/>
+          <div style={{display:"flex",gap:8}}>
+            <div style={{display:"flex",alignItems:"stretch",borderRadius:8,overflow:"hidden",border:"1.5px solid rgba(13,47,92,0.10)",background:"#f4f7fd",flex:"0 0 auto"}}>
+              <span style={{display:"flex",alignItems:"center",padding:"0 12px",background:NV,color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:14,flexShrink:0,userSelect:"none"}}>M</span>
+              <input className="inp" style={{border:"none",borderRadius:0,background:"transparent",width:80}}
+                placeholder="Código" value={ntCode}
+                onChange={function(e){setNtCode(e.target.value.replace(/\D/g,""));setNtErr("");}}
+                maxLength={10}/>
+            </div>
+            <input className="inp" style={{flex:1}} placeholder="Usuario de sesión (ej: ofonseca)" value={ntUser}
+              onChange={function(e){setNtUser(e.target.value);setNtErr("");}}/>
           </div>
-          <input className="inp" placeholder="Nombre completo" value={ntName}
+          <input className="inp" placeholder="Nombre completo (ej: Oscar Fonseca)" value={ntName}
             onChange={function(e){setNtName(e.target.value);setNtErr("");}}/>
           <select className="inp" value={ntCargo} onChange={function(e){setNtCargo(e.target.value);}}>
             {CARGOS.map(function(c){return <option key={c}>{c}</option>;})}
@@ -6619,17 +6624,19 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
 
   const tecMap={}; tecs.forEach(function(t){tecMap[t.code]=t;});
 
-  // Pre-seleccionar técnico desde usuario logueado
+  // Buscar técnico: primero por username exacto, luego por nombre
   const initialCode = React.useMemo(function(){
     if(!initialUser||!tecs.length) return "";
-    var nombre = (initialUser.nombre||"").toLowerCase();
-    var found = tecs.find(function(t){
-      return t.name && t.name.toLowerCase().includes(nombre.split(" ")[0]);
-    });
-    return found ? found.code : "";
+    var uname=(initialUser.username||"").toLowerCase();
+    var byUser=tecs.find(function(t){return t.username&&t.username.toLowerCase()===uname;});
+    if(byUser) return byUser.code;
+    var nombre=(initialUser.nombre||"").toLowerCase();
+    var byName=tecs.find(function(t){return t.name&&t.name.toLowerCase().includes(nombre.split(" ")[0]);});
+    return byName?byName.code:"";
   }, [initialUser, tecs]);
 
   const [tecCode,setTecCode]=useState(function(){ return initialCode||""; });
+  const skippedSelection=!!initialCode; // si se detectó automático, saltar selección
   const [manualMode,setManualMode]=useState(false);
   const [tecSearch,setTecSearch]=useState("");
   const [pendingTec,setPendingTec]=useState(null);
@@ -6699,8 +6706,8 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
       realizadas:acts,pendientes:pends,obs:obs.trim()});
   }
 
-  // ── Pantalla 1: Selección de técnico ──────────────────────────────────────
-  if(!tecObj){
+  // ── Pantalla 1: Selección de técnico — solo si no se detectó automáticamente ──
+  if(!tecObj&&!skippedSelection){
     const filtered=tecSearch.trim()
       ?tecs.filter(function(t){return(t.name+t.code).toLowerCase().indexOf(tecSearch.toLowerCase())>=0;})
       :tecs;
@@ -6850,6 +6857,22 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
     );
   }
 
+  // ── Fallback: usuario sin técnico registrado ────────────────────────────────
+  if(!tecObj){
+    return(
+      <div style={{display:"flex",flexDirection:"column",gap:16,padding:"12px 0"}}>
+        <div style={{background:"#FFF8EE",border:"1.5px solid #FFD980",borderRadius:14,padding:"18px 20px",display:"flex",flexDirection:"column",gap:8,alignItems:"center",textAlign:"center"}}>
+          <span style={{fontSize:32}}>⚠️</span>
+          <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:15,color:NV}}>Tu usuario no tiene un técnico asignado</div>
+          <div style={{fontSize:13,color:"#8a96a8"}}>
+            Pide al administrador que registre tu técnico con el usuario <strong>{initialUser?.username||""}</strong> en la configuración de la bitácora.
+          </div>
+        </div>
+        <button className="btn btn-ghost" onClick={onCancel}>Volver</button>
+      </div>
+    );
+  }
+
   // ── Pantalla 2: Formulario de reporte ─────────────────────────────────────
   const sty=CARGO_STY[tecObj.cargo]||{bg:"#e8f0fb",col:NV};
   const maxT=fecha===todayS()?nowT():undefined;
@@ -6872,11 +6895,13 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
             <span style={{background:sty.bg,color:sty.col,padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>{tecObj.cargo}</span>
           </div>
         </div>
-        <button onClick={function(){setTecCode("");}}
-          style={{background:"none",border:"1px solid rgba(13,47,92,0.18)",borderRadius:8,
-            cursor:"pointer",color:"#8a96a8",padding:"5px 10px",fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>
-          Cambiar
-        </button>
+        {!skippedSelection&&(
+          <button onClick={function(){setTecCode("");}}
+            style={{background:"none",border:"1px solid rgba(13,47,92,0.18)",borderRadius:8,
+              cursor:"pointer",color:"#8a96a8",padding:"5px 10px",fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>
+            Cambiar
+          </button>
+        )}
       </div>
 
       {/* Fecha + Turno */}
@@ -8020,7 +8045,7 @@ function RootApp(){
   if(!rootUser) return <LoginScreen onLogin={setRootUser}/>;
   if(!mod) return <SuiteSelector onSelect={setMod} currentUser={rootUser} onLogout={function(){setRootUser(null);setMod(null);}}/>;
   if(mod==="almacen") return <AlmacenApp onBack={function(){setMod(null);}} initialUser={rootUser}/>;
-  if(mod==="bitacora") return <BitacoraApp onBack={function(){setMod(null);}}/>;
+  if(mod==="bitacora") return <BitacoraApp onBack={function(){setMod(null);}} initialUser={rootUser}/>;
   return null;
 }
 ReactDOM.render(React.createElement(RootApp),document.getElementById("root"));
