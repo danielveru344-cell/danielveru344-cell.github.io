@@ -6540,6 +6540,24 @@ function ActivityCard({r,i,onRem,onUpd,isTime,aList,OTRA,maxT}){
             </span>
           </button>
         )}
+        {isTime&&r.pendiente&&(
+          <div>
+            <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#C45200",
+              letterSpacing:.8,marginBottom:6,textTransform:"uppercase"}}>Prioridad del pendiente</div>
+            <div style={{display:"flex",gap:6}}>
+              {PRIOS.map(function(pr){return(
+                <button key={pr} onClick={function(){onUpd("p",pr);}}
+                  style={{flex:1,padding:"7px 0",borderRadius:20,border:"1.5px solid",cursor:"pointer",
+                    fontFamily:"Montserrat",fontWeight:700,fontSize:12,transition:"all .12s",
+                    background:r.p===pr?PBG[pr]:"#f4f7fd",
+                    color:r.p===pr?PCOL[pr]:"#8a96a8",
+                    borderColor:r.p===pr?PCOL[pr]+"66":"transparent"}}>
+                  {pr}
+                </button>
+              );})}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -6633,7 +6651,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
 
   const emptyCard = function(){
     var area = (aList&&aList.length>0) ? aList[0] : "";
-    return {id:gid(),area:area,otraArea:"",desc:"",hi:"",hf:"",pendiente:false};
+    return {id:gid(),area:area,otraArea:"",desc:"",hi:"",hf:"",pendiente:false,p:"Media"};
   };
   const [real,setReal]=useState([]);             // actividades ya confirmadas esta sesión
   const [current,setCurrent]=useState(emptyCard); // tarjeta activa
@@ -6698,7 +6716,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
     }
     if(allReal.length===0){alert("⚠️ Completa al menos una actividad antes de guardar.");return;}
     var pends=allReal.filter(function(r){return r.pendiente;}).map(function(r){
-      return {id:r.id,area:r.area,desc:r.desc,p:"Media"};
+      return {id:r.id,area:r.area,desc:r.desc,p:r.p||"Media"};
     });
     var tecLabel=tecCode?("M"+tecCode+" · "+tecNombreActivo):tecNombreActivo;
     onSave({id:gid(),createdAt:ts(),fecha:fecha,turno:turno,tipo:tipo,tecnico:tecLabel,
@@ -6804,6 +6822,8 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
                         fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{r.hi} – {r.hf}</span>
                       {r.pendiente&&<span style={{background:"#FFF0D9",color:"#C45200",borderRadius:6,
                         padding:"2px 8px",fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>⏳ Pendiente</span>}
+                      {r.pendiente&&r.p&&<span style={{background:PBG[r.p],color:PCOL[r.p],borderRadius:6,
+                        padding:"2px 8px",fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>{r.p}</span>}
                     </div>
                     <p style={{margin:0,fontSize:13,color:NV,lineHeight:1.5}}>{r.desc}</p>
                   </div>
@@ -6925,20 +6945,24 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar}){
         style={{background:NV,padding:"12px 14px",cursor:"pointer",userSelect:"none"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
           <div style={{minWidth:0,flex:1}}>
-            <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:"#fff",
-              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.tecnico}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+              <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:"#fff",
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>{e.tecnico}</div>
+              <span style={{
+                background:e.tipo==="fallo"?"rgba(192,0,26,0.55)":e.tipo==="ajuste"?"rgba(0,74,158,0.55)":"rgba(255,255,255,0.12)",
+                color:e.tipo==="fallo"?"#fca5a5":e.tipo==="ajuste"?"#93c5fd":"rgba(255,255,255,0.4)",
+                border:"1px solid "+(e.tipo==="fallo"?"rgba(252,165,165,0.35)":e.tipo==="ajuste"?"rgba(147,197,253,0.35)":"rgba(255,255,255,0.15)"),
+                padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:800,fontFamily:"Montserrat",
+                letterSpacing:0.3,flexShrink:0,whiteSpace:"nowrap"}}>
+                {e.tipo==="fallo"?"🔴 Fallo":e.tipo==="ajuste"?"🔧 Ajuste":"— Sin tipo"}
+              </span>
+            </div>
             <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
               <span>{fD(e.fecha+"T12:00:00")}</span>
               <span style={{opacity:.4}}>·</span>
               <span>{e.turno}</span>
               <span style={{opacity:.4}}>·</span>
               <span>{fT(e.createdAt)}</span>
-              {e.tipo&&<><span style={{opacity:.4}}>·</span>
-                <span style={{background:e.tipo==="fallo"?"rgba(192,0,26,0.45)":"rgba(0,74,158,0.4)",
-                  color:e.tipo==="fallo"?"#fca5a5":"#93c5fd",
-                  padding:"1px 7px",borderRadius:20,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
-                  {e.tipo==="fallo"?"🔴 Fallo":"🔧 Ajuste"}
-                </span></>}
             </div>
           </div>
           <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
@@ -7104,7 +7128,16 @@ function EntryCard(props){
             <div style={{fontSize:11,color:"#8a96a8",marginTop:2}}>{fT(e.createdAt)}</div>
           </div>
         </div>
-        <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap",alignItems:"center"}}>
+          {e.tipo&&(
+            <span style={{
+              background:e.tipo==="fallo"?"#FFDEDE":"#D9ECFF",
+              color:e.tipo==="fallo"?"#C0001A":"#004A9E",
+              border:"1px solid "+(e.tipo==="fallo"?"rgba(192,0,26,0.2)":"rgba(0,74,158,0.2)"),
+              padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:800,fontFamily:"Montserrat",letterSpacing:0.2}}>
+              {e.tipo==="fallo"?"🔴 Fallo":"🔧 Ajuste"}
+            </span>
+          )}
           <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,color:"#1D7A3E",fontWeight:600}}>
             <Ico d={IC.check} sz={12} c="#1D7A3E"/>{e.realizadas.length} realizadas
           </span>
@@ -7260,6 +7293,35 @@ function ReportesView(props){
           </div>
         </div>
       )}
+
+      {/* ── Filtro rápido de tipo ── */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {[["todos","Todos",null],["fallo","🔴 Fallo","#C0001A"],["ajuste","🔧 Ajuste","#004A9E"]].map(function(op){
+          var isActive=tp===op[0];
+          var col=op[2];
+          return(
+            <button key={op[0]} onClick={function(){setTp(op[0]);}}
+              style={{
+                padding:"6px 14px",borderRadius:20,border:"1.5px solid",cursor:"pointer",
+                fontFamily:"Montserrat",fontWeight:700,fontSize:12,letterSpacing:0.3,
+                transition:"all 0.15s",
+                borderColor:isActive?(col||NV):"rgba(13,47,92,0.14)",
+                background:isActive?(col==="fallo"||col==="#C0001A"?"#FFDEDE":col==="#004A9E"?"#D9ECFF":"var(--light)"):"#fff",
+                color:isActive?(col||NV):"#8a96a8",
+                boxShadow:isActive?"0 1px 6px rgba(0,0,0,0.08)":"none",
+              }}>
+              {op[1]}
+              {op[0]!=="todos"&&(
+                <span style={{
+                  marginLeft:6,background:isActive?"rgba(0,0,0,0.08)":"rgba(13,47,92,0.07)",
+                  borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:800}}>
+                  {entries.filter(function(e){return e.tipo===op[0];}).length}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
       <div style={{fontSize:12,color:"#8a96a8",fontFamily:"Montserrat",fontWeight:600}}>
         {fil.length} {fil.length===1?"reporte":"reportes"}
