@@ -6603,7 +6603,7 @@ function AnalCard(p){
 }
 
 // ── NewForm ───────────────────────────────────────────────────────────────────
-function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
+function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sessionEntries}){
   const turnosList=turnos&&turnos.length>0?turnos:TURNOS_DEF;
   const eqList=eqs.length>0?eqs:AREAS_DEF;
   const locList=locEqs&&locEqs.length>0?locEqs:AREAS_LOC;
@@ -6696,6 +6696,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
 
   function doSave(){
     if(!tecNombreActivo){alert("No se pudo identificar al usuario.");return;}
+    if(!tipo){alert("⚠️ Selecciona el tipo de reporte: Fallo o Ajuste.");return;}
     if(fecha>todayS()){alert("⚠️ La fecha del reporte no puede ser futura.");return;}
     // Intentar agregar la tarjeta actual si tiene contenido
     var allReal=real.slice();
@@ -6721,6 +6722,10 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
     var tecLabel=tecCode?("M"+tecCode+" · "+tecNombreActivo):tecNombreActivo;
     onSave({id:gid(),createdAt:ts(),fecha:fecha,turno:turno,tipo:tipo,tecnico:tecLabel,
       realizadas:allReal,pendientes:pends,obs:""});
+    // Resetear form para nuevo reporte en la misma sesión
+    setReal([]);
+    setTipo("");
+    setCurrent(emptyCard());
   }
   // ── Formulario de reporte ─────────────────────────────────────────────────
   const sty=cargoActivo?(CARGO_STY[cargoActivo]||{bg:"#e8f0fb",col:NV}):{bg:"#e8f0fb",col:NV};
@@ -6760,21 +6765,23 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
               {turnosList.map(function(t){return <option key={t}>{t}</option>;})}
             </select>
           </div>
-          <div style={{flex:1,padding:"12px 14px"}}>
-            <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",letterSpacing:.5,marginBottom:5}}>TIPO</div>
+          <div style={{flex:1,padding:"12px 14px",background:!tipo?"rgba(192,0,26,0.03)":"transparent",transition:"background .2s"}}>
+            <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,
+              color:!tipo?"#C0001A":"#8a96a8",letterSpacing:.5,marginBottom:5}}>
+              TIPO <span style={{color:"#C0001A"}}>*</span>
+            </div>
             <div style={{display:"flex",gap:5}}>
-              {[["fallo","🔴","#C0001A","#FFDEDE"],["ajuste","🔧","#004A9E","#D9ECFF"]].map(function(op){return(
+              {[["fallo","🔴 Fallo","#C0001A","#FFDEDE"],["ajuste","🔧 Ajuste","#004A9E","#D9ECFF"]].map(function(op){return(
                 <button key={op[0]} onClick={function(){setTipo(tipo===op[0]?"":op[0]);}}
-                  style={{flex:1,padding:"4px 0",borderRadius:8,border:"1.5px solid",cursor:"pointer",
-                    borderColor:tipo===op[0]?op[2]:"rgba(13,47,92,0.12)",
+                  style={{flex:1,padding:"5px 0",borderRadius:8,border:"1.5px solid",cursor:"pointer",
+                    borderColor:tipo===op[0]?op[2]:(!tipo?"rgba(192,0,26,0.35)":"rgba(13,47,92,0.12)"),
                     background:tipo===op[0]?op[3]:"transparent",
                     fontFamily:"Montserrat",fontWeight:700,fontSize:11,
-                    color:tipo===op[0]?op[2]:"#8a96a8",transition:"all .15s"}}>
+                    color:tipo===op[0]?op[2]:(!tipo?"#C0001A":"#8a96a8"),transition:"all .15s"}}>
                   {op[1]}
                 </button>
               );})}
             </div>
-            {tipo&&<div style={{fontSize:10,color:"#8a96a8",marginTop:3,textAlign:"center",fontWeight:600,fontFamily:"Montserrat",textTransform:"uppercase"}}>{tipo}</div>}
           </div>
         </div>
       </div>
@@ -6848,6 +6855,62 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser}){
           Cancelar
         </button>
       </div>
+
+      {/* ── Reportes guardados esta sesión ── */}
+      {sessionEntries&&sessionEntries.length>0&&(
+        <div style={{marginTop:4}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <div style={{width:4,height:18,borderRadius:4,background:"#1D7A3E"}}/>
+            <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:12,color:"#1D7A3E",
+              textTransform:"uppercase",letterSpacing:.5}}>Esta sesión</span>
+            <span style={{background:"#1D7A3E",color:"#fff",borderRadius:20,fontSize:10,
+              fontWeight:800,fontFamily:"Montserrat",padding:"2px 8px"}}>
+              {sessionEntries.length} guardado{sessionEntries.length>1?"s":""}
+            </span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {sessionEntries.map(function(e){
+              var tipoBg=e.tipo==="fallo"?"#FFDEDE":e.tipo==="ajuste"?"#D9ECFF":"rgba(13,47,92,0.06)";
+              var tipoCol=e.tipo==="fallo"?"#C0001A":e.tipo==="ajuste"?"#004A9E":"#8a96a8";
+              return(
+                <div key={e.id} style={{background:"#fff",borderRadius:12,
+                  border:"1.5px solid rgba(29,122,62,0.2)",
+                  padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:12,color:NV,flex:1,minWidth:0,
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.tecnico}</span>
+                    <span style={{background:tipoBg,color:tipoCol,borderRadius:20,
+                      fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 8px",flexShrink:0}}>
+                      {e.tipo==="fallo"?"🔴 Fallo":e.tipo==="ajuste"?"🔧 Ajuste":"— Sin tipo"}
+                    </span>
+                  </div>
+                  <div style={{fontSize:11,color:"#8a96a8",display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <span>{fD(e.fecha+"T12:00:00")}</span>
+                    <span style={{opacity:.4}}>·</span>
+                    <span>{e.turno}</span>
+                    <span style={{opacity:.4}}>·</span>
+                    <span>{fT(e.createdAt)}</span>
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {e.realizadas.map(function(r,i){return(
+                      <span key={i} style={{background:"#e8f0fb",color:NV,borderRadius:6,
+                        padding:"2px 8px",fontSize:11,fontWeight:600,fontFamily:"Montserrat"}}>
+                        {r.area}{r.hi&&r.hf?" · "+r.hi+"–"+r.hf:""}
+                      </span>
+                    );})}
+                    {e.pendientes.length>0&&(
+                      <span style={{background:"#FFF0D9",color:"#C45200",borderRadius:6,
+                        padding:"2px 8px",fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>
+                        ⏳ {e.pendientes.length} pendiente{e.pendientes.length>1?"s":""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -8378,13 +8441,21 @@ function BitacoraApp({onBack, initialUser}){
   const [locEqs,setLocEqs]=useState(AREAS_LOC);
   const [turnos,setTurnos]=useState(TURNOS_DEF);
   const [tab,setTab]=useState("home");
-  const [filtroInicial,setFiltroInicial]=useState(null); // null | "pendientes"
+  const [filtroInicial,setFiltroInicial]=useState(null);
   const [detail,setDetail]=useState(null);
   const [showPass,setShowPass]=useState(false);
   const [adminOk,setAdminOk]=useState(false);
   const [loading,setLoading]=useState(true);
   const [sync,setSync]=useState(null);
-  const [confToast,setConfToast]=useState(null); // {nombre, fecha}
+  const [confToast,setConfToast]=useState(null);
+  const [sessionEntries,setSessionEntries]=useState([]); // solo en memoria, se borra al salir del tab
+
+  // Limpiar sesión al salir del tab "nuevo"
+  const prevTab=React.useRef("home");
+  useEffect(function(){
+    if(prevTab.current==="nuevo"&&tab!=="nuevo") setSessionEntries([]);
+    prevTab.current=tab;
+  },[tab]);
 
   useEffect(function(){
     async function init(){
@@ -8447,7 +8518,8 @@ function BitacoraApp({onBack, initialUser}){
       save(KS.e,n);
       return n;
     });
-    setTab("home");
+    setSessionEntries(function(p){return [entry].concat(p);});
+    // NO cambiar de tab — quedarse en "nuevo" con form reseteado
   }
 
   function confirmarLectura(entryId){
@@ -8584,7 +8656,7 @@ function BitacoraApp({onBack, initialUser}){
         ):tab==="analisis"?(
           <AnalisisView entries={entries}/>
         ):tab==="nuevo"?(
-          <NewForm onSave={doSave} onCancel={function(){setTab("home");}} eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos} initialUser={initialUser}/>
+          <NewForm onSave={doSave} onCancel={function(){setTab("home");}} eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos} initialUser={initialUser} sessionEntries={sessionEntries}/>
         ):tab==="admin"&&adminOk?(
           <AdminPanel eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos} entries={entries} setEqs={setEqs} setTecs={setTecs} setMetEqs={setMetEqs} setLocEqs={setLocEqs} setTurnos={setTurnos} onDel={doDel} onLogout={function(){setAdminOk(false);setTab("home");}}/>
         ):null}
