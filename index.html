@@ -5995,33 +5995,63 @@ function ABadge({label,col,bg}){
 }
 
 // ── Mini bar chart SVG ─────────────────────────────────────────────────────────
-function BarChart14({data, color}){
-  const BW=26,GAP=5,BH=80,LH=36;
-  const W=data.length*(BW+GAP)+GAP;
+function BarChart14({data, color, label}){
+  const BW=26,GAP=5,BH=90,LH=36,YW=24;
+  const W=YW+data.length*(BW+GAP)+GAP;
   const TH=BH+LH;
   const maxVal=Math.max.apply(null,data.map(function(d){return d.v;}),0)||1;
   const barCol=color||NV;
+  const total=data.reduce(function(s,d){return s+d.v;},0);
+  // Ticks del eje Y: 0, mitad, máximo
+  const ticks=[0,Math.round(maxVal/2),maxVal].filter(function(v,i,a){return a.indexOf(v)===i;});
+
   return(
-    <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:4}}>
-      <svg width={W} height={TH} style={{display:"block"}}>
-        {data.map(function(d,i){
-          const bh=Math.round((d.v/maxVal)*BH);
-          const x=GAP+i*(BW+GAP);
-          const y=BH-bh;
-          const lx=x+BW/2; const ly=BH+8;
-          return(
-            <g key={i}>
-              <rect x={x} y={y} width={BW} height={Math.max(bh,2)} rx="3"
-                fill={d.v>0?barCol:"#e8f0fb"}/>
-              {d.v>0&&<text x={x+BW/2} y={y-3} textAnchor="middle" fontSize="9"
-                fill={barCol} fontWeight="700" fontFamily="Montserrat,sans-serif">{d.v}</text>}
-              <text transform={"rotate(-45,"+lx+","+ly+")"}
-                x={lx} y={ly} textAnchor="end" fontSize="9" fill="#8a96a8"
-                fontFamily="Inter,sans-serif">{d.l}</text>
-            </g>
-          );
-        })}
-      </svg>
+    <div>
+      {/* Total + contexto */}
+      <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:6}}>
+        <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:22,color:barCol,lineHeight:1}}>{total}</span>
+        <span style={{fontSize:11,color:"#8a96a8",fontFamily:"Montserrat"}}>
+          {label||"actividades en el período"}
+        </span>
+      </div>
+      <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:4}}>
+        <svg width={W} height={TH} style={{display:"block"}}>
+          {/* Líneas guía del eje Y */}
+          {ticks.map(function(t){
+            const ty=BH-Math.round((t/maxVal)*BH);
+            return(
+              <g key={t}>
+                <line x1={YW} y1={ty} x2={W} y2={ty}
+                  stroke={t===0?"#e8f0fb":"#f0f4fa"} strokeWidth="1"/>
+                <text x={YW-3} y={ty+3} textAnchor="end" fontSize="8"
+                  fill="#c7d0dd" fontFamily="Montserrat,sans-serif" fontWeight="600">{t}</text>
+              </g>
+            );
+          })}
+          {/* Barras */}
+          {data.map(function(d,i){
+            const bh=Math.round((d.v/maxVal)*BH);
+            const x=YW+GAP+i*(BW+GAP);
+            const y=BH-bh;
+            const lx=x+BW/2; const ly=BH+8;
+            return(
+              <g key={i}>
+                <rect x={x} y={y} width={BW} height={Math.max(bh,2)} rx="3"
+                  fill={d.v>0?barCol:"#e8f0fb"}/>
+                {d.v>0&&<text x={x+BW/2} y={y-3} textAnchor="middle" fontSize="9"
+                  fill={barCol} fontWeight="700" fontFamily="Montserrat,sans-serif">{d.v}</text>}
+                <text transform={"rotate(-45,"+lx+","+ly+")"}
+                  x={lx} y={ly} textAnchor="end" fontSize="9" fill="#8a96a8"
+                  fontFamily="Inter,sans-serif">{d.l}</text>
+              </g>
+            );
+          })}
+          {/* Eje Y label */}
+          <text transform={"rotate(-90,8,"+(BH/2)+")"}
+            x={8} y={BH/2} textAnchor="middle" fontSize="8"
+            fill="#c7d0dd" fontFamily="Montserrat,sans-serif" fontWeight="700">act.</text>
+        </svg>
+      </div>
     </div>
   );
 }
@@ -7403,6 +7433,8 @@ function BarHorizontal({data, unitY, maxVal, onSelect, selected}){
 function AnalisisView(props){
   const entries=props.entries;
   const [periodo,setPeriodo]=useState("todo");
+  const [periodoDesde,setPeriodoDesde]=useState("");
+  const [periodoHasta,setPeriodoHasta]=useState("");
   const [trendDesde,setTrendDesde]=useState("");
   const [trendHasta,setTrendHasta]=useState("");
   const [trendCustom,setTrendCustom]=useState(false);
@@ -7412,9 +7444,9 @@ function AnalisisView(props){
 
   // ── Paleta de colores por equipo ──────────────────────────────
   const EQ_PALETTE=[
-    "#2d7dd2","#C45200","#1D7A3E","#7C3AED","#C0001A","#0A5A72",
-    "#B45309","#6366f1","#0D2F5C","#D97706","#059669","#DC2626",
-    "#7C3AED","#0891B2","#CA8A04","#16A34A","#9333EA","#0284C7"
+    "#0D2F5C","#C45200","#1D7A3E","#9333EA","#C0001A","#0A5A72",
+    "#B45309","#2d7dd2","#D97706","#059669","#DC2626","#0891B2",
+    "#7C3AED","#CA8A04","#16A34A","#0284C7","#DB2777","#4F46E5"
   ];
   const eqColorMap=useMemo(function(){
     const map={};
@@ -7433,11 +7465,17 @@ function AnalisisView(props){
     return map;
   },[entries]);
 
-  function eqColor(name){return eqColorMap[name]||"#2d7dd2";}
+  function eqColor(name){return eqColorMap[name]||EQ_PALETTE[0];}
 
   // ── Filtro de período global ───────────────────────────────────
   const hoy=new Date();
   const filtradas=entries.filter(function(e){
+    if(periodo==="custom"){
+      var d=new Date(e.createdAt);
+      if(periodoDesde&&d<new Date(periodoDesde+"T00:00:00"))return false;
+      if(periodoHasta&&d>new Date(periodoHasta+"T23:59:59"))return false;
+      return true;
+    }
     if(periodo==="todo")return true;
     const dias=periodo==="7d"?7:periodo==="30d"?30:90;
     const corte=new Date(hoy);corte.setDate(corte.getDate()-dias);
@@ -7595,21 +7633,45 @@ function AnalisisView(props){
     <div style={{display:"flex",flexDirection:"column",gap:18}}>
 
       {/* ── Selector de período ── */}
-      <div style={{background:"#fff",borderRadius:12,padding:"10px 14px",border:"1px solid rgba(13,47,92,0.08)",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,fontFamily:"Montserrat",fontWeight:700,color:"#8a96a8",textTransform:"uppercase",letterSpacing:.8,flexShrink:0}}>Período</span>
-        <div style={{display:"flex",gap:5,flex:1,flexWrap:"wrap"}}>
-          {[["7d","7 días"],["30d","30 días"],["90d","90 días"],["todo","Todo"]].map(function(op){return(
-            <button key={op[0]} onClick={function(){setPeriodo(op[0]);}}
-              style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",
-                fontFamily:"Montserrat",fontWeight:700,fontSize:11,
-                borderColor:periodo===op[0]?NV:"rgba(13,47,92,0.12)",
-                background:periodo===op[0]?NV:"#f4f7fd",
-                color:periodo===op[0]?"#fff":"#8a96a8"}}>
-              {op[1]}
-            </button>
-          );})}
+      <div style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:"1px solid rgba(13,47,92,0.08)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:10,fontFamily:"Montserrat",fontWeight:700,color:"#8a96a8",textTransform:"uppercase",letterSpacing:.8,flexShrink:0}}>Período</span>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",flex:1}}>
+            {[["7d","7 días"],["30d","30 días"],["90d","90 días"],["todo","Todo"],["custom","Personalizado"]].map(function(op){return(
+              <button key={op[0]} onClick={function(){setPeriodo(op[0]);}}
+                style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",
+                  fontFamily:"Montserrat",fontWeight:700,fontSize:11,
+                  borderColor:periodo===op[0]?NV:"rgba(13,47,92,0.12)",
+                  background:periodo===op[0]?NV:"#f4f7fd",
+                  color:periodo===op[0]?"#fff":"#8a96a8"}}>
+                {op[1]}
+              </button>
+            );})}
+          </div>
+          <span style={{fontSize:11,color:"#8a96a8",flexShrink:0}}>{filtradas.length} reporte{filtradas.length!==1?"s":""}</span>
         </div>
-        <span style={{fontSize:11,color:"#8a96a8",flexShrink:0}}>{filtradas.length} reporte{filtradas.length!==1?"s":""}</span>
+        {periodo==="custom"&&(
+          <div style={{display:"flex",gap:10,marginTop:10,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:130}}>
+              <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:9,color:"#8a96a8",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Desde</div>
+              <input type="date" value={periodoDesde} onChange={function(e){setPeriodoDesde(e.target.value);}}
+                style={{width:"100%",border:"1.5px solid rgba(13,47,92,0.15)",borderRadius:8,padding:"7px 10px",fontSize:13,fontFamily:"Montserrat",color:NV,background:"#fff"}}/>
+            </div>
+            <div style={{flex:1,minWidth:130}}>
+              <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:9,color:"#8a96a8",textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Hasta</div>
+              <input type="date" value={periodoHasta} onChange={function(e){setPeriodoHasta(e.target.value);}}
+                style={{width:"100%",border:"1.5px solid rgba(13,47,92,0.15)",borderRadius:8,padding:"7px 10px",fontSize:13,fontFamily:"Montserrat",color:NV,background:"#fff"}}/>
+            </div>
+            {(periodoDesde||periodoHasta)&&(
+              <button onClick={function(){setPeriodoDesde("");setPeriodoHasta("");}}
+                style={{alignSelf:"flex-end",background:"none",border:"1px solid rgba(13,47,92,0.15)",
+                  borderRadius:8,cursor:"pointer",color:"#8a96a8",fontFamily:"Montserrat",
+                  fontWeight:700,fontSize:11,padding:"7px 12px",whiteSpace:"nowrap"}}>
+                Limpiar
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── KPIs ── */}
@@ -7701,7 +7763,8 @@ function AnalisisView(props){
               <div style={{marginBottom:4,fontSize:9,color:"#c7d0dd",fontFamily:"Montserrat",fontWeight:700,textTransform:"uppercase",letterSpacing:.8}}>
                 Eje Y: No. actividades · Eje X: Fecha
               </div>
-              <BarChart14 data={trend14} color={eqSeleccionado?eqColor(eqSeleccionado):undefined}/>
+              <BarChart14 data={trend14} color={eqSeleccionado?eqColor(eqSeleccionado):undefined}
+                label={eqSeleccionado?"actividades en "+eqSeleccionado:"actividades (todos los equipos)"}/>
               <div style={{display:"flex",justifyContent:"space-between",marginTop:4,paddingTop:4,borderTop:"1px solid #e8f0fb"}}>
                 <span style={{fontSize:10,color:"#c7d0dd",fontFamily:"Montserrat"}}>← más antiguo</span>
                 <span style={{fontSize:10,color:"#c7d0dd",fontFamily:"Montserrat"}}>más reciente →</span>
