@@ -6998,7 +6998,7 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar}){
   const e=entry;
   const hiA=(e.pendientes||[]).filter(function(p){return p.p==="Alta";}).length;
   const confs=e.confirmaciones||[];
-  const puedeConfirmar=initialUser&&(initialUser.cargo==="Administrador"||initialUser.cargo==="Coordinador");
+  const puedeConfirmar=initialUser&&(initialUser.cargo==="Administrador"||initialUser.cargo==="Coordinador"||initialUser.role==="admin");
   const yaConfirmó=puedeConfirmar&&confs.some(function(c){return c.username===initialUser.username;});
   const pendientes=(e.pendientes||[]);
   const [open,setOpen]=useState(true);
