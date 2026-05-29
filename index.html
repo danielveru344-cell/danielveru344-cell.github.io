@@ -8059,7 +8059,8 @@ function AnalisisView(props){
           });
           eqKeys.forEach(function(k){
             if(!fallosByEq[k])fallosByEq[k]={fallos:[],repairMins:[]};
-            fallosByEq[k].fallos.push(new Date(entry.fecha+"T12:00:00"));
+            // Usar createdAt (timestamp real) para el cálculo de MTBF
+            fallosByEq[k].fallos.push(new Date(entry.createdAt));
             var mins=entry.realizadas.reduce(function(s,r){return s+dm(r.hi,r.hf);},0);
             if(mins>0)fallosByEq[k].repairMins.push(mins);
           });
@@ -8075,8 +8076,7 @@ function AnalisisView(props){
             for(var i=1;i<fallos.length;i++) gaps.push((fallos[i]-fallos[i-1])/(1000*60*60));
             mtbfH=gaps.reduce(function(s,g){return s+g;},0)/gaps.length;
           } else if(fallos.length===1){
-            var hoyMed=new Date(hoy.getFullYear()+"-"+(String(hoy.getMonth()+1).padStart(2,"0"))+"-"+(String(hoy.getDate()).padStart(2,"0"))+"T12:00:00");
-            mtbfH=(hoyMed-fallos[0])/(1000*60*60);
+            mtbfH=(hoy-fallos[0])/(1000*60*60);
           }
           var mttrMin=d.repairMins.length>0?d.repairMins.reduce(function(s,m){return s+m;},0)/d.repairMins.length:null;
           var disp=(mtbfH!==null&&mttrMin!==null)?Math.round((mtbfH/(mtbfH+mttrMin/60))*1000)/10:null;
