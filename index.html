@@ -8054,14 +8054,16 @@ function AnalisisView(props){
         falloEntries.forEach(function(entry){
           var eqKeys=new Set();
           entry.realizadas.forEach(function(r){
-            var k=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
+            var k=r.area&&r.area.trim()?r.area.trim():null;
             if(k&&k!=="✏ Otra actividad...")eqKeys.add(k);
           });
           eqKeys.forEach(function(k){
             if(!fallosByEq[k])fallosByEq[k]={fallos:[],repairMins:[]};
-            // Usar createdAt (timestamp real) para el cálculo de MTBF
             fallosByEq[k].fallos.push(new Date(entry.createdAt));
-            var mins=entry.realizadas.reduce(function(s,r){return s+dm(r.hi,r.hf);},0);
+            // MTTR: solo minutos de actividades de ESTE equipo en el reporte
+            var mins=entry.realizadas
+              .filter(function(r){return r.area&&r.area.trim()===k;})
+              .reduce(function(s,r){return s+dm(r.hi,r.hf);},0);
             if(mins>0)fallosByEq[k].repairMins.push(mins);
           });
         });
@@ -8103,65 +8105,85 @@ function AnalisisView(props){
           </AnalCard>
         );
 
-        // Datos para gráficas
-        const mtbfData=metricas.filter(function(m){return m.mtbfH!==null;})
+        // Si hay equipo seleccionado, filtrar métricas a ese equipo
+        const metricasFiltradas=eqSeleccionado
+          ?metricas.filter(function(m){return m.name===eqSeleccionado;})
+          :metricas;
+
+        const mtbfData=metricasFiltradas.filter(function(m){return m.mtbfH!==null;})
           .sort(function(a,b){return b.mtbfH-a.mtbfH;})
           .map(function(m){return{lbl:m.name,val:Math.round(m.mtbfH),display:fmH(m.mtbfH),unit:"",color:m.col};});
 
-        const mttrData=metricas.filter(function(m){return m.mttrMin!==null;})
-          .sort(function(a,b){return a.mttrMin-b.mttrMin;}) // menor MTTR arriba = mejor
+        const mttrData=metricasFiltradas.filter(function(m){return m.mttrMin!==null;})
+          .sort(function(a,b){return a.mttrMin-b.mttrMin;})
           .map(function(m){return{lbl:m.name,val:Math.round(m.mttrMin),display:fmMin(m.mttrMin),unit:"",color:m.col};});
 
-        const dispData=metricas.filter(function(m){return m.disp!==null;})
+        const dispData=metricasFiltradas.filter(function(m){return m.disp!==null;})
           .sort(function(a,b){return b.disp-a.disp;})
           .map(function(m){
             var col=m.disp>=95?"#1D7A3E":m.disp>=80?"#C45200":"#C0001A";
             return{lbl:m.name,val:m.disp,display:m.disp+"%",unit:"",color:col};
           });
 
-        // KPIs globales
-        var allMtbf=metricas.filter(function(m){return m.mtbfH!==null;}).map(function(m){return m.mtbfH;});
-        var allMttr=metricas.filter(function(m){return m.mttrMin!==null;}).map(function(m){return m.mttrMin;});
-        var mtbfGlobal=allMtbf.length>0?allMtbf.reduce(function(s,v){return s+v;},0)/allMtbf.length:null;
-        var mttrGlobal=allMttr.length>0?allMttr.reduce(function(s,v){return s+v;},0)/allMttr.length:null;
+        // KPIs: si hay equipo seleccionado mostrar ese, si no el global
+        var kpiMtbf, kpiMttr, kpiLblMtbf, kpiLblMttr, kpiSub;
+        if(eqSeleccionado&&metricasFiltradas.length>0){
+          var mEq=metricasFiltradas[0];
+          kpiMtbf=fmH(mEq.mtbfH);
+          kpiMttr=fmMin(mEq.mttrMin);
+          kpiLblMtbf="MTBF · "+eqSeleccionado.slice(0,16);
+          kpiLblMttr="MTTR · "+eqSeleccionado.slice(0,16);
+          kpiSub=mEq.nFallos+" fallo"+(mEq.nFallos!==1?"s":"")+" registrados";
+        } else {
+          var allMtbf=metricas.filter(function(m){return m.mtbfH!==null;}).map(function(m){return m.mtbfH;});
+          var allMttr=metricas.filter(function(m){return m.mttrMin!==null;}).map(function(m){return m.mttrMin;});
+          kpiMtbf=fmH(allMtbf.length>0?allMtbf.reduce(function(s,v){return s+v;},0)/allMtbf.length:null);
+          kpiMttr=fmMin(allMttr.length>0?allMttr.reduce(function(s,v){return s+v;},0)/allMttr.length:null);
+          kpiLblMtbf="MTBF Global";
+          kpiLblMttr="MTTR Global";
+          kpiSub=falloEntries.length+" reporte"+(falloEntries.length!==1?"s":"")+" tipo Fallo";
+        }
 
         return(<>
-          {/* Explicación + KPIs globales */}
-          <AnalCard title="Confiabilidad — Resumen" icon={IC.clk} col="#6366f1">
-            <div style={{background:"rgba(99,102,241,0.06)",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
-              <div style={{fontSize:11,color:"#4338ca",fontWeight:700,fontFamily:"Montserrat",marginBottom:4}}>¿Qué miden?</div>
-              <div style={{fontSize:11,color:"#555",lineHeight:1.6}}>
-                <b>MTBF</b> — tiempo promedio entre fallos. Mayor = más confiable.<br/>
-                <b>MTTR</b> — tiempo promedio de reparación. Menor = más ágil.<br/>
-                <b>Disponibilidad</b> = MTBF ÷ (MTBF + MTTR). Más cerca de 100% = mejor.
+          <AnalCard title={"Confiabilidad"+(eqSeleccionado?" · "+eqSeleccionado:" — Resumen")} icon={IC.clk} col="#6366f1">
+            {!eqSeleccionado&&(
+              <div style={{background:"rgba(99,102,241,0.06)",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+                <div style={{fontSize:11,color:"#4338ca",fontWeight:700,fontFamily:"Montserrat",marginBottom:4}}>¿Qué miden?</div>
+                <div style={{fontSize:11,color:"#555",lineHeight:1.6}}>
+                  <b>MTBF</b> — tiempo promedio entre fallos. Mayor = más confiable.<br/>
+                  <b>MTTR</b> — tiempo promedio de reparación. Menor = más ágil.<br/>
+                  <b>Disponibilidad</b> = MTBF ÷ (MTBF + MTTR). Más cerca de 100% = mejor.
+                </div>
               </div>
-              <div style={{fontSize:10,color:"#8a96a8",marginTop:4}}>
-                Basado en {falloEntries.length} reporte{falloEntries.length!==1?"s":""} tipo Fallo · Respeta el período seleccionado arriba.
+            )}
+            {eqSeleccionado&&metricasFiltradas.length===0&&(
+              <div style={{fontSize:12,color:"#8a96a8",textAlign:"center",padding:"8px 0 4px"}}>
+                Sin reportes tipo Fallo para <b>{eqSeleccionado}</b> en este período.
               </div>
-            </div>
+            )}
+            <div style={{fontSize:10,color:"#8a96a8",marginBottom:10}}>{kpiSub}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
               {[
-                {lbl:"MTBF Global",val:fmH(mtbfGlobal),col:"#6366f1",sub:"entre fallos"},
-                {lbl:"MTTR Global",val:fmMin(mttrGlobal),col:"#0A5A72",sub:"por reparación"},
-                {lbl:"Equipos analizados",val:metricas.length,col:NV,sub:"con datos"},
+                {lbl:kpiLblMtbf,val:kpiMtbf,col:"#6366f1",sub:"entre fallos"},
+                {lbl:kpiLblMttr,val:kpiMttr,col:"#0A5A72",sub:"por reparación"},
+                {lbl:"Equipos",val:eqSeleccionado?(metricasFiltradas.length>0?"1 sel.":"--"):metricas.length,col:NV,sub:eqSeleccionado?"seleccionado":"analizados"},
               ].map(function(k){return(
                 <div key={k.lbl} style={{background:k.col+"11",borderRadius:10,padding:"10px 10px",border:"1px solid "+k.col+"33",textAlign:"center"}}>
                   <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:20,color:k.col,lineHeight:1}}>{k.val}</div>
-                  <div style={{fontSize:9,color:k.col,fontFamily:"Montserrat",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginTop:3}}>{k.lbl}</div>
+                  <div style={{fontSize:9,color:k.col,fontFamily:"Montserrat",fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginTop:3,wordBreak:"break-word"}}>{k.lbl}</div>
                   <div style={{fontSize:9,color:"#b0bac8",marginTop:1}}>{k.sub}</div>
                 </div>
               );})}
             </div>
           </AnalCard>
 
-          {/* Gráficas MTBF y MTTR en paralelo */}
           <div className="a2">
             <AnalCard title="MTBF por equipo" icon={IC.clk} col="#6366f1">
               <div style={{fontSize:11,color:"#8a96a8",marginBottom:10}}>
                 Tiempo promedio entre fallos consecutivos. <b style={{color:"#6366f1"}}>Mayor = más confiable.</b>
               </div>
               {mtbfData.length===0
-                ?<span style={{color:"#b0bac8",fontSize:13}}>Registra al menos 2 fallos por equipo para calcular.</span>
+                ?<span style={{color:"#b0bac8",fontSize:13}}>{eqSeleccionado?"Sin datos de MTBF para este equipo.":"Registra al menos 2 fallos por equipo para calcular."}</span>
                 :<BarHorizontal data={mtbfData} unitY="Tiempo entre fallos"/>
               }
             </AnalCard>
@@ -8171,7 +8193,7 @@ function AnalisisView(props){
                 Tiempo promedio de reparación por fallo. <b style={{color:"#0A5A72"}}>Menor = más ágil.</b>
               </div>
               {mttrData.length===0
-                ?<span style={{color:"#b0bac8",fontSize:13}}>Registra horas inicio/fin en los reportes de fallo.</span>
+                ?<span style={{color:"#b0bac8",fontSize:13}}>{eqSeleccionado?"Sin datos de MTTR para este equipo.":"Registra horas inicio/fin en los reportes de fallo."}</span>
                 :<BarHorizontal data={mttrData} unitY="Tiempo de reparación"/>
               }
             </AnalCard>
