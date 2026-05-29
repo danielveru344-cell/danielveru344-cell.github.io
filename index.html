@@ -5995,11 +5995,12 @@ function ABadge({label,col,bg}){
 }
 
 // ── Mini bar chart SVG ─────────────────────────────────────────────────────────
-function BarChart14({data}){
+function BarChart14({data, color}){
   const BW=26,GAP=5,BH=80,LH=36;
   const W=data.length*(BW+GAP)+GAP;
   const TH=BH+LH;
   const maxVal=Math.max.apply(null,data.map(function(d){return d.v;}),0)||1;
+  const barCol=color||NV;
   return(
     <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:4}}>
       <svg width={W} height={TH} style={{display:"block"}}>
@@ -6011,9 +6012,9 @@ function BarChart14({data}){
           return(
             <g key={i}>
               <rect x={x} y={y} width={BW} height={Math.max(bh,2)} rx="3"
-                fill={d.v>0?NV:"#e8f0fb"}/>
+                fill={d.v>0?barCol:"#e8f0fb"}/>
               {d.v>0&&<text x={x+BW/2} y={y-3} textAnchor="middle" fontSize="9"
-                fill={NV} fontWeight="700" fontFamily="Montserrat,sans-serif">{d.v}</text>}
+                fill={barCol} fontWeight="700" fontFamily="Montserrat,sans-serif">{d.v}</text>}
               <text transform={"rotate(-45,"+lx+","+ly+")"}
                 x={lx} y={ly} textAnchor="end" fontSize="9" fill="#8a96a8"
                 fontFamily="Inter,sans-serif">{d.l}</text>
@@ -7340,7 +7341,7 @@ function ReportesView(props){
 }
 
 // ── AnalisisView ──────────────────────────────────────────────────────────────
-function BarHorizontal({data, color, unitY, maxVal, onSelect, selected}){
+function BarHorizontal({data, unitY, maxVal, onSelect, selected}){
   if(!data||data.length===0) return <span style={{color:"#8a96a8",fontSize:13}}>Sin datos</span>;
   const mx=maxVal||Math.max.apply(null,data.map(function(d){return d.val;}),1);
   const ticks=[0,Math.round(mx/4),Math.round(mx/2),Math.round(mx*3/4),mx].filter(function(v,i,a){return a.indexOf(v)===i;});
@@ -7354,38 +7355,45 @@ function BarHorizontal({data, color, unitY, maxVal, onSelect, selected}){
         const pct=Math.round((d.val/mx)*100);
         const isSelected=selected===d.lbl;
         const isOther=selected&&!isSelected;
+        const col=d.color||"#2d7dd2";
         return(
           <div key={d.lbl}
             onClick={function(){if(onSelect) onSelect(isSelected?null:d.lbl);}}
             style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,
               cursor:onSelect?"pointer":"default",
-              opacity:isOther?0.45:1,
+              opacity:isOther?0.4:1,
               transition:"opacity .2s"}}>
-            <span style={{fontSize:11,color:isSelected?color:"#555",width:"38%",maxWidth:130,minWidth:0,
+            {/* Chip de color del equipo */}
+            <div style={{width:8,height:8,borderRadius:2,background:col,flexShrink:0,
+              boxShadow:isSelected?"0 0 0 3px "+col+"44":"none",
+              transition:"box-shadow .2s"}}/>
+            <span style={{fontSize:11,color:isSelected?col:"#555",width:"36%",maxWidth:120,minWidth:0,
               overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
-              flexShrink:0,textAlign:"right",fontWeight:isSelected?800:600}}
+              flexShrink:0,textAlign:"right",fontWeight:isSelected?800:600,
+              transition:"color .2s"}}
               title={d.lbl}>{d.lbl}</span>
             <div style={{flex:1,position:"relative",height:14,minWidth:0}}>
               <div style={{position:"absolute",inset:0,background:"#f0f4fa",borderRadius:7}}/>
               <div style={{position:"absolute",top:0,left:0,height:"100%",
                 width:pct+"%",
-                background:isSelected?color:i===0?color:(color+"99"),
+                background:col,
+                opacity:isOther?0.5:1,
                 borderRadius:7,transition:"width .5s cubic-bezier(.25,.46,.45,.94)",
-                boxShadow:isSelected?"0 0 0 2px "+color+"44":"none"}}/>
+                boxShadow:isSelected?"0 0 0 2px "+col+"55":"none"}}/>
             </div>
             <span style={{fontFamily:"Montserrat",fontSize:12,fontWeight:800,
-              color:isSelected?color:i===0?color:(color+"bb"),minWidth:52,textAlign:"left",
+              color:isSelected?col:(col+"cc"),minWidth:52,textAlign:"left",
               flexShrink:0}}>{d.display||d.val} <span style={{fontWeight:500,fontSize:10,color:"#b0bac8"}}>{d.unit||""}</span></span>
           </div>
         );
       })}
-      <div style={{display:"flex",justifyContent:"space-between",paddingLeft:"calc(38% + 8px)",marginTop:4}}>
+      <div style={{display:"flex",justifyContent:"space-between",paddingLeft:"calc(38% + 24px)",marginTop:4}}>
         {ticks.map(function(t){return(
           <span key={t} style={{fontSize:9,color:"#c7d0dd",fontFamily:"Montserrat",fontWeight:600}}>{t}</span>
         );})}
       </div>
-      <div style={{height:1,background:"#e8f0fb",marginLeft:"calc(38% + 8px)",marginTop:2}}/>
-      <div style={{fontSize:9,color:"#c7d0dd",fontFamily:"Montserrat",marginLeft:"calc(38% + 8px)",marginTop:3}}>
+      <div style={{height:1,background:"#e8f0fb",marginLeft:"calc(38% + 24px)",marginTop:2}}/>
+      <div style={{fontSize:9,color:"#c7d0dd",fontFamily:"Montserrat",marginLeft:"calc(38% + 24px)",marginTop:3}}>
         {unitY} →
       </div>
     </div>
@@ -7394,12 +7402,40 @@ function BarHorizontal({data, color, unitY, maxVal, onSelect, selected}){
 
 function AnalisisView(props){
   const entries=props.entries;
-  const [periodo,setPeriodo]=useState("todo"); // "7d"|"30d"|"90d"|"todo"
+  const [periodo,setPeriodo]=useState("todo");
+  const [trendDesde,setTrendDesde]=useState("");
+  const [trendHasta,setTrendHasta]=useState("");
+  const [trendCustom,setTrendCustom]=useState(false);
 
   function dm(a,b){if(!a||!b)return 0;const p=function(s){const x=s.split(":");return parseInt(x[0])*60+parseInt(x[1]);};const d=p(b)-p(a);return d>0?d:0;}
   function fm(m){if(!m)return"--";const h=Math.floor(m/60),mn=m%60;return h>0?h+"h"+(mn>0?" "+mn+"min":""):mn+"min";}
 
-  // ── Filtro de período ──────────────────────────────────────────
+  // ── Paleta de colores por equipo ──────────────────────────────
+  const EQ_PALETTE=[
+    "#2d7dd2","#C45200","#1D7A3E","#7C3AED","#C0001A","#0A5A72",
+    "#B45309","#6366f1","#0D2F5C","#D97706","#059669","#DC2626",
+    "#7C3AED","#0891B2","#CA8A04","#16A34A","#9333EA","#0284C7"
+  ];
+  const eqColorMap=useMemo(function(){
+    const map={};
+    const allKeys=new Set();
+    entries.forEach(function(entry){
+      entry.realizadas.forEach(function(r){
+        var k=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
+        if(k&&k!=="✏ Otra actividad...")allKeys.add(k);
+      });
+      (entry.pendientes||[]).forEach(function(p){
+        var k=p.equipo&&p.equipo.trim()?p.equipo.trim():p.area&&p.area.trim()?p.area.trim():null;
+        if(k)allKeys.add(k);
+      });
+    });
+    Array.from(allKeys).sort().forEach(function(k,i){map[k]=EQ_PALETTE[i%EQ_PALETTE.length];});
+    return map;
+  },[entries]);
+
+  function eqColor(name){return eqColorMap[name]||"#2d7dd2";}
+
+  // ── Filtro de período global ───────────────────────────────────
   const hoy=new Date();
   const filtradas=entries.filter(function(e){
     if(periodo==="todo")return true;
@@ -7453,7 +7489,7 @@ function AnalisisView(props){
   const mxTec=ptec[0]?ptec[0][1]:1;
 
   const [expandedPart,setExpandedPart]=useState(null);
-  const [eqSeleccionado,setEqSeleccionado]=useState(null); // equipo filtrado en trend
+  const [eqSeleccionado,setEqSeleccionado]=useState(null);
   const trMap={};
   filtradas.forEach(function(e){trMap[e.turno]=(trMap[e.turno]||0)+1;});
   const trEntries=Object.entries(trMap).sort(function(a,b){return b[1]-a[1];});
@@ -7465,24 +7501,58 @@ function AnalisisView(props){
   const totP=filtradas.reduce(function(a,e){return a+e.pendientes.length;},0);
   const totA=filtradas.reduce(function(a,e){return a+(e.pendientes||[]).filter(function(p){return p.p==="Alta";}).length;},0);
 
-  // Trend: últimos N días según período, filtrado por equipo si hay uno seleccionado
+  // ── Trend con rango propio (custom o derivado del período global) ──
   const trendDias=periodo==="7d"?7:periodo==="30d"?14:periodo==="90d"?30:14;
-  const trend14=[];
-  for(let i=trendDias-1;i>=0;i--){
-    const d=new Date(hoy);d.setDate(d.getDate()-i);
-    const key=d.toISOString().slice(0,10);
-    const lbl=trendDias<=7
-      ?d.toLocaleDateString("es-CO",{weekday:"short"})
-      :d.toLocaleDateString("es-CO",{day:"2-digit",month:"short"});
-    const cnt=filtradas.filter(function(e){return isoDay(e.createdAt)===key;}).reduce(function(a,e){
-      if(!eqSeleccionado) return a+e.realizadas.length;
-      return a+e.realizadas.filter(function(r){
-        var k=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
-        return k===eqSeleccionado;
-      }).length;
-    },0);
-    trend14.push({l:lbl,v:cnt});
+
+  // Rango de fechas del trend
+  var trendIni=null, trendFin=null;
+  if(trendCustom&&trendDesde){
+    trendIni=new Date(trendDesde+"T00:00:00");
+    trendFin=trendHasta?new Date(trendHasta+"T23:59:59"):hoy;
   }
+
+  // Construir días del trend
+  const trend14=(function(){
+    if(trendCustom&&trendIni){
+      var days=[];
+      var cur=new Date(trendIni);
+      var fin=trendFin||hoy;
+      var totalDays=Math.min(Math.round((fin-cur)/(1000*60*60*24))+1, 60);
+      for(var i=0;i<totalDays;i++){
+        var d2=new Date(cur);d2.setDate(cur.getDate()+i);
+        var k=d2.toISOString().slice(0,10);
+        var lbl=totalDays<=7
+          ?d2.toLocaleDateString("es-CO",{weekday:"short"})
+          :d2.toLocaleDateString("es-CO",{day:"2-digit",month:"short"});
+        var cnt=entries.filter(function(e){return isoDay(e.createdAt)===k;}).reduce(function(a,e){
+          if(!eqSeleccionado)return a+e.realizadas.length;
+          return a+e.realizadas.filter(function(r){
+            var kk=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
+            return kk===eqSeleccionado;
+          }).length;
+        },0);
+        days.push({l:lbl,v:cnt});
+      }
+      return days;
+    }
+    var result=[];
+    for(var i=trendDias-1;i>=0;i--){
+      var d2=new Date(hoy);d2.setDate(d2.getDate()-i);
+      var k=d2.toISOString().slice(0,10);
+      var lbl=trendDias<=7
+        ?d2.toLocaleDateString("es-CO",{weekday:"short"})
+        :d2.toLocaleDateString("es-CO",{day:"2-digit",month:"short"});
+      var cnt=filtradas.filter(function(e){return isoDay(e.createdAt)===k;}).reduce(function(a,e){
+        if(!eqSeleccionado)return a+e.realizadas.length;
+        return a+e.realizadas.filter(function(r){
+          var kk=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
+          return kk===eqSeleccionado;
+        }).length;
+      },0);
+      result.push({l:lbl,v:cnt});
+    }
+    return result;
+  })();
 
   // Predicción
   const ms14=14*24*60*60*1000;
@@ -7559,20 +7629,25 @@ function AnalisisView(props){
         <AnalCard id="ac-interv" title="Intervenciones por equipo" icon={IC.wrench} col={NV}>
           {topI.length===0?<span style={{color:"#8a96a8",fontSize:13}}>Sin datos</span>:<>
             <BarHorizontal
-              data={topI.map(function(e){return{lbl:e.area,val:e.iv,unit:"interv."};})}
-              color={NV} unitY="No. intervenciones" maxVal={mxI}
+              data={topI.map(function(e){return{lbl:e.area,val:e.iv,unit:"interv.",color:eqColor(e.area)}})}
+              unitY="No. intervenciones" maxVal={mxI}
               onSelect={setEqSeleccionado} selected={eqSeleccionado}/>
             {/* Separador + Trend */}
             <div style={{borderTop:"1.5px solid rgba(13,47,92,0.07)",marginTop:16,paddingTop:14}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-                <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,color:"#6366f1",
+                <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,
+                  color:eqSeleccionado?eqColor(eqSeleccionado):"#6366f1",
                   textTransform:"uppercase",letterSpacing:.8}}>
-                  Tendencia — {trendDias} días
+                  Tendencia
                 </span>
                 {eqSeleccionado
-                  ?<><span style={{background:"#e8f0fb",color:NV,borderRadius:20,padding:"2px 10px",
-                      fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>
-                      🔍 {eqSeleccionado}
+                  ?<><span style={{
+                      background:eqColor(eqSeleccionado)+"22",
+                      color:eqColor(eqSeleccionado),
+                      borderRadius:20,padding:"2px 10px",
+                      fontSize:11,fontWeight:700,fontFamily:"Montserrat",
+                      border:"1px solid "+eqColor(eqSeleccionado)+"44"}}>
+                      {eqSeleccionado}
                     </span>
                     <button onClick={function(){setEqSeleccionado(null);}}
                       style={{background:"none",border:"none",cursor:"pointer",color:"#8a96a8",
@@ -7584,11 +7659,49 @@ function AnalisisView(props){
                     Toca un equipo para filtrar
                   </span>
                 }
+                <button onClick={function(){setTrendCustom(function(v){return !v;});}}
+                  style={{marginLeft:"auto",background:trendCustom?"#e8f0fb":"none",
+                    border:"1px solid rgba(13,47,92,0.15)",borderRadius:8,
+                    cursor:"pointer",color:trendCustom?NV:"#8a96a8",
+                    fontFamily:"Montserrat",fontWeight:700,fontSize:10,padding:"3px 8px"}}>
+                  {trendCustom?"✕ Cerrar":"Fechas"}
+                </button>
               </div>
+
+              {trendCustom&&(
+                <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",
+                  background:"rgba(13,47,92,0.04)",borderRadius:10,padding:"10px 12px"}}>
+                  <div style={{flex:1,minWidth:120}}>
+                    <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:9,color:"#8a96a8",
+                      textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Desde</div>
+                    <input type="date" value={trendDesde}
+                      onChange={function(e){setTrendDesde(e.target.value);}}
+                      style={{width:"100%",border:"1px solid rgba(13,47,92,0.15)",borderRadius:8,
+                        padding:"6px 8px",fontSize:12,fontFamily:"Montserrat",color:NV,background:"#fff"}}/>
+                  </div>
+                  <div style={{flex:1,minWidth:120}}>
+                    <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:9,color:"#8a96a8",
+                      textTransform:"uppercase",letterSpacing:.5,marginBottom:4}}>Hasta</div>
+                    <input type="date" value={trendHasta}
+                      onChange={function(e){setTrendHasta(e.target.value);}}
+                      style={{width:"100%",border:"1px solid rgba(13,47,92,0.15)",borderRadius:8,
+                        padding:"6px 8px",fontSize:12,fontFamily:"Montserrat",color:NV,background:"#fff"}}/>
+                  </div>
+                  {(trendDesde||trendHasta)&&(
+                    <button onClick={function(){setTrendDesde("");setTrendHasta("");}}
+                      style={{alignSelf:"flex-end",background:"none",border:"1px solid rgba(13,47,92,0.15)",
+                        borderRadius:8,cursor:"pointer",color:"#8a96a8",fontFamily:"Montserrat",
+                        fontSize:11,fontWeight:700,padding:"6px 10px",whiteSpace:"nowrap"}}>
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div style={{marginBottom:4,fontSize:9,color:"#c7d0dd",fontFamily:"Montserrat",fontWeight:700,textTransform:"uppercase",letterSpacing:.8}}>
                 Eje Y: No. actividades · Eje X: Fecha
               </div>
-              <BarChart14 data={trend14}/>
+              <BarChart14 data={trend14} color={eqSeleccionado?eqColor(eqSeleccionado):undefined}/>
               <div style={{display:"flex",justifyContent:"space-between",marginTop:4,paddingTop:4,borderTop:"1px solid #e8f0fb"}}>
                 <span style={{fontSize:10,color:"#c7d0dd",fontFamily:"Montserrat"}}>← más antiguo</span>
                 <span style={{fontSize:10,color:"#c7d0dd",fontFamily:"Montserrat"}}>más reciente →</span>
@@ -7601,8 +7714,8 @@ function AnalisisView(props){
         <AnalCard id="ac-tiempo" title="Tiempo de intervención" icon={IC.clk} col="#2d7dd2">
           {topT.length===0?<span style={{color:"#8a96a8",fontSize:13}}>Registra horas inicio/fin para ver esto</span>
             :<BarHorizontal
-                data={topT.map(function(e){return{lbl:e.area,val:e.min,display:fm(e.min),unit:""};})}
-                color="#2d7dd2" unitY="Tiempo acumulado" maxVal={mxT}/>}
+                data={topT.map(function(e){return{lbl:e.area,val:e.min,display:fm(e.min),unit:"",color:eqColor(e.area)}})}
+                unitY="Tiempo acumulado" maxVal={mxT}/>}
         </AnalCard>
       </div>
 
@@ -7665,8 +7778,8 @@ function AnalisisView(props){
         <AnalCard id="ac-pend" title="Pendientes por equipo" icon={IC.alert} col="#C45200">
           <BarHorizontal
             data={topP.map(function(e){return{lbl:e.area,val:e.pend,unit:"pend.",
-              display:e.alta>0?e.pend+" ("+e.alta+"↑)":String(e.pend)};})}
-            color="#C45200" unitY="No. pendientes" maxVal={mxP}/>
+              display:e.alta>0?e.pend+" ("+e.alta+"↑)":String(e.pend),color:eqColor(e.area)}})}
+            unitY="No. pendientes" maxVal={mxP}/>
           <div style={{fontSize:10,color:"#b0bac8",marginTop:6,fontStyle:"italic"}}>
             (N↑) = pendientes de prioridad Alta
           </div>
@@ -7727,8 +7840,8 @@ function AnalisisView(props){
         <AnalCard title="Reportes por técnico" icon={IC.user} col="#2d7dd2">
           {ptec.length===0?<span style={{color:"#8a96a8",fontSize:13}}>Sin datos</span>
             :<BarHorizontal
-                data={ptec.map(function(kv){return{lbl:kv[0],val:kv[1],unit:"rep."};})}
-                color="#2d7dd2" unitY="No. reportes" maxVal={mxTec}/>}
+                data={ptec.map(function(kv,i){return{lbl:kv[0],val:kv[1],unit:"rep.",color:TR_COLS[i%TR_COLS.length]}})}
+                unitY="No. reportes" maxVal={mxTec}/>}
         </AnalCard>
 
         {/* Por turno */}
