@@ -7345,7 +7345,7 @@ function ReportesView(props){
             </div>
             <div className="fg3" style={{marginBottom:10}}>
               <BtkField label="Turno"><select className="inp" value={trn} onChange={function(e){setTrn(e.target.value);}}><option>Todos</option>{(props.turnos||TURNOS_DEF).map(function(t){return <option key={t}>{t}</option>;})}</select></BtkField>
-              <BtkField label="Area"><select className="inp" value={ar} onChange={function(e){setAr(e.target.value);}}><option>Todas</option>{allAreas.map(function(a){return <option key={a}>{a}</option>;})}</select></BtkField>
+              <BtkField label="Equipo/Área"><select className="inp" value={ar} onChange={function(e){setAr(e.target.value);}}><option>Todas</option>{allAreas.map(function(a){return <option key={a}>{a}</option>;})}</select></BtkField>
               <BtkField label="Prioridad"><select className="inp" value={pr} onChange={function(e){setPr(e.target.value);}}><option>Todas</option>{PRIOS.map(function(p){return <option key={p}>{p}</option>;})}</select></BtkField>
             </div>
             <div className="fg2" style={{marginBottom:10}}>
