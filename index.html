@@ -5803,14 +5803,24 @@ const CARGO_STY={
 };
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
-function ts(){return new Date().toISOString();}
-function fD(iso){return new Date(iso).toLocaleDateString("es-CO",{day:"2-digit",month:"short",year:"numeric"});}
-function fT(iso){return new Date(iso).toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit"});}
+function ts(){
+  // Guardar timestamp en hora local Colombia (no UTC) para evitar desfase de día
+  const d=new Date();
+  const off=d.getTimezoneOffset(); // minutos detrás de UTC (Colombia = 300)
+  const local=new Date(d.getTime()-off*60000);
+  return local.toISOString().slice(0,19)+"-05:00";
+}
+function fD(iso){return new Date(iso).toLocaleDateString("es-CO",{day:"2-digit",month:"short",year:"numeric",timeZone:"America/Bogota"});}
+function fT(iso){return new Date(iso).toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit",timeZone:"America/Bogota"});}
 function gid(){return Math.random().toString(36).slice(2,9);}
-function isoDay(iso){return iso.slice(0,10);}
+function isoDay(iso){
+  // Extraer día en hora Colombia tanto para ISO UTC como para strings locales
+  const d=new Date(iso);
+  return d.toLocaleDateString("en-CA",{timeZone:"America/Bogota"}); // "YYYY-MM-DD"
+}
 function nowT(){const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes());}
 function pad(n){return String(n).padStart(2,"0");}
-function todayS(){return new Date().toISOString().slice(0,10);}
+function todayS(){return new Date().toLocaleDateString("en-CA",{timeZone:"America/Bogota"});}
 
 const TURNOS_DEF=["Turno A (6:00-14:00)","Turno B (14:00-22:00)","Turno C (22:00-6:00)"];
 const KS={e:"btk_v1",eq:"btk_eq",tec:"btk_tec",p:"btk_pw",met:"btk_met",loc:"btk_loc",tur:"btk_tur"};
@@ -7269,8 +7279,8 @@ function ReportesView(props){
     if(tp==="fallo"&&e.tipo!=="fallo")return false;
     if(tp==="ajuste"&&e.tipo!=="ajuste")return false;
     if(tp==="sin_tipo"&&e.tipo)return false;
-    if(de&&isoDay(e.createdAt)<de)return false;
-    if(ha&&isoDay(e.createdAt)>ha)return false;
+    if(de&&e.fecha<de)return false;
+    if(ha&&e.fecha>ha)return false;
     return true;
   }).sort(function(a,b){
     switch(sortBy){
@@ -7799,15 +7809,15 @@ function AnalisisView(props){
   const hoy=new Date();
   const filtradas=entries.filter(function(e){
     if(periodo==="custom"){
-      var d=new Date(e.createdAt);
-      if(periodoDesde&&d<new Date(periodoDesde+"T00:00:00"))return false;
-      if(periodoHasta&&d>new Date(periodoHasta+"T23:59:59"))return false;
+      if(periodoDesde&&e.fecha<periodoDesde)return false;
+      if(periodoHasta&&e.fecha>periodoHasta)return false;
       return true;
     }
     if(periodo==="todo")return true;
     const dias=periodo==="7d"?7:periodo==="30d"?30:90;
     const corte=new Date(hoy);corte.setDate(corte.getDate()-dias);
-    return new Date(e.createdAt)>=corte;
+    const corteStr=corte.toLocaleDateString("en-CA",{timeZone:"America/Bogota"});
+    return e.fecha>=corteStr;
   });
 
   const eqMap={};
@@ -7886,14 +7896,14 @@ function AnalisisView(props){
       var totalDays=Math.min(Math.round((fin-cur)/(1000*60*60*24))+1, 60);
       for(var i=0;i<totalDays;i++){
         var d2=new Date(cur);d2.setDate(cur.getDate()+i);
-        var k=d2.toISOString().slice(0,10);
+        var k=d2.toLocaleDateString("en-CA",{timeZone:"America/Bogota"});
         var lbl=totalDays<=7
-          ?d2.toLocaleDateString("es-CO",{weekday:"short"})
-          :d2.toLocaleDateString("es-CO",{day:"2-digit",month:"short"});
-        var cnt=entries.filter(function(e){return isoDay(e.createdAt)===k;}).reduce(function(a,e){
+          ?d2.toLocaleDateString("es-CO",{weekday:"short",timeZone:"America/Bogota"})
+          :d2.toLocaleDateString("es-CO",{day:"2-digit",month:"short",timeZone:"America/Bogota"});
+        var cnt=entries.filter(function(e){return e.fecha===k;}).reduce(function(a,e){
           if(!eqSeleccionado)return a+e.realizadas.length;
           return a+e.realizadas.filter(function(r){
-            var kk=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
+            var kk=r.area&&r.area.trim()?r.area.trim():null;
             return kk===eqSeleccionado;
           }).length;
         },0);
@@ -7904,14 +7914,14 @@ function AnalisisView(props){
     var result=[];
     for(var i=trendDias-1;i>=0;i--){
       var d2=new Date(hoy);d2.setDate(d2.getDate()-i);
-      var k=d2.toISOString().slice(0,10);
+      var k=d2.toLocaleDateString("en-CA",{timeZone:"America/Bogota"});
       var lbl=trendDias<=7
-        ?d2.toLocaleDateString("es-CO",{weekday:"short"})
-        :d2.toLocaleDateString("es-CO",{day:"2-digit",month:"short"});
-      var cnt=filtradas.filter(function(e){return isoDay(e.createdAt)===k;}).reduce(function(a,e){
+        ?d2.toLocaleDateString("es-CO",{weekday:"short",timeZone:"America/Bogota"})
+        :d2.toLocaleDateString("es-CO",{day:"2-digit",month:"short",timeZone:"America/Bogota"});
+      var cnt=filtradas.filter(function(e){return e.fecha===k;}).reduce(function(a,e){
         if(!eqSeleccionado)return a+e.realizadas.length;
         return a+e.realizadas.filter(function(r){
-          var kk=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
+          var kk=r.area&&r.area.trim()?r.area.trim():null;
           return kk===eqSeleccionado;
         }).length;
       },0);
@@ -8122,7 +8132,7 @@ function AnalisisView(props){
           });
           eqKeys.forEach(function(k){
             if(!fallosByEq[k])fallosByEq[k]={fallos:[],repairMins:[]};
-            fallosByEq[k].fallos.push(new Date(entry.createdAt));
+            fallosByEq[k].fallos.push(new Date(entry.fecha+"T12:00:00"));
             // MTTR: solo minutos de actividades de ESTE equipo en el reporte
             var mins=entry.realizadas
               .filter(function(r){return r.area&&r.area.trim()===k;})
@@ -8141,7 +8151,8 @@ function AnalisisView(props){
             for(var i=1;i<fallos.length;i++) gaps.push((fallos[i]-fallos[i-1])/(1000*60*60));
             mtbfH=gaps.reduce(function(s,g){return s+g;},0)/gaps.length;
           } else if(fallos.length===1){
-            mtbfH=(hoy-fallos[0])/(1000*60*60);
+            var hoyNoon=new Date(todayS()+"T12:00:00");
+            mtbfH=(hoyNoon-fallos[0])/(1000*60*60);
           }
           var mttrMin=d.repairMins.length>0?d.repairMins.reduce(function(s,m){return s+m;},0)/d.repairMins.length:null;
           var disp=(mtbfH!==null&&mttrMin!==null)?Math.round((mtbfH/(mtbfH+mttrMin/60))*1000)/10:null;
