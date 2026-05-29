@@ -8054,44 +8054,145 @@ function AnalisisView(props){
         }
       </AnalCard>
 
-      <div className="a2">
-        {/* Por técnico */}
-        <AnalCard title="Reportes por técnico" icon={IC.user} col="#2d7dd2">
-          {ptec.length===0?<span style={{color:"#8a96a8",fontSize:13}}>Sin datos</span>
-            :<BarHorizontal
-                data={ptec.map(function(kv,i){return{lbl:kv[0],val:kv[1],unit:"rep.",color:TR_COLS[i%TR_COLS.length]}})}
-                unitY="No. reportes" maxVal={mxTec}/>}
-        </AnalCard>
+      {/* Técnicos — análisis detallado */}
+      {(function(){
+        // Colores para turnos
+        const TURNO_COLS=["#2d7dd2","#C45200","#6366f1","#1D7A3E","#7C3AED","#B45309"];
+        const turnosUnicos=Array.from(new Set(filtradas.map(function(e){return e.turno;}).filter(Boolean))).sort();
 
-        {/* Por turno */}
-        <AnalCard title="Distribución por turno" icon={IC.clk} col="#6366f1">
-          {trEntries.length===0
-            ?<span style={{color:"#8a96a8",fontSize:13}}>Sin datos</span>
-            :<div>
-              <div style={{fontSize:10,color:"#b0bac8",fontFamily:"Montserrat",fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>
-                Eje Y: Turno · Eje X: No. reportes (%)
-              </div>
-              {trEntries.map(function(kv,i){
-                const p=Math.round(kv[1]/totTr*100);
-                const col=TR_COLS[i%TR_COLS.length];
+        // Estado de filtro de fechas propio
+        // Usamos los mismos periodoDesde/periodoHasta del filtro global — ya filtradas
+
+        // Construir mapa: técnico → { turno → { reportes, horas, dias:Set } }
+        const tecMap2={};
+        filtradas.forEach(function(entry){
+          const tec=entry.tecnico||"Sin nombre";
+          const turno=entry.turno||"Sin turno";
+          if(!tecMap2[tec])tecMap2[tec]={};
+          if(!tecMap2[tec][turno])tecMap2[tec][turno]={reportes:0,min:0,dias:new Set()};
+          tecMap2[tec][turno].reportes++;
+          tecMap2[tec][turno].dias.add(entry.fecha);
+          entry.realizadas.forEach(function(r){
+            tecMap2[tec][turno].min+=dm(r.hi,r.hf);
+          });
+        });
+
+        const tecList=Object.entries(tecMap2).sort(function(a,b){
+          var tA=Object.values(a[1]).reduce(function(s,v){return s+v.reportes;},0);
+          var tB=Object.values(b[1]).reduce(function(s,v){return s+v.reportes;},0);
+          return tB-tA;
+        });
+
+        if(tecList.length===0) return(
+          <AnalCard title="Técnicos por turno" icon={IC.user} col="#2d7dd2">
+            <span style={{color:"#b0bac8",fontSize:13}}>Sin datos en el período.</span>
+          </AnalCard>
+        );
+
+        // Máximo de horas para escala
+        const maxMin=Math.max.apply(null,tecList.map(function(kv){
+          return Object.values(kv[1]).reduce(function(s,v){return s+v.min;},0);
+        }),1);
+
+        return(
+          <AnalCard title="Técnicos por turno" icon={IC.user} col="#2d7dd2">
+            <div style={{fontSize:11,color:"#8a96a8",marginBottom:12}}>
+              Horas reportadas por técnico desglosadas por turno. Responde al período seleccionado arriba.
+            </div>
+
+            {/* Leyenda de turnos */}
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+              {turnosUnicos.map(function(t,i){return(
+                <div key={t} style={{display:"flex",alignItems:"center",gap:5}}>
+                  <div style={{width:10,height:10,borderRadius:3,background:TURNO_COLS[i%TURNO_COLS.length],flexShrink:0}}/>
+                  <span style={{fontSize:11,fontFamily:"Montserrat",fontWeight:600,color:"#555"}}>{t}</span>
+                </div>
+              );})}
+            </div>
+
+            {/* Un bloque por técnico */}
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {tecList.map(function(kv){
+                const tec=kv[0];const turnos=kv[1];
+                const totalMin=Object.values(turnos).reduce(function(s,v){return s+v.min;},0);
+                const totalRep=Object.values(turnos).reduce(function(s,v){return s+v.reportes;},0);
+                const totalDias=new Set(Object.values(turnos).flatMap(function(v){return Array.from(v.dias);})).size;
+                const pct=Math.round((totalMin/maxMin)*100);
+                const ini=tec.split(" ").filter(Boolean).slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase();
+
                 return(
-                  <div key={kv[0]} style={{marginBottom:14}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,gap:8}}>
-                      <span style={{fontSize:11,color:col,fontWeight:700,fontFamily:"Montserrat",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>{kv[0]}</span>
-                      <span style={{fontFamily:"Montserrat",fontSize:11,color:col,fontWeight:800,flexShrink:0}}>{kv[1]} rep. · {p}%</span>
+                  <div key={tec} style={{border:"1px solid rgba(13,47,92,0.10)",borderRadius:12,overflow:"hidden"}}>
+                    {/* Header técnico */}
+                    <div style={{background:"rgba(13,47,92,0.04)",padding:"10px 14px",
+                      display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{width:32,height:32,borderRadius:10,background:NV,
+                        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:12}}>{ini}</span>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:NV,
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tec}</div>
+                        <div style={{fontSize:10,color:"#8a96a8",marginTop:1}}>
+                          {totalRep} reporte{totalRep!==1?"s":""} · {totalDias} día{totalDias!==1?"s":""} · {fm(totalMin)} totales
+                        </div>
+                      </div>
+                      <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:16,color:NV,flexShrink:0}}>{fm(totalMin)}</div>
                     </div>
-                    <div style={{height:9,background:"#e8f0fb",borderRadius:5,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:p+"%",background:col,borderRadius:5,transition:"width .4s"}}/>
+
+                    {/* Barra apilada de turnos */}
+                    <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
+                      {/* Barra apilada visual */}
+                      <div style={{height:14,borderRadius:7,overflow:"hidden",display:"flex",background:"#f0f4fa"}}>
+                        {turnosUnicos.map(function(t,i){
+                          var v=turnos[t];if(!v||!v.min)return null;
+                          var w=Math.round((v.min/totalMin)*100);
+                          return(
+                            <div key={t} title={t+": "+fm(v.min)}
+                              style={{height:"100%",width:w+"%",background:TURNO_COLS[i%TURNO_COLS.length],
+                                transition:"width .5s",minWidth:v.min>0?4:0}}/>
+                          );
+                        })}
+                      </div>
+
+                      {/* Detalle por turno */}
+                      {turnosUnicos.filter(function(t){return turnos[t]&&turnos[t].min>0;}).map(function(t,i){
+                        var v=turnos[t];
+                        var col=TURNO_COLS[turnosUnicos.indexOf(t)%TURNO_COLS.length];
+                        var pctTurno=Math.round((v.min/totalMin)*100);
+                        return(
+                          <div key={t} style={{display:"flex",alignItems:"center",gap:8}}>
+                            <div style={{width:8,height:8,borderRadius:2,background:col,flexShrink:0}}/>
+                            <span style={{fontSize:11,color:"#555",flex:1,fontFamily:"Montserrat",fontWeight:600,
+                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t}</span>
+                            <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+                              <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:12,color:col}}>{fm(v.min)}</span>
+                              <span style={{fontSize:10,color:"#b0bac8"}}>{v.reportes} rep.</span>
+                              <span style={{fontSize:10,color:"#c7d0dd"}}>{v.dias.size}d</span>
+                              <span style={{fontSize:10,color:"#c7d0dd",minWidth:30,textAlign:"right"}}>{pctTurno}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Barra total */}
+                      <div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                          <span style={{fontSize:10,color:"#8a96a8",fontFamily:"Montserrat",fontWeight:700,textTransform:"uppercase",letterSpacing:.5}}>Total período</span>
+                          <span style={{fontFamily:"Montserrat",fontSize:11,fontWeight:800,color:NV}}>{fm(totalMin)}</span>
+                        </div>
+                        <div style={{height:6,background:"#f0f4fa",borderRadius:3,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:pct+"%",background:NV,borderRadius:3,transition:"width .5s"}}/>
+                        </div>
+                        <div style={{fontSize:9,color:"#c7d0dd",marginTop:2,textAlign:"right"}}>vs. técnico con más horas</div>
+                      </div>
                     </div>
                   </div>
                 );
               })}
-              <div style={{height:1,background:"#e8f0fb",marginTop:4}}/>
-              <div style={{fontSize:9,color:"#c7d0dd",fontFamily:"Montserrat",marginTop:3}}>No. reportes (%) →</div>
             </div>
-          }
-        </AnalCard>
-      </div>
+          </AnalCard>
+        );
+      })()}
 
       {/* Tabla resumen */}
       <AnalCard id="ac-resumen" title="Resumen por equipo" icon={IC.list} col="#8a96a8">
