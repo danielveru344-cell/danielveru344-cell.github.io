@@ -8075,7 +8075,8 @@ function AnalisisView(props){
             for(var i=1;i<fallos.length;i++) gaps.push((fallos[i]-fallos[i-1])/(1000*60*60));
             mtbfH=gaps.reduce(function(s,g){return s+g;},0)/gaps.length;
           } else if(fallos.length===1){
-            mtbfH=(hoy-fallos[0])/(1000*60*60);
+            var hoyMed=new Date(hoy.getFullYear()+"-"+(String(hoy.getMonth()+1).padStart(2,"0"))+"-"+(String(hoy.getDate()).padStart(2,"0"))+"T12:00:00");
+            mtbfH=(hoyMed-fallos[0])/(1000*60*60);
           }
           var mttrMin=d.repairMins.length>0?d.repairMins.reduce(function(s,m){return s+m;},0)/d.repairMins.length:null;
           var disp=(mtbfH!==null&&mttrMin!==null)?Math.round((mtbfH/(mtbfH+mttrMin/60))*1000)/10:null;
