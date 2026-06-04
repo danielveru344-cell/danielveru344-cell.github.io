@@ -6625,7 +6625,7 @@ function AnalCard(p){
 }
 
 // ── NewForm ───────────────────────────────────────────────────────────────────
-function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sessionEntries}){
+function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sessionEntries,allEntries}){
   const turnosList=turnos&&turnos.length>0?turnos:TURNOS_DEF;
   const eqList=eqs.length>0?eqs:AREAS_DEF;
   const locList=locEqs&&locEqs.length>0?locEqs:AREAS_LOC;
@@ -6738,6 +6738,30 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
       allReal=allReal.concat([Object.assign({},r,{area:resolveArea(r)})]);
     }
     if(allReal.length===0){alert("⚠️ Completa al menos una actividad antes de guardar.");return;}
+    // ── Validar cruces contra reportes anteriores del mismo técnico y fecha ──
+    function toMin2(t){var p=t.split(":");return parseInt(p[0])*60+parseInt(p[1]);}
+    var tecLabelCheck=tecCode?("M"+tecCode+" · "+tecNombreActivo):tecNombreActivo;
+    var historial=(allEntries||[]).filter(function(e){
+      return e.fecha===fecha && e.tecnico===tecLabelCheck;
+    });
+    for(var ni=0;ni<allReal.length;ni++){
+      var nr=allReal[ni];
+      if(!nr.hi||!nr.hf) continue;
+      var na1=toMin2(nr.hi),na2=toMin2(nr.hf);
+      for(var ei=0;ei<historial.length;ei++){
+        var rep=historial[ei];
+        var realizadas=rep.realizadas||[];
+        for(var ri=0;ri<realizadas.length;ri++){
+          var er=realizadas[ri];
+          if(!er.hi||!er.hf) continue;
+          var eb1=toMin2(er.hi),eb2=toMin2(er.hf);
+          if(na1<eb2&&eb1<na2){
+            alert("⚠️ Cruce con un reporte ya guardado:\n"+er.hi+" – "+er.hf+" · "+er.area+"\n\nEsta actividad se solapa con ese rango. Ajusta las horas.");
+            return;
+          }
+        }
+      }
+    }
     var pends=allReal.filter(function(r){return r.pendiente;}).map(function(r){
       return {id:r.id,area:r.area,desc:r.desc,p:r.p||"Media"};
     });
@@ -8710,7 +8734,7 @@ function BitacoraApp({onBack, initialUser}){
         ):tab==="analisis"?(
           <AnalisisView entries={entries}/>
         ):tab==="nuevo"?(
-          <NewForm onSave={doSave} onCancel={function(){setTab("home");}} eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos} initialUser={initialUser} sessionEntries={sessionEntries}/>
+          <NewForm onSave={doSave} onCancel={function(){setTab("home");}} eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos} initialUser={initialUser} sessionEntries={sessionEntries} allEntries={entries}/>
         ):tab==="admin"&&adminOk?(
           <AdminPanel eqs={eqs} tecs={tecs} metEqs={metEqs} locEqs={locEqs} turnos={turnos} entries={entries} setEqs={setEqs} setTecs={setTecs} setMetEqs={setMetEqs} setLocEqs={setLocEqs} setTurnos={setTurnos} onDel={doDel} onLogout={function(){setAdminOk(false);setTab("home");}}/>
         ):null}
