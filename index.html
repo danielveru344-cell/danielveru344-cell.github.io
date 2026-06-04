@@ -6781,7 +6781,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
               TIPO <span style={{color:"#C0001A"}}>*</span>
             </div>
             <div style={{display:"flex",gap:5}}>
-              {[["fallo","🔴 Fallo","#C0001A","#FFDEDE"],["ajuste","🔧 Ajuste","#004A9E","#D9ECFF"],["preventivo","🔧 Prev.","#1A9647","#e8f5e9"]].map(function(op){return(
+              {[["fallo","🔴 Fallo","#C0001A","#FFDEDE"],["ajuste","🔧 Ajuste","#004A9E","#D9ECFF"],["preventivo","🔧 Prev.","#1A9647","#e8f5e9"],["otro","⚙️ Otro","#7C3AED","#EDE9FE"]].map(function(op){return(
                 <button key={op[0]} onClick={function(){setTipo(tipo===op[0]?"":op[0]);}}
                   style={{flex:1,padding:"5px 0",borderRadius:8,border:"1.5px solid",cursor:"pointer",
                     borderColor:tipo===op[0]?op[2]:(!tipo?"rgba(192,0,26,0.35)":"rgba(13,47,92,0.12)"),
@@ -6880,8 +6880,8 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {sessionEntries.map(function(e){
-              var tipoBg=e.tipo==="fallo"?"#FFDEDE":e.tipo==="ajuste"?"#D9ECFF":e.tipo==="preventivo"?"#e8f5e9":"rgba(13,47,92,0.06)";
-              var tipoCol=e.tipo==="fallo"?"#C0001A":e.tipo==="ajuste"?"#004A9E":e.tipo==="preventivo"?"#1A9647":"#8a96a8";
+              var tipoBg=e.tipo==="fallo"?"#FFDEDE":e.tipo==="ajuste"?"#D9ECFF":e.tipo==="preventivo"?"#e8f5e9":e.tipo==="otro"?"#EDE9FE":"rgba(13,47,92,0.06)";
+              var tipoCol=e.tipo==="fallo"?"#C0001A":e.tipo==="ajuste"?"#004A9E":e.tipo==="preventivo"?"#1A9647":e.tipo==="otro"?"#7C3AED":"#8a96a8";
               return(
                 <div key={e.id} style={{background:"#fff",borderRadius:12,
                   border:"1.5px solid rgba(29,122,62,0.2)",
@@ -6891,7 +6891,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
                       overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.tecnico}</span>
                     <span style={{background:tipoBg,color:tipoCol,borderRadius:20,
                       fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 8px",flexShrink:0}}>
-                      {e.tipo==="fallo"?"🔴 Fallo":e.tipo==="ajuste"?"🔧 Ajuste":e.tipo==="preventivo"?"🟢 Prev.":"— Sin tipo"}
+                      {e.tipo==="fallo"?"🔴 Fallo":e.tipo==="ajuste"?"🔧 Ajuste":e.tipo==="preventivo"?"🟢 Prev.":e.tipo==="otro"?"⚙️ Otro":"— Sin tipo"}
                     </span>
                   </div>
                   <div style={{fontSize:11,color:"#8a96a8",display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -7022,12 +7022,12 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar}){
               <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:"#fff",
                 overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>{e.tecnico}</div>
               <span style={{
-                background:e.tipo==="fallo"?"rgba(192,0,26,0.55)":e.tipo==="ajuste"?"rgba(0,74,158,0.55)":e.tipo==="preventivo"?"rgba(26,150,71,0.55)":"rgba(255,255,255,0.12)",
-                color:e.tipo==="fallo"?"#fca5a5":e.tipo==="ajuste"?"#93c5fd":e.tipo==="preventivo"?"#86efac":"rgba(255,255,255,0.4)",
-                border:"1px solid "+(e.tipo==="fallo"?"rgba(252,165,165,0.35)":e.tipo==="ajuste"?"rgba(147,197,253,0.35)":e.tipo==="preventivo"?"rgba(134,239,172,0.35)":"rgba(255,255,255,0.15)"),
+                background:e.tipo==="fallo"?"rgba(192,0,26,0.55)":e.tipo==="ajuste"?"rgba(0,74,158,0.55)":e.tipo==="preventivo"?"rgba(26,150,71,0.55)":e.tipo==="otro"?"rgba(124,58,237,0.55)":"rgba(255,255,255,0.12)",
+                color:e.tipo==="fallo"?"#fca5a5":e.tipo==="ajuste"?"#93c5fd":e.tipo==="preventivo"?"#86efac":e.tipo==="otro"?"#c4b5fd":"rgba(255,255,255,0.4)",
+                border:"1px solid "+(e.tipo==="fallo"?"rgba(252,165,165,0.35)":e.tipo==="ajuste"?"rgba(147,197,253,0.35)":e.tipo==="preventivo"?"rgba(134,239,172,0.35)":e.tipo==="otro"?"rgba(196,181,253,0.35)":"rgba(255,255,255,0.15)"),
                 padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:800,fontFamily:"Montserrat",
                 letterSpacing:0.3,flexShrink:0,whiteSpace:"nowrap"}}>
-                {e.tipo==="fallo"?"🔴 Fallo":e.tipo==="ajuste"?"🔧 Ajuste":e.tipo==="preventivo"?"🟢 Prev.":"— Sin tipo"}
+                {e.tipo==="fallo"?"🔴 Fallo":e.tipo==="ajuste"?"🔧 Ajuste":e.tipo==="preventivo"?"🟢 Prev.":e.tipo==="otro"?"⚙️ Otro":"— Sin tipo"}
               </span>
             </div>
             <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
@@ -7204,11 +7204,11 @@ function EntryCard(props){
           <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap",alignItems:"center"}}>
           {e.tipo&&(
             <span style={{
-              background:e.tipo==="fallo"?"#FFDEDE":e.tipo==="preventivo"?"#e8f5e9":"#D9ECFF",
-              color:e.tipo==="fallo"?"#C0001A":e.tipo==="preventivo"?"#1A9647":"#004A9E",
-              border:"1px solid "+(e.tipo==="fallo"?"rgba(192,0,26,0.2)":e.tipo==="preventivo"?"rgba(26,150,71,0.2)":"rgba(0,74,158,0.2)"),
+              background:e.tipo==="fallo"?"#FFDEDE":e.tipo==="preventivo"?"#e8f5e9":e.tipo==="otro"?"#EDE9FE":"#D9ECFF",
+              color:e.tipo==="fallo"?"#C0001A":e.tipo==="preventivo"?"#1A9647":e.tipo==="otro"?"#7C3AED":"#004A9E",
+              border:"1px solid "+(e.tipo==="fallo"?"rgba(192,0,26,0.2)":e.tipo==="preventivo"?"rgba(26,150,71,0.2)":e.tipo==="otro"?"rgba(124,58,237,0.2)":"rgba(0,74,158,0.2)"),
               padding:"2px 9px",borderRadius:20,fontSize:11,fontWeight:800,fontFamily:"Montserrat",letterSpacing:0.2}}>
-              {e.tipo==="fallo"?"🔴 Fallo":e.tipo==="preventivo"?"🟢 Preventivo":"🔧 Ajuste"}
+              {e.tipo==="fallo"?"🔴 Fallo":e.tipo==="preventivo"?"🟢 Preventivo":e.tipo==="otro"?"⚙️ Otro":"🔧 Ajuste"}
             </span>
           )}
           <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,color:"#1D7A3E",fontWeight:600}}>
@@ -7279,6 +7279,7 @@ function ReportesView(props){
     if(tp==="fallo"&&e.tipo!=="fallo")return false;
     if(tp==="ajuste"&&e.tipo!=="ajuste")return false;
     if(tp==="preventivo"&&e.tipo!=="preventivo")return false;
+    if(tp==="otro"&&e.tipo!=="otro")return false;
     if(tp==="sin_tipo"&&e.tipo)return false;
     if(de&&e.fecha<de)return false;
     if(ha&&e.fecha>ha)return false;
@@ -7333,13 +7334,13 @@ function ReportesView(props){
           <div style={{borderTop:"1px solid rgba(13,47,92,0.08)",paddingTop:12,marginBottom:10}}>
             <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Filtrar</div>
             <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-              {[["todos","Todos"],["fallo","🔴 Fallos"],["ajuste","🔧 Ajustes"],["preventivo","🟢 Prev."],["sin_tipo","Sin tipo"]].map(function(op){return(
+              {[["todos","Todos"],["fallo","🔴 Fallos"],["ajuste","🔧 Ajustes"],["preventivo","🟢 Prev."],["otro","⚙️ Otros"],["sin_tipo","Sin tipo"]].map(function(op){return(
                 <button key={op[0]} onClick={function(){setTp(op[0]);}}
                   style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",
                     fontFamily:"Montserrat",fontWeight:700,fontSize:11,
-                    borderColor:tp===op[0]?(op[0]==="fallo"?"#C0001A":op[0]==="ajuste"?"#004A9E":op[0]==="preventivo"?"#1A9647":NV):"rgba(13,47,92,0.12)",
-                    background:tp===op[0]?(op[0]==="fallo"?"#FFDEDE":op[0]==="ajuste"?"#D9ECFF":op[0]==="preventivo"?"#e8f5e9":"var(--light)"):"#f4f7fd",
-                    color:tp===op[0]?(op[0]==="fallo"?"#C0001A":op[0]==="ajuste"?"#004A9E":op[0]==="preventivo"?"#1A9647":NV):"#8a96a8"}}>
+                    borderColor:tp===op[0]?(op[0]==="fallo"?"#C0001A":op[0]==="ajuste"?"#004A9E":op[0]==="preventivo"?"#1A9647":op[0]==="otro"?"#7C3AED":NV):"rgba(13,47,92,0.12)",
+                    background:tp===op[0]?(op[0]==="fallo"?"#FFDEDE":op[0]==="ajuste"?"#D9ECFF":op[0]==="preventivo"?"#e8f5e9":op[0]==="otro"?"#EDE9FE":"var(--light)"):"#f4f7fd",
+                    color:tp===op[0]?(op[0]==="fallo"?"#C0001A":op[0]==="ajuste"?"#004A9E":op[0]==="preventivo"?"#1A9647":op[0]==="otro"?"#7C3AED":NV):"#8a96a8"}}>
                   {op[1]}
                 </button>
               );})}
@@ -7370,7 +7371,7 @@ function ReportesView(props){
 
       {/* ── Filtro rápido de tipo ── */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        {[["todos","Todos",null],["fallo","🔴 Fallo","#C0001A"],["ajuste","🔧 Ajuste","#004A9E"],["preventivo","🟢 Prev.","#1A9647"]].map(function(op){
+        {[["todos","Todos",null],["fallo","🔴 Fallo","#C0001A"],["ajuste","🔧 Ajuste","#004A9E"],["preventivo","🟢 Prev.","#1A9647"],["otro","⚙️ Otro","#7C3AED"]].map(function(op){
           var isActive=tp===op[0];
           var col=op[2];
           return(
@@ -7380,7 +7381,7 @@ function ReportesView(props){
                 fontFamily:"Montserrat",fontWeight:700,fontSize:12,letterSpacing:0.3,
                 transition:"all 0.15s",
                 borderColor:isActive?(col||NV):"rgba(13,47,92,0.14)",
-                background:isActive?(col==="#C0001A"?"#FFDEDE":col==="#004A9E"?"#D9ECFF":col==="#1A9647"?"#e8f5e9":"var(--light)"):"#fff",
+                background:isActive?(col==="#C0001A"?"#FFDEDE":col==="#004A9E"?"#D9ECFF":col==="#1A9647"?"#e8f5e9":col==="#7C3AED"?"#EDE9FE":"var(--light)"):"#fff",
                 color:isActive?(col||NV):"#8a96a8",
                 boxShadow:isActive?"0 1px 6px rgba(0,0,0,0.08)":"none",
               }}>
