@@ -6455,13 +6455,14 @@ function SecHdr({label,col,count,onAdd,addLabel}){
 
 function ActivityCard({r,i,onRem,onUpd,isTime,aList,OTRA,maxT,minT}){
   const hiErr=!!(r.hi&&r.hf&&r.hf<=r.hi);
+  const hiCruce=!!(minT&&r.hi&&r.hi<minT);
   return(
-    <div style={{background:"#fff",borderRadius:16,border:"1.5px solid rgba(13,47,92,0.10)",
+    <div style={{background:"#fff",borderRadius:16,border:"1.5px solid "+(hiCruce?"rgba(192,0,26,0.35)":"rgba(13,47,92,0.10)"),
       boxShadow:"0 2px 12px rgba(13,47,92,0.06)",overflow:"hidden"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-        padding:"10px 14px",background:"#f9fafc",borderBottom:"1px solid rgba(13,47,92,0.07)"}}>
-        <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:11,color:"#8a96a8",letterSpacing:.5}}>
-          ACTIVIDAD
+        padding:"10px 14px",background:hiCruce?"rgba(192,0,26,0.04)":"#f9fafc",borderBottom:"1px solid rgba(13,47,92,0.07)"}}>
+        <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:11,color:hiCruce?"#C0001A":"#8a96a8",letterSpacing:.5}}>
+          {hiCruce?"⚠️ CRUCE DE HORARIO":"ACTIVIDAD"}
         </span>
         {onRem&&<button onClick={onRem}
           style={{background:"none",border:"none",cursor:"pointer",color:"#8a96a8",padding:4,
@@ -6469,6 +6470,14 @@ function ActivityCard({r,i,onRem,onUpd,isTime,aList,OTRA,maxT,minT}){
           <Ico d={IC.x} sz={15}/>
         </button>}
       </div>
+      {hiCruce&&(
+        <div style={{background:"rgba(192,0,26,0.06)",borderBottom:"1px solid rgba(192,0,26,0.12)",
+          padding:"7px 14px",display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:12,color:"#C0001A",fontFamily:"Montserrat",fontWeight:600}}>
+            El inicio debe ser desde las <strong>{minT}</strong> (fin de la actividad anterior)
+          </span>
+        </div>
+      )}
       <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:10}}>
         <div>
           <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",
@@ -6486,7 +6495,7 @@ function ActivityCard({r,i,onRem,onUpd,isTime,aList,OTRA,maxT,minT}){
                 INICIO{minT&&<span style={{color:"#2d7dd2",marginLeft:4}}>desde {minT}</span>}
               </span>
               <div style={{display:"flex",gap:4}}>
-                <input type="time" className={"inp"+(hiErr?" inp-err":"")}
+                <input type="time" className={"inp"+(hiErr||hiCruce?" inp-err":"")}
                   style={{flex:1,minWidth:0,fontSize:13}} value={r.hi} min={minT} max={maxT}
                   onChange={function(e){onUpd("hi",e.target.value);}}/>
                 <button onClick={function(){onUpd("hi",minT&&nowT()<minT?minT:nowT());}}
@@ -6689,18 +6698,18 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
     if(hoy&&r.hi>now){alert("Hora inicio no puede ser futura.");return;}
     if(hoy&&r.hf>now){alert("Hora fin no puede ser futura.");return;}
     function toMin(t){const p=t.split(":");return parseInt(p[0])*60+parseInt(p[1]);}
-    if(minHi&&r.hi<minHi){alert("⚠️ Inicio ("+r.hi+") se cruza con actividad anterior que terminó a las "+minHi+".");return;}
     const a1=toMin(r.hi),a2=toMin(r.hf);
     for(var i=0;i<real.length;i++){
       const b=real[i];
       const b1=toMin(b.hi),b2=toMin(b.hf);
       if(a1<b2&&b1<a2){
-        alert("⚠️ Se cruza con la actividad "+(i+1)+":\n"+b.hi+" – "+b.hf+" · "+b.desc.slice(0,40));
+        alert("⚠️ Cruce de horario con actividad "+(i+1)+":\n"+b.hi+" – "+b.hf+" · "+b.desc.slice(0,40)+"\n\nEl inicio debe ser desde las "+b.hf+" en adelante.");
         return;
       }
     }
+    const nuevaHi=r.hf; // la próxima actividad empieza donde esta termina
     setReal(function(prev){return prev.concat([Object.assign({},r,{area:resolveArea(r)})]);});
-    setCurrent(emptyCard());
+    setCurrent(Object.assign(emptyCard(),{hi:nuevaHi}));
   }
 
   function remReal(id){setReal(function(r){return r.filter(function(x){return x.id!==id;});});}
@@ -6724,7 +6733,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
       var a1=toMin(r.hi),a2=toMin(r.hf);
       for(var i=0;i<allReal.length;i++){
         var b=allReal[i];var b1=toMin(b.hi),b2=toMin(b.hf);
-        if(a1<b2&&b1<a2){alert("⚠️ Se cruza con la actividad "+(i+1)+":\n"+b.hi+" – "+b.hf+" · "+b.desc.slice(0,40));return;}
+        if(a1<b2&&b1<a2){alert("⚠️ Cruce de horario con actividad "+(i+1)+":\n"+b.hi+" – "+b.hf+" · "+b.desc.slice(0,40)+"\n\nEl inicio debe ser desde las "+b.hf+" en adelante.");return;}
       }
       allReal=allReal.concat([Object.assign({},r,{area:resolveArea(r)})]);
     }
