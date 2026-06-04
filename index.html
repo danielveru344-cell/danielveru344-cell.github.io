@@ -6691,8 +6691,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
     // Verificar que inicio no sea antes del fin de la última actividad registrada
     function toMin(t){const p=t.split(":");return parseInt(p[0])*60+parseInt(p[1]);}
     if(minHi&&r.hi<minHi){
-      alert("⚠️ El inicio ("+r.hi+") se cruza con la actividad anterior que terminó a las "+minHi+".
-El inicio debe ser desde las "+minHi+" en adelante.");
+      alert("⚠️ El inicio ("+r.hi+") se cruza con la actividad anterior.\nTerminó a las "+minHi+". El inicio debe ser desde las "+minHi+" en adelante.");
       return;
     }
     const a1=toMin(r.hi),a2=toMin(r.hf);
