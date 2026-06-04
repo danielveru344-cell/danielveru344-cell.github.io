@@ -8590,15 +8590,43 @@ function BitacoraApp({onBack, initialUser}){
       if(adminOk)setTab("admin");else setShowPass(true);}
   }
 
-  function doSave(entry){
+  async function doSave(entry){
+    // Fetch latest from Supabase first to avoid overwriting other users' reports
+    let remoto=null;
+    try{ remoto=await btkGet(KS.e); }catch(ex){}
     setEntries(function(p){
-      const n=[entry].concat(p);
-      save(KS.e,n);
-      return n;
+      // Merge: start from remote (authoritative), add any local entries not in remote, then prepend new entry
+      const base=Array.isArray(remoto)&&remoto.length>0?remoto:p;
+      // Include local entries that might not be in remote yet (created in this session before sync)
+      const localIds=new Set(base.map(function(e){return e.id;}));
+      const localOnly=p.filter(function(e){return !localIds.has(e.id);});
+      const merged=[entry].concat(localOnly).concat(base);
+      save(KS.e,merged);
+      return merged;
     });
     setSessionEntries(function(p){return [entry].concat(p);});
     // NO cambiar de tab — quedarse en "nuevo" con form reseteado
   }
+
+  async function reloadEntries(){
+    try{
+      const remoto=await btkGet(KS.e);
+      if(Array.isArray(remoto)&&remoto.length>0){
+        setEntries(function(local){
+          const remoteIds=new Set(remoto.map(function(e){return e.id;}));
+          const localOnly=local.filter(function(e){return !remoteIds.has(e.id);}); 
+          const merged=localOnly.concat(remoto);
+          ls(KS.e,merged);
+          return merged;
+        });
+      }
+    }catch(ex){console.warn("reloadEntries error",ex);}
+  }
+
+  useEffect(function(){
+    var id=setInterval(reloadEntries,60000);
+    return function(){clearInterval(id);};
+  },[]);
 
   function confirmarLectura(entryId){
     if(!initialUser) return;
@@ -8677,12 +8705,19 @@ function BitacoraApp({onBack, initialUser}){
             <div style={{fontFamily:"Montserrat",fontSize:9,color:"rgba(255,255,255,0.4)",letterSpacing:1.5,textTransform:"uppercase",marginTop:1}}>Bussie - Mantenimiento</div>
           </div>
         </div>
-        {adminOk&&tab!=="admin"&&(
-          <button onClick={function(){setTab("admin");}}
-            style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",cursor:"pointer",padding:"5px 12px",display:"flex",alignItems:"center",gap:5,fontFamily:"Montserrat",fontSize:11,fontWeight:700}}>
-            <Ico d={IC.cog} sz={13} c="#fff"/>Admin
+        <div style={{display:"flex",gap:7,alignItems:"center"}}>
+          <button onClick={reloadEntries}
+            title="Actualizar reportes"
+            style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",cursor:"pointer",padding:"5px 10px",display:"flex",alignItems:"center",gap:4,fontFamily:"Montserrat",fontSize:11,fontWeight:700}}>
+            <Ico d={IC.reset} sz={13} c="#fff"/>
           </button>
-        )}
+          {adminOk&&tab!=="admin"&&(
+            <button onClick={function(){setTab("admin");}}
+              style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",cursor:"pointer",padding:"5px 12px",display:"flex",alignItems:"center",gap:5,fontFamily:"Montserrat",fontSize:11,fontWeight:700}}>
+              <Ico d={IC.cog} sz={13} c="#fff"/>Admin
+            </button>
+          )}
+        </div>
       </header>
 
       <main style={{maxWidth:860,margin:"0 auto",padding:"20px 14px 82px"}}>
