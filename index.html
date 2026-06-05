@@ -7887,8 +7887,11 @@ function AnalisisView(props){
     return e.fecha>=corteStr;
   });
 
+  // ── Solo reportes con tipo "fallo" (para métricas) ────────────
+  const filtradasFallo=filtradas.filter(function(e){return e.tipo==="fallo";});
+
   const eqMap={};
-  filtradas.forEach(function(entry){
+  filtradasFallo.forEach(function(entry){
     entry.realizadas.forEach(function(r){
       var key=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
       if(!key||key==="✏ Otra actividad...")return;
@@ -7912,7 +7915,7 @@ function AnalisisView(props){
 
   const PARTES=["rodamiento","cojinete","correa","banda","cadena","sello","empaque","o-ring","filtro","aceite","lubricante","sensor","encoder","valvula","fusible","relay","contactor","breaker","variador","motor","bomba","compresor"];
   const pc={};
-  filtradas.forEach(function(entry){
+  filtradasFallo.forEach(function(entry){
     entry.realizadas.concat(entry.pendientes||[]).forEach(function(item){
       const txt=(item.desc||"").toLowerCase();
       const area=item.area||"Sin área";
@@ -7927,22 +7930,22 @@ function AnalisisView(props){
   });
   const ptop=Object.entries(pc).sort(function(a,b){return b[1].total-a[1].total;}).slice(0,16);
 
-  const tm={};filtradas.forEach(function(e){tm[e.tecnico]=(tm[e.tecnico]||0)+1;});
+  const tm={};filtradasFallo.forEach(function(e){tm[e.tecnico]=(tm[e.tecnico]||0)+1;});
   const ptec=Object.entries(tm).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
   const mxTec=ptec[0]?ptec[0][1]:1;
 
   const [expandedPart,setExpandedPart]=useState(null);
   const [eqSeleccionado,setEqSeleccionado]=useState(null);
   const trMap={};
-  filtradas.forEach(function(e){trMap[e.turno]=(trMap[e.turno]||0)+1;});
+  filtradasFallo.forEach(function(e){trMap[e.turno]=(trMap[e.turno]||0)+1;});
   const trEntries=Object.entries(trMap).sort(function(a,b){return b[1]-a[1];});
   const totTr=trEntries.reduce(function(s,x){return s+x[1];},0)||1;
   const TR_COLS=["#2d7dd2","#C45200","#6366f1","#1D7A3E","#7C3AED","#B45309"];
 
-  const totIv=filtradas.reduce(function(a,e){return a+e.realizadas.length;},0);
-  const totMin=filtradas.reduce(function(a,e){return a+e.realizadas.reduce(function(b,r){return b+dm(r.hi,r.hf);},0);},0);
-  const totP=filtradas.reduce(function(a,e){return a+e.pendientes.length;},0);
-  const totA=filtradas.reduce(function(a,e){return a+(e.pendientes||[]).filter(function(p){return p.p==="Alta";}).length;},0);
+  const totIv=filtradasFallo.reduce(function(a,e){return a+e.realizadas.length;},0);
+  const totMin=filtradasFallo.reduce(function(a,e){return a+e.realizadas.reduce(function(b,r){return b+dm(r.hi,r.hf);},0);},0);
+  const totP=filtradasFallo.reduce(function(a,e){return a+e.pendientes.length;},0);
+  const totA=filtradasFallo.reduce(function(a,e){return a+(e.pendientes||[]).filter(function(p){return p.p==="Alta";}).length;},0);
 
   // ── Trend con rango propio (custom o derivado del período global) ──
   const trendDias=periodo==="7d"?7:periodo==="30d"?14:periodo==="90d"?30:14;
@@ -7985,7 +7988,7 @@ function AnalisisView(props){
       var lbl=trendDias<=7
         ?d2.toLocaleDateString("es-CO",{weekday:"short",timeZone:"America/Bogota"})
         :d2.toLocaleDateString("es-CO",{day:"2-digit",month:"short",timeZone:"America/Bogota"});
-      var cnt=filtradas.filter(function(e){return e.fecha===k;}).reduce(function(a,e){
+      var cnt=filtradasFallo.filter(function(e){return e.fecha===k;}).reduce(function(a,e){
         if(!eqSeleccionado)return a+e.realizadas.length;
         return a+e.realizadas.filter(function(r){
           var kk=r.area&&r.area.trim()?r.area.trim():null;
@@ -8001,7 +8004,7 @@ function AnalisisView(props){
   const ms14=14*24*60*60*1000;
   const cut14=new Date(hoy-ms14);const cut28=new Date(hoy-2*ms14);
   const rcnt={};const ocnt={};
-  filtradas.forEach(function(entry){
+  filtradasFallo.forEach(function(entry){
     const d2=new Date(entry.createdAt);
     const isR=d2>=cut14;const isO=d2>=cut28&&d2<cut14;
     entry.realizadas.forEach(function(r){
@@ -8053,7 +8056,7 @@ function AnalisisView(props){
               </button>
             );})}
           </div>
-          <span style={{fontSize:11,color:"#8a96a8",flexShrink:0}}>{filtradas.length} reporte{filtradas.length!==1?"s":""}</span>
+          <span style={{fontSize:11,color:"#8a96a8",flexShrink:0}}>{filtradas.length} reporte{filtradas.length!==1?"s":""} · {filtradasFallo.length} fallo{filtradasFallo.length!==1?"s":""}</span>
         </div>
         {periodo==="custom"&&(
           <div style={{display:"flex",gap:10,marginTop:10,flexWrap:"wrap"}}>
@@ -8081,7 +8084,7 @@ function AnalisisView(props){
 
       {/* ── KPIs ── */}
       <div className="kpi4">
-        <KCard lbl="Intervenciones" val={totIv} icon={IC.wrench} col={NV} sub={filtradas.length+" reportes"}
+        <KCard lbl="Intervenciones" val={totIv} icon={IC.wrench} col={NV} sub={filtradasFallo.length+" reportes fallo"}
           onClick={function(){document.getElementById("ac-interv")&&document.getElementById("ac-interv").scrollIntoView({behavior:"smooth",block:"start"});}}/>
         <KCard lbl="Tiempo total" val={fm(totMin)} icon={IC.clk} col="#2d7dd2" sub="horas registradas"
           onClick={function(){document.getElementById("ac-tiempo")&&document.getElementById("ac-tiempo").scrollIntoView({behavior:"smooth",block:"start"});}}/>
@@ -8189,7 +8192,7 @@ function AnalisisView(props){
 
       {/* ── MTBF / MTTR ── */}
       {(function(){
-        const falloEntries=filtradas.filter(function(e){return e.tipo==="fallo";});
+        const falloEntries=filtradasFallo;
         const fallosByEq={};
         falloEntries.forEach(function(entry){
           var eqKeys=new Set();
