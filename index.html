@@ -2815,13 +2815,12 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
   };
 
   const handleSave=async()=>{
-    // Si usarInventario y el usuario escribió en el buscador pero no seleccionó,
-    // usamos lo que escribió como nombre libre
-    const nombreFinal = f.item_name || itemSearch.trim();
-    if(!nombreFinal){
-      setValidErr("Selecciona el artículo antes de enviar.");
+    // El artículo DEBE haberse seleccionado del inventario — no se acepta texto libre
+    if(!f.item_id){
+      setValidErr("Selecciona el artículo del inventario. Escribe para buscar y toca la opción.");
       return;
     }
+    const nombreFinal = f.item_name;
     if(!f.quantity||parseInt(f.quantity)<1){
       setValidErr("La cantidad debe ser mayor a 0.");
       return;
@@ -2906,17 +2905,33 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
                   placeholder="Buscar artículo…"
                   value={itemSearch}
                   autoComplete="off"
+                  style={{
+                    borderColor: itemSearch&&!f.item_id ? "#FF3B30" : undefined,
+                    background:  itemSearch&&!f.item_id ? "#FFF5F5" : undefined,
+                  }}
                   onChange={e=>{
                     setItemSearch(e.target.value);
                     setShowItemDrop(true);
+                    // Si el usuario borra el texto, limpiar selección
                     if(!e.target.value){ handleArticuloSelect(""); }
+                    // Si el usuario escribe después de haber seleccionado, invalidar la selección
+                    else if(f.item_id){ s("item_id",null); s("item_name",""); s("item_code",""); }
                   }}
                   onFocus={()=>setShowItemDrop(true)}
-                  onBlur={()=>setTimeout(()=>setShowItemDrop(false),180)}
+                  onBlur={()=>setTimeout(()=>{
+                    setShowItemDrop(false);
+                    // Si quedó texto pero nada seleccionado, limpiar el campo
+                    if(itemSearch&&!f.item_id){ setItemSearch(""); }
+                  },180)}
                 />
                 {f.item_id&&!showItemDrop&&(
                   <div style={{fontSize:12,color:"var(--accent)",marginTop:4,fontWeight:600}}>
                     ✓ {f.item_name} · {f.item_code}
+                  </div>
+                )}
+                {itemSearch&&!f.item_id&&!showItemDrop&&(
+                  <div style={{fontSize:11,color:"#FF3B30",marginTop:4,fontWeight:600}}>
+                    ⚠ Debes seleccionar una opción de la lista
                   </div>
                 )}
                 {showItemDrop&&(()=>{
@@ -7015,175 +7030,6 @@ function ARow(props){
   );
 }
 
-// ── PendienteThreadModal ──────────────────────────────────────────────────────
-function PendienteThreadModal({pendiente, entryId, entryTecnico, entryFecha, initialUser, onAgregarSeguimiento, onCerrarPendiente, onClose}){
-  const [desc,setDesc]=useState("");
-  const [hi,setHi]=useState("");
-  const [hf,setHf]=useState("");
-  const [saving,setSaving]=useState(false);
-  const [cerrando,setCerrando]=useState(false);
-
-  const segs=pendiente.seguimientos||[];
-  const pCerrado=pendiente.cerrado;
-
-  function nowT(){
-    return new Date().toLocaleTimeString("es-CO",{timeZone:"America/Bogota",hour:"2-digit",minute:"2-digit",hour12:false});
-  }
-  function fmtTs(iso){
-    var d=new Date(iso);
-    return d.toLocaleDateString("es-CO",{day:"2-digit",month:"short",timeZone:"America/Bogota"})
-      +" "+d.toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit",timeZone:"America/Bogota"});
-  }
-
-  function hacerSeguimiento(cerrar){
-    if(!desc.trim()){alert("Describe qué se hizo.");return;}
-    if(!hi||!hf){alert("Ingresa hora de inicio y fin.");return;}
-    if(hf<=hi){alert("Hora fin debe ser posterior a inicio.");return;}
-    setSaving(true);
-    const tecNombre=(initialUser&&(initialUser.nombre||initialUser.username))||"—";
-    const seg={
-      id:Math.random().toString(36).slice(2),
-      tecnico:tecNombre,
-      hi:hi,hf:hf,
-      desc:desc.trim(),
-      ts:new Date().toISOString(),
-      cerro:cerrar
-    };
-    if(cerrar){
-      onCerrarPendiente(entryId,pendiente.id,seg);
-      setCerrando(true);
-      setTimeout(function(){setSaving(false);onClose();},800);
-    } else {
-      onAgregarSeguimiento(entryId,pendiente.id,seg);
-      setDesc("");setHi("");setHf("");
-      setSaving(false);
-    }
-  }
-
-  return(
-    <div className="overlay" onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-      <div className="sheet" style={{maxHeight:"88vh"}}>
-        <div className="sheet-handle"/>
-        {/* Header */}
-        <div style={{padding:"14px 18px 10px",borderBottom:"1px solid rgba(13,47,92,0.08)"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:5,flexWrap:"wrap"}}>
-                <span style={{background:pCerrado?"#D1F2E0":"#FFF0D9",color:pCerrado?"#1D7A3E":"#C45200",
-                  borderRadius:20,fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 9px"}}>
-                  {pCerrado?"✅ Cerrado":"⏳ Abierto"}</span>
-                <span style={{background:PBG[pendiente.p],color:PCOL[pendiente.p],
-                  borderRadius:20,fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 9px"}}>
-                  {pendiente.p}</span>
-              </div>
-              <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:14,color:"#0D2F5C",lineHeight:1.35}}>
-                {pendiente.area||pendiente.equipo||"Pendiente"}
-              </div>
-              <div style={{fontSize:12,color:"#5C3A00",marginTop:4,lineHeight:1.4}}>{pendiente.desc}</div>
-              <div style={{fontSize:10,color:"#8a96a8",marginTop:5,fontFamily:"Montserrat"}}>
-                Reportado por {entryTecnico} · {fmtTs(entryFecha+"T12:00:00")}
-              </div>
-            </div>
-            <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",
-              color:"#8a96a8",fontSize:20,padding:"2px 6px",flexShrink:0}}>×</button>
-          </div>
-        </div>
-
-        {/* Hilo de seguimientos */}
-        <div style={{padding:"12px 18px",display:"flex",flexDirection:"column",gap:0,overflowY:"auto"}}>
-          {segs.length===0&&!pCerrado&&(
-            <div style={{textAlign:"center",padding:"18px 0",color:"#b0bac8",fontSize:12,fontFamily:"Montserrat",fontWeight:600}}>
-              Sin seguimientos aún. Sé el primero.
-            </div>
-          )}
-          {segs.map(function(s,i){
-            return(
-              <div key={s.id||i} style={{display:"flex",gap:10,marginBottom:12}}>
-                {/* Avatar + línea vertical */}
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
-                  <div style={{width:30,height:30,borderRadius:15,
-                    background:s.cerro?"#1D7A3E":"#0D2F5C",
-                    display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:11}}>
-                      {s.cerro?"✓":s.tecnico.split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase().slice(0,2)}
-                    </span>
-                  </div>
-                  {i<segs.length-1&&(
-                    <div style={{width:2,flex:1,minHeight:12,background:"rgba(13,47,92,0.10)",
-                      borderRadius:1,marginTop:4}}/>
-                  )}
-                </div>
-                {/* Contenido */}
-                <div style={{flex:1,minWidth:0,paddingBottom:4}}>
-                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:3}}>
-                    <span style={{fontFamily:"Montserrat",fontWeight:700,fontSize:12,color:"#0D2F5C"}}>
-                      {s.tecnico}</span>
-                    <span style={{background:"#e8f0fb",color:"#2d7dd2",borderRadius:6,
-                      padding:"1px 7px",fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
-                      {s.hi} – {s.hf}</span>
-                    {s.cerro&&<span style={{background:"#D1F2E0",color:"#1D7A3E",borderRadius:6,
-                      padding:"1px 7px",fontSize:10,fontWeight:800,fontFamily:"Montserrat"}}>✅ Cerró</span>}
-                  </div>
-                  <p style={{margin:0,fontSize:13,color:"#3C3C43",lineHeight:1.5}}>{s.desc}</p>
-                  <div style={{fontSize:10,color:"#b0bac8",marginTop:3,fontFamily:"Montserrat"}}>{fmtTs(s.ts)}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Formulario de seguimiento */}
-        {!pCerrado&&(
-          <div style={{padding:"10px 18px 4px",borderTop:"1px solid rgba(13,47,92,0.08)"}}>
-            <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,color:"#0D2F5C",
-              textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Agregar seguimiento</div>
-            <div style={{display:"flex",gap:8,marginBottom:8}}>
-              <div style={{flex:1}}>
-                <div className="ios-input-label">Hora inicio</div>
-                <input type="time" className="ios-input" value={hi}
-                  onChange={function(e){setHi(e.target.value);}}/>
-              </div>
-              <div style={{flex:1}}>
-                <div className="ios-input-label">Hora fin</div>
-                <input type="time" className="ios-input" value={hf}
-                  onChange={function(e){setHf(e.target.value);}}/>
-              </div>
-            </div>
-            <textarea className="ios-input" rows={2} value={desc}
-              onChange={function(e){setDesc(e.target.value);}}
-              placeholder="¿Qué se hizo?"
-              style={{resize:"none",marginBottom:10}}/>
-            <div style={{display:"flex",gap:8,marginBottom:10}}>
-              <button onClick={function(){hacerSeguimiento(false);}} disabled={saving}
-                style={{flex:1,padding:"11px",borderRadius:10,border:"1.5px solid #0D2F5C",
-                  background:"#fff",color:"#0D2F5C",cursor:"pointer",
-                  fontFamily:"Montserrat",fontWeight:800,fontSize:12,
-                  opacity:saving?0.6:1}}>
-                + Seguimiento
-              </button>
-              <button onClick={function(){if(window.confirm("¿Confirmar cierre de este pendiente?"))hacerSeguimiento(true);}} disabled={saving}
-                style={{flex:1,padding:"11px",borderRadius:10,border:"none",
-                  background:"#1D7A3E",color:"#fff",cursor:"pointer",
-                  fontFamily:"Montserrat",fontWeight:800,fontSize:12,
-                  opacity:saving?0.6:1}}>
-                ✅ Cerrar
-              </button>
-            </div>
-          </div>
-        )}
-        {pCerrado&&(
-          <div style={{padding:"10px 18px 18px",textAlign:"center"}}>
-            <div style={{background:"#D1F2E0",borderRadius:10,padding:"12px",
-              color:"#1D7A3E",fontFamily:"Montserrat",fontWeight:700,fontSize:13}}>
-              ✅ Pendiente cerrado el {fmtTs(pendiente.fechaCierre||"")}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── EntryDetail ───────────────────────────────────────────────────────────────
 function EntryDetail(props){
   const entry=props.entry;
@@ -7228,16 +7074,14 @@ function EntryDetail(props){
 }
 
 // ── EntryCard ─────────────────────────────────────────────────────────────────
-function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSeguimiento, onCerrarPendiente}){
+function EntryExpanded({entry, onPrint, initialUser, onConfirmar}){
   const e=entry;
-  const hiA=(e.pendientes||[]).filter(function(p){return !p.cerrado&&p.p==="Alta";}).length;
+  const hiA=(e.pendientes||[]).filter(function(p){return p.p==="Alta";}).length;
   const confs=e.confirmaciones||[];
   const puedeConfirmar=initialUser&&(initialUser.cargo==="Administrador"||initialUser.cargo==="Coordinador"||initialUser.role==="admin");
   const yaConfirmó=puedeConfirmar&&confs.some(function(c){return c.username===initialUser.username;});
   const pendientes=(e.pendientes||[]);
-  const pendientesAbiertos=pendientes.filter(function(p){return !p.cerrado;});
   const [open,setOpen]=useState(true);
-  const [threadPend,setThreadPend]=useState(null); // pendiente seleccionado para el modal
 
   function fmtConf(iso){
     var d=new Date(iso);
@@ -7281,7 +7125,7 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
             {pendientes.length>0&&<span style={{background:hiA>0?"rgba(192,0,26,0.4)":"rgba(196,82,0,0.4)",
               color:hiA>0?"#fca5a5":"#fdba74",
               padding:"2px 7px",borderRadius:20,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
-              ⏳{pendientesAbiertos.length}</span>}
+              ⏳{pendientes.length}</span>}
             {confs.length>0&&<span style={{background:"rgba(29,122,62,0.5)",color:"#6ee7a0",
               padding:"2px 7px",borderRadius:20,fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>
               ✓</span>}
@@ -7343,67 +7187,26 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                 <div style={{width:3,height:12,borderRadius:2,background:"#C45200"}}/>
                 <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,color:"#C45200",
                   textTransform:"uppercase",letterSpacing:.8}}>Pendientes</span>
-                {pendientesAbiertos.length<pendientes.length&&(
-                  <span style={{marginLeft:"auto",background:"#D1F2E0",color:"#1D7A3E",
-                    borderRadius:20,fontSize:9,fontWeight:800,fontFamily:"Montserrat",padding:"1px 7px"}}>
-                    {pendientes.length-pendientesAbiertos.length} cerrado{pendientes.length-pendientesAbiertos.length>1?"s":""}
-                  </span>
-                )}
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {pendientes.map(function(p,i){
-                  var cerrado=p.cerrado;
-                  var segs=p.seguimientos||[];
-                  return(
-                    <div key={p.id||i} style={{
-                      background:cerrado?"rgba(29,122,62,0.05)":"rgba(196,82,0,0.04)",
-                      borderRadius:8,border:"1px solid "+(cerrado?"rgba(29,122,62,0.15)":"rgba(196,82,0,0.12)"),
-                      padding:"8px 10px",
-                      opacity:cerrado?0.65:1}}>
-                      <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:p.desc?3:0,alignItems:"center"}}>
-                            <span style={{background:cerrado?"#D1F2E0":"rgba(13,47,92,0.08)",
-                              color:cerrado?"#1D7A3E":NV,borderRadius:6,
-                              padding:"2px 7px",fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>
-                              {cerrado?"✅ ":""}{p.equipo&&p.equipo.trim()?p.equipo:p.area}</span>
-                            {!cerrado&&<span style={{background:PBG[p.p],color:PCOL[p.p],borderRadius:6,
-                              padding:"2px 7px",fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>{p.p}</span>}
-                            {segs.length>0&&<span style={{fontSize:9,color:"#8a96a8",fontFamily:"Montserrat",fontWeight:600}}>
-                              {segs.length} seg.</span>}
-                          </div>
-                          {p.desc&&<p style={{margin:0,fontSize:13,color:cerrado?"#5a6a7a":"#5C3A00",lineHeight:1.4}}>{p.desc}</p>}
-                        </div>
-                        {(onAgregarSeguimiento||onCerrarPendiente)&&(
-                          <button onClick={function(){setThreadPend(p);}}
-                            style={{background:cerrado?"#e8f0fb":"#FFF0D9",
-                              border:"1px solid "+(cerrado?"rgba(13,47,92,0.12)":"rgba(196,82,0,0.2)"),
-                              borderRadius:8,padding:"5px 10px",cursor:"pointer",
-                              color:cerrado?NV:"#C45200",fontFamily:"Montserrat",
-                              fontWeight:800,fontSize:10,flexShrink:0,whiteSpace:"nowrap"}}>
-                            {cerrado?"Ver →":"Gestionar →"}
-                          </button>
-                        )}
+                {pendientes.map(function(p,i){return(
+                  <div key={p.id||i} style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                    <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,color:"#C45200",
+                      minWidth:16,paddingTop:2}}>{i+1}.</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:p.desc?3:0}}>
+                        <span style={{background:"rgba(13,47,92,0.08)",color:NV,borderRadius:6,
+                          padding:"2px 7px",fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>
+                          {p.equipo&&p.equipo.trim()?p.equipo:p.area}</span>
+                        <span style={{background:PBG[p.p],color:PCOL[p.p],borderRadius:6,
+                          padding:"2px 7px",fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>{p.p}</span>
                       </div>
+                      {p.desc&&<p style={{margin:0,fontSize:13,color:"#5C3A00",lineHeight:1.4}}>{p.desc}</p>}
                     </div>
-                  );
-                })}
+                  </div>
+                );})}
               </div>
             </div>
-          )}
-
-          {/* Modal de hilo de pendiente */}
-          {threadPend&&(
-            <PendienteThreadModal
-              pendiente={threadPend}
-              entryId={e.id}
-              entryTecnico={e.tecnico}
-              entryFecha={e.fecha}
-              initialUser={initialUser}
-              onAgregarSeguimiento={onAgregarSeguimiento}
-              onCerrarPendiente={onCerrarPendiente}
-              onClose={function(){setThreadPend(null);}}
-            />
           )}
 
           {/* Confirmaciones */}
@@ -7551,7 +7354,7 @@ function ReportesView(props){
     if(trn!=="Todos"&&e.turno!==trn)return false;
     if(ar!=="Todas"&&!e.realizadas.some(function(r){return r.area===ar;})&&!(e.pendientes||[]).some(function(p){return p.area===ar;}))return false;
     if(pr!=="Todas"&&!(e.pendientes||[]).some(function(p){return p.p===pr;}))return false;
-    if(sp&&(e.pendientes||[]).filter(function(p){return !p.cerrado;}).length===0)return false;
+    if(sp&&(e.pendientes||[]).length===0)return false;
     if(sv&&(e.confirmaciones||[]).length>0)return false;
     if(tp==="fallo"&&e.tipo!=="fallo")return false;
     if(tp==="ajuste"&&e.tipo!=="ajuste")return false;
@@ -7710,7 +7513,7 @@ function ReportesView(props){
                     <div key={d}>
                       <div className="day-sep"><div className="day-line"/><span className="day-lbl">{fD(d+"T12:00:00")}</span><span style={{background:"#e8f0fb",color:NV,padding:"1px 9px",borderRadius:10,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[d].length}</span><div className="day-line"/></div>
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {gmap[d].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onPrint={function(){window.print();}}/>;}) }
+                        {gmap[d].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onPrint={function(){window.print();}}/>;}) }
                       </div>
                     </div>
                   );})}
@@ -7741,7 +7544,7 @@ function ReportesView(props){
                           <span style={{background:"#e8f0fb",color:NV,padding:"2px 10px",borderRadius:20,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[k].length} reporte{gmap[k].length>1?"s":""}</span>
                         </div>
                         <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                          {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onPrint={function(){window.print();}}/>;}) }
+                          {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onPrint={function(){window.print();}}/>;}) }
                         </div>
                       </div>
                     );
@@ -7771,7 +7574,7 @@ function ReportesView(props){
                         <span style={{background:"#FFF0D9",color:"#C45200",padding:"2px 10px",borderRadius:20,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[k].length} reporte{gmap[k].length>1?"s":""}</span>
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onPrint={function(){window.print();}}/>;}) }
+                        {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onPrint={function(){window.print();}}/>;}) }
                       </div>
                     </div>
                   );})}
@@ -7782,7 +7585,7 @@ function ReportesView(props){
             // horas_desc / horas_asc — lista plana
             return(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {fil.map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onPrint={function(){window.print();}}/>;}) }
+                {fil.map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onPrint={function(){window.print();}}/>;}) }
               </div>
             );
           })()
@@ -8877,41 +8680,8 @@ function BitacoraApp({onBack, initialUser}){
     setDetail(null);
   }
 
-  // ── Seguimiento de pendientes ────────────────────────────────────────────────
-  function agregarSeguimiento(entryId, pendId, seguimiento){
-    setEntries(function(prev){
-      const n=prev.map(function(e){
-        if(e.id!==entryId) return e;
-        const newPends=(e.pendientes||[]).map(function(p){
-          if(p.id!==pendId) return p;
-          const segs=(p.seguimientos||[]).concat([seguimiento]);
-          return Object.assign({},p,{seguimientos:segs});
-        });
-        return Object.assign({},e,{pendientes:newPends});
-      });
-      save(KS.e,n);
-      return n;
-    });
-  }
-
-  function cerrarPendiente(entryId, pendId, seguimientoCierre){
-    setEntries(function(prev){
-      const n=prev.map(function(e){
-        if(e.id!==entryId) return e;
-        const newPends=(e.pendientes||[]).map(function(p){
-          if(p.id!==pendId) return p;
-          const segs=(p.seguimientos||[]).concat([seguimientoCierre]);
-          return Object.assign({},p,{seguimientos:segs,cerrado:true,fechaCierre:seguimientoCierre.ts});
-        });
-        return Object.assign({},e,{pendientes:newPends});
-      });
-      save(KS.e,n);
-      return n;
-    });
-  }
-
-  const totP=entries.reduce(function(a,e){return a+(e.pendientes||[]).filter(function(p){return !p.cerrado;}).length;},0);
-  const altaP=entries.reduce(function(a,e){return a+(e.pendientes||[]).filter(function(p){return !p.cerrado&&p.p==="Alta";}).length;},0);
+  const totP=entries.reduce(function(a,e){return a+e.pendientes.length;},0);
+  const altaP=entries.reduce(function(a,e){return a+e.pendientes.filter(function(p){return p.p==="Alta";}).length;},0);
 
   const TABS=[
     {id:"home",lbl:"Inicio",ic:IC.home},
@@ -9013,7 +8783,7 @@ function BitacoraApp({onBack, initialUser}){
             }
           </div>
         ):tab==="reportes"?(
-          <ReportesView entries={entries} turnos={turnos} onDetail={function(e){setDetail(e);}} initialUser={initialUser} onConfirmar={confirmarLectura} filtroInicial={filtroInicial} onClearFiltro={function(){setFiltroInicial(null);}} onAgregarSeguimiento={agregarSeguimiento} onCerrarPendiente={cerrarPendiente}/>
+          <ReportesView entries={entries} turnos={turnos} onDetail={function(e){setDetail(e);}} initialUser={initialUser} onConfirmar={confirmarLectura} filtroInicial={filtroInicial} onClearFiltro={function(){setFiltroInicial(null);}}/>
         ):tab==="analisis"?(
           <AnalisisView entries={entries}/>
         ):tab==="nuevo"?(
