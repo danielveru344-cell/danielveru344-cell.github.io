@@ -6272,11 +6272,122 @@ function AdminPanel({eqs,tecs,metEqs,locEqs,turnos,entries,setEqs,setTecs,setMet
         placeholder={"6:00-14:00\n14:00-22:00\n22:00-6:00"}
         emptyMsg="Sin turnos — se usarán los predeterminados (A, B, C)"/>
 
+      {/* ── Pendientes activos ── */}
+      {(function(){
+        var pendEntries=entries
+          .filter(function(e){return (e.pendientes||[]).some(function(p){return !p.cerrado;});})
+          .slice()
+          .sort(function(a,b){
+            var ta=a.updatedAt||a.createdAt||a.fecha;
+            var tb=b.updatedAt||b.createdAt||b.fecha;
+            return new Date(tb)-new Date(ta);
+          });
+        if(pendEntries.length===0) return null;
+        function fmtRelTs(iso){
+          if(!iso) return "";
+          var d=new Date(iso);
+          var now=new Date();
+          var diff=Math.floor((now-d)/1000);
+          if(diff<60) return "hace "+diff+"s";
+          if(diff<3600) return "hace "+Math.floor(diff/60)+"min";
+          if(diff<86400) return "hace "+Math.floor(diff/3600)+"h";
+          return "hace "+Math.floor(diff/86400)+"d";
+        }
+        return(
+          <div className="card" style={{marginBottom:16,border:"1.5px solid rgba(196,82,0,0.22)",borderRadius:12,overflow:"hidden"}}>
+            <div className="card-hdr" style={{background:"linear-gradient(90deg,rgba(196,82,0,0.07),transparent)",borderBottom:"1px solid rgba(196,82,0,0.12)"}}>
+              <Ico d={IC.alert} sz={15} c="#C45200"/>
+              <span className="stitle" style={{color:"#C45200"}}>Pendientes activos</span>
+              <span style={{marginLeft:"auto",background:"#FFF0D9",color:"#C45200",borderRadius:20,fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 10px"}}>
+                {pendEntries.reduce(function(a,e){return a+(e.pendientes||[]).filter(function(p){return !p.cerrado;}).length;},0)} abiertos
+              </span>
+            </div>
+            <div style={{maxHeight:400,overflowY:"auto"}}>
+              {pendEntries.map(function(e){
+                var abiertos=(e.pendientes||[]).filter(function(p){return !p.cerrado;});
+                var updLabel=fmtRelTs(e.updatedAt||e.createdAt);
+                return(
+                  <div key={e.id} style={{padding:"12px 14px",borderBottom:"0.5px solid rgba(13,47,92,0.07)"}}>
+                    {/* Entry header */}
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7}}>
+                        <div style={{width:28,height:28,borderRadius:8,background:"#0D2F5C",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:11}}>
+                            {(e.tecnico||"?").split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase().slice(0,2)}
+                          </span>
+                        </div>
+                        <div>
+                          <div style={{fontFamily:"Montserrat",fontWeight:800,fontSize:12,color:"#0D2F5C",lineHeight:1}}>{e.tecnico}</div>
+                          <div style={{fontSize:10,color:"#8a96a8",marginTop:2,fontFamily:"Montserrat"}}>{fD(e.fecha+"T12:00:00")} · {e.turno}</div>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        {e.updatedAt&&<span style={{fontSize:10,color:"#8a96a8",fontFamily:"Montserrat",fontWeight:600}}>⏱ {updLabel}</span>}
+                        <span style={{background:"#FFF0D9",color:"#C45200",borderRadius:20,fontSize:10,fontWeight:800,fontFamily:"Montserrat",padding:"2px 9px"}}>
+                          ⏳ {abiertos.length} pend.
+                        </span>
+                      </div>
+                    </div>
+                    {/* Pendientes list */}
+                    {abiertos.map(function(p,pi){
+                      var segs=p.seguimientos||[];
+                      var lastSeg=segs.length>0?segs[segs.length-1]:null;
+                      return(
+                        <div key={p.id||pi} style={{
+                          background:"#FAFAFA",border:"1px solid rgba(196,82,0,0.14)",
+                          borderRadius:9,padding:"9px 12px",marginBottom:6,
+                          borderLeft:"3px solid "+(p.p==="Alta"?"#C0001A":p.p==="Media"?"#C45200":"#8a96a8")
+                        }}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6,marginBottom:lastSeg?6:0}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginBottom:2}}>
+                                <span style={{background:PBG[p.p],color:PCOL[p.p],borderRadius:20,fontSize:9,fontWeight:800,fontFamily:"Montserrat",padding:"1px 7px"}}>{p.p}</span>
+                                <span style={{fontFamily:"Montserrat",fontWeight:700,fontSize:11,color:"#0D2F5C"}}>{p.area||p.equipo||"—"}</span>
+                              </div>
+                              <div style={{fontSize:12,color:"#5C3A00",lineHeight:1.35}}>{p.desc}</div>
+                            </div>
+                            {segs.length>0&&(
+                              <span style={{background:"#e8f0fb",color:"#2d7dd2",borderRadius:6,padding:"1px 7px",fontSize:9,fontWeight:700,fontFamily:"Montserrat",flexShrink:0}}>
+                                {segs.length} seg.
+                              </span>
+                            )}
+                          </div>
+                          {lastSeg&&(
+                            <div style={{background:"#fff",border:"1px solid rgba(13,47,92,0.08)",borderRadius:6,padding:"7px 10px",display:"flex",gap:8,alignItems:"flex-start"}}>
+                              <div style={{width:22,height:22,borderRadius:11,background:"#0D2F5C",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                                <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:9}}>
+                                  {lastSeg.tecnico.split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase().slice(0,2)}
+                                </span>
+                              </div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap",marginBottom:2}}>
+                                  <span style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#0D2F5C"}}>{lastSeg.tecnico}</span>
+                                  <span style={{background:"#e8f0fb",color:"#2d7dd2",borderRadius:4,padding:"0px 5px",fontSize:9,fontWeight:700,fontFamily:"Montserrat"}}>{lastSeg.hi}–{lastSeg.hf}</span>
+                                  <span style={{fontSize:9,color:"#b0bac8",fontFamily:"Montserrat"}}>{fmtRelTs(lastSeg.ts)}</span>
+                                </div>
+                                <div style={{fontSize:11,color:"#3C3C43",lineHeight:1.4}}>{lastSeg.desc}</div>
+                              </div>
+                            </div>
+                          )}
+                          {segs.length===0&&(
+                            <div style={{fontSize:10,color:"#b0bac8",fontFamily:"Montserrat",fontWeight:600,marginTop:4,fontStyle:"italic"}}>Sin seguimientos aún</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       <SCard title="Reportes" col="#C0001A" icon={IC.docs}>
         {entries.length===0
           ?<div style={{padding:"16px",color:"#8a96a8",fontSize:13,textAlign:"center"}}>No hay reportes</div>
           :<div style={{maxHeight:320,overflowY:"auto"}}>
-            {entries.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);}).map(function(e){
+            {entries.slice().sort(function(a,b){return new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt);}).map(function(e){
               return(
                 <div key={e.id} className="list-row" style={{gap:10}}>
                   <div style={{flex:1,minWidth:0}}>
@@ -6285,6 +6396,7 @@ function AdminPanel({eqs,tecs,metEqs,locEqs,turnos,entries,setEqs,setTecs,setMet
                       {fD(e.fecha+"T12:00:00")} · {e.turno.split(" ")[0]} {e.turno.split(" ")[1]||""}
                       {e.realizadas.length>0&&<span style={{marginLeft:6}}>· {e.realizadas.length} act.</span>}
                       {e.pendientes.length>0&&<span style={{marginLeft:4,color:"#C45200"}}>· {e.pendientes.length} pend.</span>}
+                      {e.updatedAt&&e.updatedAt!==e.createdAt&&<span style={{marginLeft:4,color:"#2d7dd2"}}>· upd {(function(){var d=new Date(e.updatedAt),n=new Date(),diff=Math.floor((n-d)/1000);if(diff<3600)return Math.floor(diff/60)+"min";if(diff<86400)return Math.floor(diff/3600)+"h";return Math.floor(diff/86400)+"d";})()}</span>}
                     </div>
                   </div>
                   <button className="del-btn" onClick={function(){
@@ -7305,25 +7417,61 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                 {pendientes.map(function(p,i){
                   var cerrado=p.cerrado;
                   var segs=p.seguimientos||[];
+                  var lastSeg=segs.length>0?segs[segs.length-1]:null;
+                  function fmtRelTs(iso){
+                    if(!iso) return "";
+                    var d=new Date(iso);var now=new Date();
+                    var diff=Math.floor((now-d)/1000);
+                    if(diff<60) return "hace "+diff+"s";
+                    if(diff<3600) return "hace "+Math.floor(diff/60)+"min";
+                    if(diff<86400) return "hace "+Math.floor(diff/3600)+"h";
+                    return "hace "+Math.floor(diff/86400)+"d";
+                  }
                   return(
-                    <div key={p.id||i} style={{background:cerrado?"rgba(29,122,62,0.05)":"rgba(196,82,0,0.04)",borderRadius:8,border:"1px solid "+(cerrado?"rgba(29,122,62,0.15)":"rgba(196,82,0,0.12)"),padding:"8px 10px",opacity:cerrado?0.65:1}}>
-                      <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:p.desc?3:0,alignItems:"center"}}>
-                            <span style={{background:cerrado?"#D1F2E0":"rgba(13,47,92,0.08)",color:cerrado?"#1D7A3E":"#0D2F5C",borderRadius:6,padding:"2px 7px",fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>
-                              {cerrado?"✅ ":""}{p.equipo&&p.equipo.trim()?p.equipo:p.area}</span>
-                            {!cerrado&&<span style={{background:PBG[p.p],color:PCOL[p.p],borderRadius:6,padding:"2px 7px",fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>{p.p}</span>}
-                            {segs.length>0&&<span style={{fontSize:9,color:"#8a96a8",fontFamily:"Montserrat",fontWeight:600}}>{segs.length} seg.</span>}
+                    <div key={p.id||i} style={{background:cerrado?"rgba(29,122,62,0.05)":"rgba(196,82,0,0.04)",borderRadius:8,border:"1.5px solid "+(cerrado?"rgba(29,122,62,0.18)":"rgba(196,82,0,0.18)"),overflow:"hidden",borderLeft:"3px solid "+(cerrado?"#1D7A3E":p.p==="Alta"?"#C0001A":p.p==="Media"?"#C45200":"#8a96a8")}}>
+                      <div style={{padding:"8px 10px"}}>
+                        <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:p.desc?3:0,alignItems:"center"}}>
+                              <span style={{background:cerrado?"#D1F2E0":"rgba(13,47,92,0.08)",color:cerrado?"#1D7A3E":"#0D2F5C",borderRadius:6,padding:"2px 7px",fontSize:11,fontWeight:700,fontFamily:"Montserrat"}}>
+                                {cerrado?"✅ ":""}{p.equipo&&p.equipo.trim()?p.equipo:p.area}</span>
+                              {!cerrado&&<span style={{background:PBG[p.p],color:PCOL[p.p],borderRadius:6,padding:"2px 7px",fontSize:10,fontWeight:700,fontFamily:"Montserrat"}}>{p.p}</span>}
+                              {segs.length>0&&<span style={{background:"#e8f0fb",color:"#2d7dd2",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:700,fontFamily:"Montserrat"}}>{segs.length} seg.</span>}
+                            </div>
+                            {p.desc&&<p style={{margin:0,fontSize:13,color:cerrado?"#5a6a7a":"#5C3A00",lineHeight:1.4}}>{p.desc}</p>}
                           </div>
-                          {p.desc&&<p style={{margin:0,fontSize:13,color:cerrado?"#5a6a7a":"#5C3A00",lineHeight:1.4}}>{p.desc}</p>}
+                          {(onAgregarSeguimiento||onCerrarPendiente)&&(
+                            <button onClick={function(){setThreadPend(p);}}
+                              style={{background:cerrado?"#e8f0fb":"#FFF0D9",border:"1px solid "+(cerrado?"rgba(13,47,92,0.12)":"rgba(196,82,0,0.2)"),borderRadius:8,padding:"5px 10px",cursor:"pointer",color:cerrado?"#0D2F5C":"#C45200",fontFamily:"Montserrat",fontWeight:800,fontSize:10,flexShrink:0,whiteSpace:"nowrap"}}>
+                              {cerrado?"Ver →":"Gestionar →"}
+                            </button>
+                          )}
                         </div>
-                        {(onAgregarSeguimiento||onCerrarPendiente)&&(
-                          <button onClick={function(){setThreadPend(p);}}
-                            style={{background:cerrado?"#e8f0fb":"#FFF0D9",border:"1px solid "+(cerrado?"rgba(13,47,92,0.12)":"rgba(196,82,0,0.2)"),borderRadius:8,padding:"5px 10px",cursor:"pointer",color:cerrado?"#0D2F5C":"#C45200",fontFamily:"Montserrat",fontWeight:800,fontSize:10,flexShrink:0,whiteSpace:"nowrap"}}>
-                            {cerrado?"Ver →":"Gestionar →"}
-                          </button>
-                        )}
                       </div>
+                      {/* Último seguimiento inline */}
+                      {lastSeg&&(
+                        <div style={{background:cerrado?"rgba(29,122,62,0.05)":"rgba(255,255,255,0.7)",borderTop:"1px solid "+(cerrado?"rgba(29,122,62,0.10)":"rgba(196,82,0,0.08)"),padding:"6px 10px",display:"flex",gap:7,alignItems:"flex-start"}}>
+                          <div style={{width:20,height:20,borderRadius:10,background:lastSeg.cerro?"#1D7A3E":"#0D2F5C",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                            <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:9}}>
+                              {lastSeg.tecnico.split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase().slice(0,2)}
+                            </span>
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+                              <span style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#0D2F5C"}}>{lastSeg.tecnico}</span>
+                              <span style={{background:"#e8f0fb",color:"#2d7dd2",borderRadius:4,padding:"0 5px",fontSize:9,fontWeight:700,fontFamily:"Montserrat"}}>{lastSeg.hi}–{lastSeg.hf}</span>
+                              <span style={{fontSize:9,color:"#b0bac8",fontFamily:"Montserrat"}}>{fmtRelTs(lastSeg.ts)}</span>
+                              {lastSeg.cerro&&<span style={{background:"#D1F2E0",color:"#1D7A3E",borderRadius:4,padding:"0 5px",fontSize:9,fontWeight:800,fontFamily:"Montserrat"}}>✅ Cerró</span>}
+                            </div>
+                            <div style={{fontSize:11,color:"#3C3C43",lineHeight:1.35,marginTop:1}}>{lastSeg.desc}</div>
+                          </div>
+                        </div>
+                      )}
+                      {!lastSeg&&!cerrado&&(
+                        <div style={{background:"rgba(196,82,0,0.03)",borderTop:"1px solid rgba(196,82,0,0.08)",padding:"5px 10px",fontSize:10,color:"#b0bac8",fontFamily:"Montserrat",fontWeight:600,fontStyle:"italic"}}>
+                          Sin seguimientos aún
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -7331,18 +7479,21 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
             </div>
           )}
 
-          {threadPend&&(
-            <PendienteThreadModal
-              pendiente={threadPend}
-              entryId={e.id}
-              entryTecnico={e.tecnico}
-              entryFecha={e.fecha}
-              initialUser={initialUser}
-              onAgregarSeguimiento={onAgregarSeguimiento}
-              onCerrarPendiente={onCerrarPendiente}
-              onClose={function(){setThreadPend(null);}}
-            />
-          )}
+          {threadPend&&(function(){
+            var livePend=(e.pendientes||[]).find(function(p){return p.id===threadPend.id;})||threadPend;
+            return(
+              <PendienteThreadModal
+                pendiente={livePend}
+                entryId={e.id}
+                entryTecnico={e.tecnico}
+                entryFecha={e.fecha}
+                initialUser={initialUser}
+                onAgregarSeguimiento={onAgregarSeguimiento}
+                onCerrarPendiente={onCerrarPendiente}
+                onClose={function(){setThreadPend(null);}}
+              />
+            );
+          })()}
 
           {/* Confirmaciones */}
           {(confs.length>0||puedeConfirmar)&&(
@@ -8823,7 +8974,7 @@ function BitacoraApp({onBack, initialUser}){
           if(p.id!==pendId) return p;
           return Object.assign({},p,{seguimientos:(p.seguimientos||[]).concat([seguimiento])});
         });
-        return Object.assign({},e,{pendientes:newPends});
+        return Object.assign({},e,{pendientes:newPends,updatedAt:seguimiento.ts});
       });
       save(KS.e,n);
       return n;
@@ -8842,7 +8993,7 @@ function BitacoraApp({onBack, initialUser}){
             fechaCierre:seguimientoCierre.ts
           });
         });
-        return Object.assign({},e,{pendientes:newPends});
+        return Object.assign({},e,{pendientes:newPends,updatedAt:seguimientoCierre.ts});
       });
       save(KS.e,n);
       return n;
@@ -8946,7 +9097,7 @@ function BitacoraApp({onBack, initialUser}){
                   <div style={{fontSize:14,fontWeight:500}}>No hay reportes aun. Crea el primero!</div>
                 </div>
               :<div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {entries.slice().sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);}).slice(0,5).map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={initialUser} onConfirmar={confirmarLectura} onPrint={function(en){window.print();}}/>;}) }
+                  {entries.slice().sort(function(a,b){return new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt);}).slice(0,5).map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={initialUser} onConfirmar={confirmarLectura} onPrint={function(en){window.print();}}/>;}) }
                   {entries.length>5&&<button onClick={function(){setTab("reportes");}} style={{background:"#fff",border:"1.5px dashed rgba(13,47,92,0.15)",borderRadius:12,padding:13,cursor:"pointer",color:"#8a96a8",fontFamily:"Montserrat",fontSize:12,fontWeight:700,width:"100%"}}>Ver los {entries.length-5} restantes</button>}
                 </div>
             }
