@@ -411,8 +411,10 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 .spare-chip button{background:none;border:none;cursor:pointer;color:#004A9E;font-size:15px;line-height:1;padding:0 0 0 2px;}
 .spare-chip button:hover{color:#FF3B30;}
 @keyframes spin{to{transform:rotate(360deg)}}
-
-/* ── Login ── */
+@keyframes emojiPickerIn{
+  from{opacity:0;transform:scale(0.6) translateY(8px);}
+  to{opacity:1;transform:scale(1) translateY(0);}
+}
 .login-wrap{
   min-height:100vh;background:var(--navy-deep);
   display:flex;align-items:center;justify-content:center;
@@ -7292,41 +7294,115 @@ function EntryDetail(props){
   );
 }
 
-// ── ReactionBar ───────────────────────────────────────────────────────────────
-var REACTION_EMOJIS=["👍","✅","🔥","👀"];
-function ReactionBar({reacciones, onToggle, initialUser, compact}){
-  var uname=initialUser&&initialUser.username;
+// ── Emoji Reaction System (WhatsApp style) ────────────────────────────────────
+var QUICK_EMOJIS=["👍","❤️","😂","😮","😢","🙏","🔥","✅","👀","💪","⚠️","🛠️"];
+
+// Floating emoji picker triggered by long-press
+function EmojiPicker({x, y, onSelect, onClose}){
+  React.useEffect(function(){
+    function handler(e){ onClose(); }
+    setTimeout(function(){ document.addEventListener("click",handler,{once:true}); },0);
+    return function(){ document.removeEventListener("click",handler); };
+  },[]);
+
+  // Keep picker inside viewport
+  var style={
+    position:"fixed",
+    zIndex:9999,
+    background:"#fff",
+    borderRadius:32,
+    boxShadow:"0 8px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12)",
+    border:"1px solid rgba(13,47,92,0.10)",
+    padding:"8px 10px",
+    display:"flex",
+    gap:2,
+    flexWrap:"nowrap",
+    animation:"emojiPickerIn 0.18s cubic-bezier(0.34,1.56,0.64,1)",
+  };
+  // position: try above the press point
+  var top=y-70; var left=x-120;
+  if(top<10) top=y+20;
+  if(left<8) left=8;
+  if(left+280>window.innerWidth) left=window.innerWidth-290;
+  style.top=top; style.left=left;
+
   return(
-    <div style={{display:"flex",gap:compact?4:6,flexWrap:"wrap",alignItems:"center"}}>
-      {REACTION_EMOJIS.map(function(em){
-        var lista=(reacciones&&reacciones[em])||[];
-        var activo=uname&&lista.includes(uname);
-        var count=lista.length;
+    <div style={style} onClick={function(ev){ev.stopPropagation();}}>
+      {QUICK_EMOJIS.map(function(em){
         return(
-          <button key={em} onClick={function(ev){ev.stopPropagation();onToggle(em);}}
-            title={lista.join(", ")||em}
-            style={{
-              display:"flex",alignItems:"center",gap:3,
-              padding:compact?"2px 6px":"3px 9px",
-              borderRadius:20,
-              border:activo?"1.5px solid rgba(13,47,92,0.45)":"1.5px solid rgba(13,47,92,0.12)",
-              background:activo?"#e8f0fb":"rgba(244,247,253,0.9)",
-              cursor:"pointer",
-              fontSize:compact?11:13,
-              fontWeight:700,
-              color:activo?"#0D2F5C":"#8a96a8",
-              transition:"all 0.14s cubic-bezier(0.25,0.46,0.45,0.94)",
-              lineHeight:1,
-              fontFamily:"Montserrat,sans-serif",
-              transform:activo?"scale(1.05)":"scale(1)",
-            }}>
-            <span style={{fontSize:compact?12:14}}>{em}</span>
-            {count>0&&<span style={{fontSize:compact?9:10,minWidth:8}}>{count}</span>}
+          <button key={em} onClick={function(ev){ev.stopPropagation();onSelect(em);}}
+            style={{background:"none",border:"none",cursor:"pointer",
+              fontSize:26,lineHeight:1,padding:"4px 5px",borderRadius:12,
+              transition:"transform 0.12s",
+            }}
+            onMouseEnter={function(e){e.currentTarget.style.transform="scale(1.35) translateY(-4px)";e.currentTarget.style.background="rgba(13,47,92,0.07)";}}
+            onMouseLeave={function(e){e.currentTarget.style.transform="scale(1)";e.currentTarget.style.background="none";}}>
+            {em}
           </button>
         );
       })}
     </div>
   );
+}
+
+// Chips showing existing reactions (click to toggle)
+function ReactionChips({reacciones, onToggle, initialUser}){
+  var uname=initialUser&&initialUser.username;
+  var entries=Object.entries(reacciones||{}).filter(function(kv){return kv[1]&&kv[1].length>0;});
+  if(!entries.length) return null;
+  return(
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
+      {entries.map(function(kv){
+        var em=kv[0]; var lista=kv[1];
+        var activo=uname&&lista.includes(uname);
+        return(
+          <button key={em} onClick={function(ev){ev.stopPropagation();onToggle(em);}}
+            title={lista.join(", ")}
+            style={{
+              display:"flex",alignItems:"center",gap:3,
+              padding:"2px 8px",borderRadius:20,
+              border:activo?"1.5px solid rgba(13,47,92,0.4)":"1.5px solid rgba(13,47,92,0.10)",
+              background:activo?"#dde8f8":"rgba(244,247,253,0.95)",
+              cursor:"pointer",lineHeight:1,
+              transition:"all 0.12s",
+            }}>
+            <span style={{fontSize:14}}>{em}</span>
+            <span style={{fontSize:11,fontWeight:700,color:activo?"#0D2F5C":"#8a96a8",fontFamily:"Montserrat,sans-serif"}}>{lista.length}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Hook: long-press → fires callback with pointer position
+function useLongPress(onLongPress, ms){
+  ms=ms||500;
+  var timerRef=React.useRef(null);
+  var posRef=React.useRef({x:0,y:0});
+  var firedRef=React.useRef(false);
+
+  function start(ev){
+    var src=ev.touches?ev.touches[0]:ev;
+    posRef.current={x:src.clientX,y:src.clientY};
+    firedRef.current=false;
+    timerRef.current=setTimeout(function(){
+      firedRef.current=true;
+      if(navigator.vibrate) navigator.vibrate(30);
+      onLongPress(posRef.current.x,posRef.current.y);
+    },ms);
+  }
+  function cancel(ev){
+    clearTimeout(timerRef.current);
+  }
+  function click(ev){
+    if(firedRef.current){ ev.preventDefault(); ev.stopPropagation(); }
+  }
+  return{
+    onMouseDown:start, onMouseUp:cancel, onMouseLeave:cancel,
+    onTouchStart:start, onTouchEnd:cancel, onTouchMove:cancel,
+    onClick:click,
+  };
 }
 
 // ── EntryCard ─────────────────────────────────────────────────────────────────
@@ -7343,6 +7419,8 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
   const [showComments,setShowComments]=useState(false);
   const [nuevoComentario,setNuevoComentario]=useState("");
   const [sendingCom,setSendingCom]=useState(false);
+  // Emoji picker state: {type:"entry"|"comment", comId, x, y}
+  const [picker,setPicker]=useState(null);
 
   // Permisos comentarios
   const esAdminCoordi=initialUser&&(initialUser.cargo==="Administrador"||initialUser.cargo==="Coordinador"||initialUser.role==="admin");
@@ -7383,13 +7461,32 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
     return d.toLocaleDateString("es-CO",{day:"2-digit",month:"short",timeZone:"America/Bogota"});
   }
 
+  // Long-press handlers for the report header
+  var entryLongPress=useLongPress(function(x,y){
+    if(onToggleReaccionEntry) setPicker({type:"entry",x:x,y:y});
+  },480);
+
   return(
     <div style={{background:"#fff",borderRadius:14,border:"1.5px solid "+(confs.length>0?"rgba(29,122,62,0.3)":"rgba(13,47,92,0.10)"),
-      boxShadow:"0 2px 12px rgba(13,47,92,0.06)",overflow:"hidden"}}>
+      boxShadow:"0 2px 12px rgba(13,47,92,0.06)",overflow:"hidden",position:"relative"}}>
 
-      {/* ── Header clicable para colapsar ── */}
-      <div onClick={function(){setOpen(function(o){return !o;});}}
-        style={{background:NV,padding:"12px 14px",cursor:"pointer",userSelect:"none"}}>
+      {/* Global emoji picker portal */}
+      {picker&&(
+        <EmojiPicker
+          x={picker.x} y={picker.y}
+          onSelect={function(em){
+            if(picker.type==="entry"&&onToggleReaccionEntry) onToggleReaccionEntry(e.id,em);
+            if(picker.type==="comment"&&onToggleReaccionComment) onToggleReaccionComment(e.id,picker.comId,em);
+            setPicker(null);
+          }}
+          onClose={function(){setPicker(null);}}
+        />
+      )}
+
+      {/* ── Header clicable para colapsar / long-press para reaccionar ── */}
+      <div {...entryLongPress}
+        onClick={function(ev){if(!picker) setOpen(function(o){return !o;});}}
+        style={{background:NV,padding:"12px 14px",cursor:"pointer",userSelect:"none",WebkitUserSelect:"none"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
           <div style={{minWidth:0,flex:1}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
@@ -7609,19 +7706,13 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
             </div>
           )}
 
-          {/* ── Reacciones al reporte ── */}
+          {/* ── Reacciones del reporte (chips) ── */}
           {onToggleReaccionEntry&&(
-            <div style={{borderTop:"1px solid rgba(13,47,92,0.07)",paddingTop:10}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,
-                  color:"#b0bac8",textTransform:"uppercase",letterSpacing:.6}}>Reacciones</span>
-              </div>
-              <ReactionBar
-                reacciones={e.reacciones||{}}
-                onToggle={function(em){onToggleReaccionEntry(e.id,em);}}
-                initialUser={initialUser}
-              />
-            </div>
+            <ReactionChips
+              reacciones={e.reacciones||{}}
+              onToggle={function(em){onToggleReaccionEntry(e.id,em);}}
+              initialUser={initialUser}
+            />
           )}
 
           {/* ── Comentarios / Respuestas ── */}
@@ -7651,6 +7742,9 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                   {comentarios.map(function(c,i){
                     var ini=(c.autor||"?").split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase().slice(0,2);
                     var esPropio=initialUser&&c.username===initialUser.username;
+                    var comLongPress=useLongPress(function(x,y){
+                      if(onToggleReaccionComment) setPicker({type:"comment",comId:c.id,x:x,y:y});
+                    },480);
                     return(
                       <div key={c.id||i} style={{
                         display:"flex",gap:8,alignItems:"flex-start",
@@ -7663,12 +7757,14 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                           <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:10}}>{ini}</span>
                         </div>
                         {/* Bubble + reactions */}
-                        <div style={{display:"flex",flexDirection:"column",gap:4,maxWidth:"80%"}}>
-                          <div style={{
-                            background:esPropio?"#e8f0fb":c.esAdmin?"#0D2F5C":"#FFF0D9",
-                            borderRadius:esPropio?"12px 2px 12px 12px":"2px 12px 12px 12px",
-                            padding:"7px 10px",
-                          }}>
+                        <div style={{display:"flex",flexDirection:"column",gap:3,maxWidth:"80%"}}>
+                          <div {...comLongPress}
+                            style={{
+                              background:esPropio?"#e8f0fb":c.esAdmin?"#0D2F5C":"#FFF0D9",
+                              borderRadius:esPropio?"12px 2px 12px 12px":"2px 12px 12px 12px",
+                              padding:"7px 10px",
+                              cursor:"default",userSelect:"none",WebkitUserSelect:"none",
+                            }}>
                             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
                               <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,
                                 color:esPropio?NV:c.esAdmin?"rgba(255,255,255,0.8)":"#C45200"}}>
@@ -7684,15 +7780,12 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                             <div style={{fontSize:13,lineHeight:1.4,
                               color:esPropio?NV:c.esAdmin?"#fff":"#5C3A00"}}>{c.texto}</div>
                           </div>
-                          {/* Reacciones al comentario */}
-                          {onToggleReaccionComment&&(
-                            <ReactionBar
-                              reacciones={c.reacciones||{}}
-                              onToggle={function(em){onToggleReaccionComment(e.id,c.id,em);}}
-                              initialUser={initialUser}
-                              compact={true}
-                            />
-                          )}
+                          {/* Reaction chips */}
+                          <ReactionChips
+                            reacciones={c.reacciones||{}}
+                            onToggle={function(em){if(onToggleReaccionComment) onToggleReaccionComment(e.id,c.id,em);}}
+                            initialUser={initialUser}
+                          />
                         </div>
                       </div>
                     );
