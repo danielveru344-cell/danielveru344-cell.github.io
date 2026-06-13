@@ -255,7 +255,6 @@ input,select,textarea,button{font-family:inherit;outline:none;}
   animation:slideUp 0.35s cubic-bezier(0.32,0.72,0,1);
   padding-bottom:calc(env(safe-area-inset-bottom,16px) + 16px);
   touch-action:pan-y;
-  will-change:transform;
 }
 @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
 .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 0;}
@@ -7308,7 +7307,7 @@ function EmojiPicker({x, y, onSelect, onClose}){
   // Keep picker inside viewport
   var style={
     position:"fixed",
-    zIndex:9999,
+    zIndex:99999,
     background:"#fff",
     borderRadius:32,
     boxShadow:"0 8px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12)",
@@ -7326,7 +7325,8 @@ function EmojiPicker({x, y, onSelect, onClose}){
   if(left+280>window.innerWidth) left=window.innerWidth-290;
   style.top=top; style.left=left;
 
-  return(
+  // Use portal to escape overflow:hidden and will-change:transform stacking contexts
+  return ReactDOM.createPortal(
     <div style={style} onClick={function(ev){ev.stopPropagation();}}>
       {QUICK_EMOJIS.map(function(em){
         return(
@@ -7341,7 +7341,8 @@ function EmojiPicker({x, y, onSelect, onClose}){
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body
   );
 }
 
