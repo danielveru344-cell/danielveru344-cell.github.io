@@ -7292,8 +7292,45 @@ function EntryDetail(props){
   );
 }
 
+// ── ReactionBar ───────────────────────────────────────────────────────────────
+var REACTION_EMOJIS=["👍","✅","🔥","👀"];
+function ReactionBar({reacciones, onToggle, initialUser, compact}){
+  var uname=initialUser&&initialUser.username;
+  return(
+    <div style={{display:"flex",gap:compact?4:6,flexWrap:"wrap",alignItems:"center"}}>
+      {REACTION_EMOJIS.map(function(em){
+        var lista=(reacciones&&reacciones[em])||[];
+        var activo=uname&&lista.includes(uname);
+        var count=lista.length;
+        return(
+          <button key={em} onClick={function(ev){ev.stopPropagation();onToggle(em);}}
+            title={lista.join(", ")||em}
+            style={{
+              display:"flex",alignItems:"center",gap:3,
+              padding:compact?"2px 6px":"3px 9px",
+              borderRadius:20,
+              border:activo?"1.5px solid rgba(13,47,92,0.45)":"1.5px solid rgba(13,47,92,0.12)",
+              background:activo?"#e8f0fb":"rgba(244,247,253,0.9)",
+              cursor:"pointer",
+              fontSize:compact?11:13,
+              fontWeight:700,
+              color:activo?"#0D2F5C":"#8a96a8",
+              transition:"all 0.14s cubic-bezier(0.25,0.46,0.45,0.94)",
+              lineHeight:1,
+              fontFamily:"Montserrat,sans-serif",
+              transform:activo?"scale(1.05)":"scale(1)",
+            }}>
+            <span style={{fontSize:compact?12:14}}>{em}</span>
+            {count>0&&<span style={{fontSize:compact?9:10,minWidth:8}}>{count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── EntryCard ─────────────────────────────────────────────────────────────────
-function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSeguimiento, onCerrarPendiente, onAgregarComentario}){
+function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSeguimiento, onCerrarPendiente, onAgregarComentario, onToggleReaccionEntry, onToggleReaccionComment}){
   const e=entry;
   const hiA=(e.pendientes||[]).filter(function(p){return !p.cerrado&&p.p==="Alta";}).length;
   const confs=e.confirmaciones||[];
@@ -7313,7 +7350,7 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
   const comentarios=e.comentarios||[];
   // El técnico autor puede responder solo si hay al menos un comentario del admin/coordi
   const hayComentarioDeAdmin=comentarios.some(function(c){return c.esAdmin;});
-  const puedeCommentar=onAgregarComentario&&(esAdminCoordi||(esTecnicoAutor&&hayComentarioDeAdmin));
+  const puedeCommentar=onAgregarComentario&&!!initialUser;
 
   function enviarComentario(){
     if(!nuevoComentario.trim()||sendingCom) return;
@@ -7572,6 +7609,21 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
             </div>
           )}
 
+          {/* ── Reacciones al reporte ── */}
+          {onToggleReaccionEntry&&(
+            <div style={{borderTop:"1px solid rgba(13,47,92,0.07)",paddingTop:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,
+                  color:"#b0bac8",textTransform:"uppercase",letterSpacing:.6}}>Reacciones</span>
+              </div>
+              <ReactionBar
+                reacciones={e.reacciones||{}}
+                onToggle={function(em){onToggleReaccionEntry(e.id,em);}}
+                initialUser={initialUser}
+              />
+            </div>
+          )}
+
           {/* ── Comentarios / Respuestas ── */}
           {(comentarios.length>0||puedeCommentar)&&(
             <div style={{borderTop:"1px solid rgba(13,47,92,0.07)",paddingTop:10}}>
@@ -7610,27 +7662,37 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                           display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:10}}>{ini}</span>
                         </div>
-                        {/* Bubble */}
-                        <div style={{
-                          maxWidth:"80%",
-                          background:esPropio?"#e8f0fb":c.esAdmin?"#0D2F5C":"#FFF0D9",
-                          borderRadius:esPropio?"12px 2px 12px 12px":"2px 12px 12px 12px",
-                          padding:"7px 10px",
-                        }}>
-                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
-                            <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,
-                              color:esPropio?NV:c.esAdmin?"rgba(255,255,255,0.8)":"#C45200"}}>
-                              {c.autor.split(" ")[0]}
-                            </span>
-                            {c.esAdmin&&<span style={{background:"rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.7)",
-                              borderRadius:4,padding:"0 5px",fontSize:9,fontWeight:700,fontFamily:"Montserrat"}}>
-                              Admin
-                            </span>}
-                            <span style={{fontSize:9,color:esPropio?"#8a96a8":c.esAdmin?"rgba(255,255,255,0.4)":"#b0bac8",
-                              fontFamily:"Montserrat",marginLeft:"auto"}}>{fmtCom(c.ts)}</span>
+                        {/* Bubble + reactions */}
+                        <div style={{display:"flex",flexDirection:"column",gap:4,maxWidth:"80%"}}>
+                          <div style={{
+                            background:esPropio?"#e8f0fb":c.esAdmin?"#0D2F5C":"#FFF0D9",
+                            borderRadius:esPropio?"12px 2px 12px 12px":"2px 12px 12px 12px",
+                            padding:"7px 10px",
+                          }}>
+                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                              <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,
+                                color:esPropio?NV:c.esAdmin?"rgba(255,255,255,0.8)":"#C45200"}}>
+                                {c.autor.split(" ")[0]}
+                              </span>
+                              {c.esAdmin&&<span style={{background:"rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.7)",
+                                borderRadius:4,padding:"0 5px",fontSize:9,fontWeight:700,fontFamily:"Montserrat"}}>
+                                Admin
+                              </span>}
+                              <span style={{fontSize:9,color:esPropio?"#8a96a8":c.esAdmin?"rgba(255,255,255,0.4)":"#b0bac8",
+                                fontFamily:"Montserrat",marginLeft:"auto"}}>{fmtCom(c.ts)}</span>
+                            </div>
+                            <div style={{fontSize:13,lineHeight:1.4,
+                              color:esPropio?NV:c.esAdmin?"#fff":"#5C3A00"}}>{c.texto}</div>
                           </div>
-                          <div style={{fontSize:13,lineHeight:1.4,
-                            color:esPropio?NV:c.esAdmin?"#fff":"#5C3A00"}}>{c.texto}</div>
+                          {/* Reacciones al comentario */}
+                          {onToggleReaccionComment&&(
+                            <ReactionBar
+                              reacciones={c.reacciones||{}}
+                              onToggle={function(em){onToggleReaccionComment(e.id,c.id,em);}}
+                              initialUser={initialUser}
+                              compact={true}
+                            />
+                          )}
                         </div>
                       </div>
                     );
@@ -7643,7 +7705,7 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                         value={nuevoComentario}
                         onChange={function(ev){setNuevoComentario(ev.target.value);}}
                         onKeyDown={function(ev){if(ev.key==="Enter"&&!ev.shiftKey){ev.preventDefault();enviarComentario();}}}
-                        placeholder={esAdminCoordi?"Escribe un comentario…":"Responde al coordinador…"}
+                        placeholder="Escribe un comentario…"
                         rows={2}
                         style={{flex:1,resize:"none",border:"1.5px solid rgba(13,47,92,0.15)",borderRadius:10,
                           padding:"8px 10px",fontSize:13,fontFamily:"Inter,sans-serif",color:NV,
@@ -7663,13 +7725,6 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                     </div>
                   )}
 
-                  {/* Aviso al técnico: no puede comentar aún */}
-                  {!puedeCommentar&&esTecnicoAutor&&!hayComentarioDeAdmin&&(
-                    <div style={{fontSize:11,color:"#8a96a8",fontFamily:"Montserrat",fontWeight:600,
-                      fontStyle:"italic",padding:"4px 2px"}}>
-                      Solo puedes responder cuando un coordinador comente primero.
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -7941,7 +7996,7 @@ function ReportesView(props){
                     <div key={d}>
                       <div className="day-sep"><div className="day-line"/><span className="day-lbl">{fD(d+"T12:00:00")}</span><span style={{background:"#e8f0fb",color:NV,padding:"1px 9px",borderRadius:10,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[d].length}</span><div className="day-line"/></div>
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {gmap[d].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onAgregarComentario={props.onAgregarComentario} onPrint={function(){window.print();}}/>;}) }
+                        {gmap[d].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onAgregarComentario={props.onAgregarComentario} onToggleReaccionEntry={props.onToggleReaccionEntry} onToggleReaccionComment={props.onToggleReaccionComment} onPrint={function(){window.print();}}/>;}) }
                       </div>
                     </div>
                   );})}
@@ -7972,7 +8027,7 @@ function ReportesView(props){
                           <span style={{background:"#e8f0fb",color:NV,padding:"2px 10px",borderRadius:20,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[k].length} reporte{gmap[k].length>1?"s":""}</span>
                         </div>
                         <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                          {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onAgregarComentario={props.onAgregarComentario} onPrint={function(){window.print();}}/>;}) }
+                          {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onAgregarComentario={props.onAgregarComentario} onToggleReaccionEntry={props.onToggleReaccionEntry} onToggleReaccionComment={props.onToggleReaccionComment} onPrint={function(){window.print();}}/>;}) }
                         </div>
                       </div>
                     );
@@ -8002,7 +8057,7 @@ function ReportesView(props){
                         <span style={{background:"#FFF0D9",color:"#C45200",padding:"2px 10px",borderRadius:20,fontSize:11,fontFamily:"Montserrat",fontWeight:700}}>{gmap[k].length} reporte{gmap[k].length>1?"s":""}</span>
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onAgregarComentario={props.onAgregarComentario} onPrint={function(){window.print();}}/>;}) }
+                        {gmap[k].map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onAgregarComentario={props.onAgregarComentario} onToggleReaccionEntry={props.onToggleReaccionEntry} onToggleReaccionComment={props.onToggleReaccionComment} onPrint={function(){window.print();}}/>;}) }
                       </div>
                     </div>
                   );})}
@@ -8013,7 +8068,7 @@ function ReportesView(props){
             // horas_desc / horas_asc — lista plana
             return(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {fil.map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onAgregarComentario={props.onAgregarComentario} onPrint={function(){window.print();}}/>;}) }
+                {fil.map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={props.initialUser} onConfirmar={props.onConfirmar} onAgregarSeguimiento={props.onAgregarSeguimiento} onCerrarPendiente={props.onCerrarPendiente} onAgregarComentario={props.onAgregarComentario} onToggleReaccionEntry={props.onToggleReaccionEntry} onToggleReaccionComment={props.onToggleReaccionComment} onPrint={function(){window.print();}}/>;}) }
               </div>
             );
           })()
@@ -9154,6 +9209,47 @@ function BitacoraApp({onBack, initialUser}){
     });
   }
 
+  // ── Reacciones: toggle emoji en reporte o en comentario ─────────────────────
+  function toggleReaccionEntry(entryId, emoji){
+    if(!initialUser) return;
+    const uname=initialUser.username;
+    setEntries(function(prev){
+      const n=prev.map(function(e){
+        if(e.id!==entryId) return e;
+        var reacs=Object.assign({},e.reacciones||{});
+        var lista=reacs[emoji]?reacs[emoji].slice():[];
+        var idx=lista.indexOf(uname);
+        if(idx>=0) lista.splice(idx,1); else lista.push(uname);
+        reacs[emoji]=lista;
+        return Object.assign({},e,{reacciones:reacs});
+      });
+      save(KS.e,n);
+      return n;
+    });
+  }
+
+  function toggleReaccionComment(entryId, comId, emoji){
+    if(!initialUser) return;
+    const uname=initialUser.username;
+    setEntries(function(prev){
+      const n=prev.map(function(e){
+        if(e.id!==entryId) return e;
+        var coms=(e.comentarios||[]).map(function(c){
+          if(c.id!==comId) return c;
+          var reacs=Object.assign({},c.reacciones||{});
+          var lista=reacs[emoji]?reacs[emoji].slice():[];
+          var idx=lista.indexOf(uname);
+          if(idx>=0) lista.splice(idx,1); else lista.push(uname);
+          reacs[emoji]=lista;
+          return Object.assign({},c,{reacciones:reacs});
+        });
+        return Object.assign({},e,{comentarios:coms});
+      });
+      save(KS.e,n);
+      return n;
+    });
+  }
+
   const totP=entries.reduce(function(a,e){return a+(e.pendientes||[]).filter(function(p){return !p.cerrado;}).length;},0);
   const altaP=entries.reduce(function(a,e){return a+(e.pendientes||[]).filter(function(p){return !p.cerrado&&p.p==="Alta";}).length;},0);
 
@@ -9251,13 +9347,13 @@ function BitacoraApp({onBack, initialUser}){
                   <div style={{fontSize:14,fontWeight:500}}>No hay reportes aun. Crea el primero!</div>
                 </div>
               :<div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {entries.slice().sort(function(a,b){return new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt);}).slice(0,5).map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={initialUser} onConfirmar={confirmarLectura} onAgregarComentario={agregarComentario} onPrint={function(en){window.print();}}/>;}) }
+                  {entries.slice().sort(function(a,b){return new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt);}).slice(0,5).map(function(e){return <EntryExpanded key={e.id} entry={e} initialUser={initialUser} onConfirmar={confirmarLectura} onAgregarComentario={agregarComentario} onToggleReaccionEntry={toggleReaccionEntry} onToggleReaccionComment={toggleReaccionComment} onPrint={function(en){window.print();}}/>;}) }
                   {entries.length>5&&<button onClick={function(){setTab("reportes");}} style={{background:"#fff",border:"1.5px dashed rgba(13,47,92,0.15)",borderRadius:12,padding:13,cursor:"pointer",color:"#8a96a8",fontFamily:"Montserrat",fontSize:12,fontWeight:700,width:"100%"}}>Ver los {entries.length-5} restantes</button>}
                 </div>
             }
           </div>
         ):tab==="reportes"?(
-          <ReportesView entries={entries} turnos={turnos} onDetail={function(e){setDetail(e);}} initialUser={initialUser} onConfirmar={confirmarLectura} filtroInicial={filtroInicial} onClearFiltro={function(){setFiltroInicial(null);}} onAgregarSeguimiento={agregarSeguimiento} onCerrarPendiente={cerrarPendiente} onAgregarComentario={agregarComentario}/>
+          <ReportesView entries={entries} turnos={turnos} onDetail={function(e){setDetail(e);}} initialUser={initialUser} onConfirmar={confirmarLectura} filtroInicial={filtroInicial} onClearFiltro={function(){setFiltroInicial(null);}} onAgregarSeguimiento={agregarSeguimiento} onCerrarPendiente={cerrarPendiente} onAgregarComentario={agregarComentario} onToggleReaccionEntry={toggleReaccionEntry} onToggleReaccionComment={toggleReaccionComment}/>
         ):tab==="analisis"?(
           <AnalisisView entries={entries}/>
         ):tab==="nuevo"?(
