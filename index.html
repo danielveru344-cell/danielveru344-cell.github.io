@@ -7708,11 +7708,27 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
 
           {/* ── Reacciones del reporte (chips) ── */}
           {onToggleReaccionEntry&&(
-            <ReactionChips
-              reacciones={e.reacciones||{}}
-              onToggle={function(em){onToggleReaccionEntry(e.id,em);}}
-              initialUser={initialUser}
-            />
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <ReactionChips
+                reacciones={e.reacciones||{}}
+                onToggle={function(em){onToggleReaccionEntry(e.id,em);}}
+                initialUser={initialUser}
+              />
+              <button
+                onClick={function(ev){
+                  ev.stopPropagation();
+                  var r=ev.currentTarget.getBoundingClientRect();
+                  setPicker({type:"entry",x:r.left,y:r.top});
+                }}
+                title="Reaccionar"
+                style={{background:"rgba(13,47,92,0.07)",border:"1.5px solid rgba(13,47,92,0.12)",
+                  borderRadius:20,padding:"2px 8px",cursor:"pointer",fontSize:14,lineHeight:1,
+                  color:"#8a96a8",display:"flex",alignItems:"center",gap:3,transition:"all 0.15s"}}
+                onMouseEnter={function(ev){ev.currentTarget.style.background="rgba(13,47,92,0.14)";ev.currentTarget.style.color="#0D2F5C";}}
+                onMouseLeave={function(ev){ev.currentTarget.style.background="rgba(13,47,92,0.07)";ev.currentTarget.style.color="#8a96a8";}}>
+                <span>😊</span><span style={{fontSize:10,fontFamily:"Montserrat",fontWeight:700}}>+</span>
+              </button>
+            </div>
           )}
 
           {/* ── Comentarios / Respuestas ── */}
@@ -7781,12 +7797,30 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                             <div style={{fontSize:13,lineHeight:1.4,
                               color:esPropio?NV:c.esAdmin?"#fff":"#5C3A00"}}>{c.texto}</div>
                           </div>
-                          {/* Reaction chips */}
-                          <ReactionChips
-                            reacciones={c.reacciones||{}}
-                            onToggle={function(em){if(onToggleReaccionComment) onToggleReaccionComment(e.id,c.id,em);}}
-                            initialUser={initialUser}
-                          />
+                          {/* Reaction chips + botón */}
+                          <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                            <ReactionChips
+                              reacciones={c.reacciones||{}}
+                              onToggle={function(em){if(onToggleReaccionComment) onToggleReaccionComment(e.id,c.id,em);}}
+                              initialUser={initialUser}
+                            />
+                            {onToggleReaccionComment&&(
+                              <button
+                                onClick={function(ev){
+                                  ev.stopPropagation();
+                                  var r=ev.currentTarget.getBoundingClientRect();
+                                  setPicker({type:"comment",comId:c.id,x:r.left,y:r.top});
+                                }}
+                                title="Reaccionar"
+                                style={{background:"rgba(13,47,92,0.06)",border:"1px solid rgba(13,47,92,0.10)",
+                                  borderRadius:16,padding:"1px 6px",cursor:"pointer",fontSize:12,lineHeight:1,
+                                  color:"#b0bac8",display:"flex",alignItems:"center",gap:2,transition:"all 0.15s"}}
+                                onMouseEnter={function(ev){ev.currentTarget.style.background="rgba(13,47,92,0.12)";ev.currentTarget.style.color="#0D2F5C";}}
+                                onMouseLeave={function(ev){ev.currentTarget.style.background="rgba(13,47,92,0.06)";ev.currentTarget.style.color="#b0bac8";}}>
+                                <span>😊</span><span style={{fontSize:9,fontFamily:"Montserrat",fontWeight:700}}>+</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
