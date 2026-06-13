@@ -7717,9 +7717,10 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
 
           {/* ── Comentarios / Respuestas ── */}
           {(comentarios.length>0||puedeCommentar)&&(
-            <div style={{borderTop:"1px solid rgba(13,47,92,0.07)",paddingTop:10}}>
+            <div onClick={function(ev){ev.stopPropagation();}} style={{borderTop:"1px solid rgba(13,47,92,0.07)",paddingTop:10}}>
               {/* Header toggle */}
-              <button onClick={function(){setShowComments(function(v){return !v;});}}
+              <button onClick={function(ev){ev.stopPropagation();setShowComments(function(v){return !v;});}}
+
                 style={{background:"none",border:"none",cursor:"pointer",padding:"0 0 8px",
                   display:"flex",alignItems:"center",gap:7,width:"100%",textAlign:"left"}}>
                 <span style={{fontSize:14}}>💬</span>
@@ -7737,7 +7738,7 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
               </button>
 
               {showComments&&(
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div onClick={function(ev){ev.stopPropagation();}} style={{display:"flex",flexDirection:"column",gap:8}}>
                   {/* Lista de comentarios */}
                   {comentarios.map(function(c,i){
                     var ini=(c.autor||"?").split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase().slice(0,2);
