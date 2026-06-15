@@ -7406,6 +7406,77 @@ function useLongPress(onLongPress, ms){
   };
 }
 
+// ── CommentBubble — componente separado para evitar hook dentro de .map() ─────
+function CommentBubble({c, i, entryId, initialUser, onToggleReaccionComment, fmtCom, setPicker}){
+  var ini=(c.autor||"?").split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase().slice(0,2);
+  var esPropio=initialUser&&c.username===initialUser.username;
+  var comLongPress=useLongPress(function(x,y){
+    if(onToggleReaccionComment) setPicker({type:"comment",comId:c.id,x:x,y:y});
+  },480);
+  return(
+    <div key={c.id||i} style={{
+      display:"flex",gap:8,alignItems:"flex-start",
+      flexDirection:esPropio?"row-reverse":"row"
+    }}>
+      {/* Avatar */}
+      <div style={{width:26,height:26,borderRadius:13,flexShrink:0,marginTop:2,
+        background:c.esAdmin?"#0D2F5C":"#C45200",
+        display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:10}}>{ini}</span>
+      </div>
+      {/* Bubble + reactions */}
+      <div style={{display:"flex",flexDirection:"column",gap:3,maxWidth:"80%"}}>
+        <div {...comLongPress}
+          style={{
+            background:esPropio?"#e8f0fb":c.esAdmin?"#0D2F5C":"#FFF0D9",
+            borderRadius:esPropio?"12px 2px 12px 12px":"2px 12px 12px 12px",
+            padding:"7px 10px",
+            cursor:"default",userSelect:"none",WebkitUserSelect:"none",
+          }}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+            <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,
+              color:esPropio?NV:c.esAdmin?"rgba(255,255,255,0.8)":"#C45200"}}>
+              {c.autor.split(" ")[0]}
+            </span>
+            {c.esAdmin&&<span style={{background:"rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.7)",
+              borderRadius:4,padding:"0 5px",fontSize:9,fontWeight:700,fontFamily:"Montserrat"}}>
+              Admin
+            </span>}
+            <span style={{fontSize:9,color:esPropio?"#8a96a8":c.esAdmin?"rgba(255,255,255,0.4)":"#b0bac8",
+              fontFamily:"Montserrat",marginLeft:"auto"}}>{fmtCom(c.ts)}</span>
+          </div>
+          <div style={{fontSize:13,lineHeight:1.4,
+            color:esPropio?NV:c.esAdmin?"#fff":"#5C3A00"}}>{c.texto}</div>
+        </div>
+        {/* Reaction chips + botón */}
+        <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+          <ReactionChips
+            reacciones={c.reacciones||{}}
+            onToggle={function(em){if(onToggleReaccionComment) onToggleReaccionComment(entryId,c.id,em);}}
+            initialUser={initialUser}
+          />
+          {onToggleReaccionComment&&(
+            <button
+              onClick={function(ev){
+                ev.stopPropagation();
+                var r=ev.currentTarget.getBoundingClientRect();
+                setPicker({type:"comment",comId:c.id,x:r.left,y:r.top});
+              }}
+              title="Reaccionar"
+              style={{background:"rgba(13,47,92,0.06)",border:"1px solid rgba(13,47,92,0.10)",
+                borderRadius:16,padding:"1px 6px",cursor:"pointer",fontSize:12,lineHeight:1,
+                color:"#b0bac8",display:"flex",alignItems:"center",gap:2,transition:"all 0.15s"}}
+              onMouseEnter={function(ev){ev.currentTarget.style.background="rgba(13,47,92,0.12)";ev.currentTarget.style.color="#0D2F5C";}}
+              onMouseLeave={function(ev){ev.currentTarget.style.background="rgba(13,47,92,0.06)";ev.currentTarget.style.color="#b0bac8";}}>
+              <span>😊</span><span style={{fontSize:9,fontFamily:"Montserrat",fontWeight:700}}>+</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── EntryCard ─────────────────────────────────────────────────────────────────
 function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSeguimiento, onCerrarPendiente, onAgregarComentario, onToggleReaccionEntry, onToggleReaccionComment}){
   const e=entry;
@@ -7758,72 +7829,17 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
                 <div onClick={function(ev){ev.stopPropagation();}} style={{display:"flex",flexDirection:"column",gap:8}}>
                   {/* Lista de comentarios */}
                   {comentarios.map(function(c,i){
-                    var ini=(c.autor||"?").split(" ").slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase().slice(0,2);
-                    var esPropio=initialUser&&c.username===initialUser.username;
-                    var comLongPress=useLongPress(function(x,y){
-                      if(onToggleReaccionComment) setPicker({type:"comment",comId:c.id,x:x,y:y});
-                    },480);
                     return(
-                      <div key={c.id||i} style={{
-                        display:"flex",gap:8,alignItems:"flex-start",
-                        flexDirection:esPropio?"row-reverse":"row"
-                      }}>
-                        {/* Avatar */}
-                        <div style={{width:26,height:26,borderRadius:13,flexShrink:0,marginTop:2,
-                          background:c.esAdmin?"#0D2F5C":"#C45200",
-                          display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <span style={{color:"#fff",fontFamily:"Montserrat",fontWeight:800,fontSize:10}}>{ini}</span>
-                        </div>
-                        {/* Bubble + reactions */}
-                        <div style={{display:"flex",flexDirection:"column",gap:3,maxWidth:"80%"}}>
-                          <div {...comLongPress}
-                            style={{
-                              background:esPropio?"#e8f0fb":c.esAdmin?"#0D2F5C":"#FFF0D9",
-                              borderRadius:esPropio?"12px 2px 12px 12px":"2px 12px 12px 12px",
-                              padding:"7px 10px",
-                              cursor:"default",userSelect:"none",WebkitUserSelect:"none",
-                            }}>
-                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
-                              <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:10,
-                                color:esPropio?NV:c.esAdmin?"rgba(255,255,255,0.8)":"#C45200"}}>
-                                {c.autor.split(" ")[0]}
-                              </span>
-                              {c.esAdmin&&<span style={{background:"rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.7)",
-                                borderRadius:4,padding:"0 5px",fontSize:9,fontWeight:700,fontFamily:"Montserrat"}}>
-                                Admin
-                              </span>}
-                              <span style={{fontSize:9,color:esPropio?"#8a96a8":c.esAdmin?"rgba(255,255,255,0.4)":"#b0bac8",
-                                fontFamily:"Montserrat",marginLeft:"auto"}}>{fmtCom(c.ts)}</span>
-                            </div>
-                            <div style={{fontSize:13,lineHeight:1.4,
-                              color:esPropio?NV:c.esAdmin?"#fff":"#5C3A00"}}>{c.texto}</div>
-                          </div>
-                          {/* Reaction chips + botón */}
-                          <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-                            <ReactionChips
-                              reacciones={c.reacciones||{}}
-                              onToggle={function(em){if(onToggleReaccionComment) onToggleReaccionComment(e.id,c.id,em);}}
-                              initialUser={initialUser}
-                            />
-                            {onToggleReaccionComment&&(
-                              <button
-                                onClick={function(ev){
-                                  ev.stopPropagation();
-                                  var r=ev.currentTarget.getBoundingClientRect();
-                                  setPicker({type:"comment",comId:c.id,x:r.left,y:r.top});
-                                }}
-                                title="Reaccionar"
-                                style={{background:"rgba(13,47,92,0.06)",border:"1px solid rgba(13,47,92,0.10)",
-                                  borderRadius:16,padding:"1px 6px",cursor:"pointer",fontSize:12,lineHeight:1,
-                                  color:"#b0bac8",display:"flex",alignItems:"center",gap:2,transition:"all 0.15s"}}
-                                onMouseEnter={function(ev){ev.currentTarget.style.background="rgba(13,47,92,0.12)";ev.currentTarget.style.color="#0D2F5C";}}
-                                onMouseLeave={function(ev){ev.currentTarget.style.background="rgba(13,47,92,0.06)";ev.currentTarget.style.color="#b0bac8";}}>
-                                <span>😊</span><span style={{fontSize:9,fontFamily:"Montserrat",fontWeight:700}}>+</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <CommentBubble
+                        key={c.id||i}
+                        c={c}
+                        i={i}
+                        entryId={e.id}
+                        initialUser={initialUser}
+                        onToggleReaccionComment={onToggleReaccionComment}
+                        fmtCom={fmtCom}
+                        setPicker={setPicker}
+                      />
                     );
                   })}
 
