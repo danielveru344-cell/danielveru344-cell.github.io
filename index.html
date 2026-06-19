@@ -2826,15 +2826,15 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
       setValidErr("La cantidad debe ser mayor a 0.");
       return;
     }
-    if(!f.equipo_name||!f.equipo_name.trim()){
+    if(f.tipo_mtto!=="correctivo"&&(!f.equipo_name||!f.equipo_name.trim())){
       setValidErr("Selecciona el equipo o máquina.");
       return;
     }
-    if(tipoSolicitud==="locativo"&&(!f.equipo_name||!f.equipo_name.trim())){
+    if(f.tipo_mtto!=="correctivo"&&tipoSolicitud==="locativo"&&(!f.equipo_name||!f.equipo_name.trim())){
       setValidErr("Selecciona el área o ubicación.");
       return;
     }
-    if(tipoSolicitud==="apoyo_critico"&&(!f.equipo_name||!f.equipo_name.trim())){
+    if(f.tipo_mtto!=="correctivo"&&tipoSolicitud==="apoyo_critico"&&(!f.equipo_name||!f.equipo_name.trim())){
       setValidErr("Selecciona el equipo o sistema crítico.");
       return;
     }
@@ -2991,6 +2991,14 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
             </AlmField>
           </div>
 
+          {f.tipo_mtto==="correctivo"&&(
+            <div style={{fontSize:12,color:"#8a96a8",fontStyle:"italic",
+              background:"var(--light)",borderRadius:8,padding:"8px 12px",
+              display:"flex",alignItems:"center",gap:6}}>
+              🔒 No requiere equipo/área en correctivo — solo diligencia el N° de Solicitud abajo
+            </div>
+          )}
+          <div style={f.tipo_mtto==="correctivo"?{opacity:.45,pointerEvents:"none",filter:"grayscale(.3)"}:undefined}>
           {tipoSolicitud==="repuesto"?(
             <AlmField label="Equipo / Máquina *">
               {/* Si ya hay equipo seleccionado, mostrar chip con X para limpiar */}
@@ -3171,13 +3179,21 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
               )}
             </AlmField>
           )}
+          </div>
 
           <AlmField label="Tipo de mantenimiento *">
             <div style={{display:"flex",gap:8}}>
               {["preventivo","correctivo"].map(function(v){
                 var act = f.tipo_mtto===v;
                 return(
-                  <button key={v} type="button" onClick={function(){s("tipo_mtto",v); s("nst","");}}
+                  <button key={v} type="button" onClick={function(){
+                      s("tipo_mtto",v); s("nst","");
+                      if(v==="correctivo"){
+                        s("equipo_name","");
+                        setEquipoSel("");setEqQ("");
+                        setAreaQ("");setShowAreaDrop(false);
+                      }
+                    }}
                     style={{flex:1,padding:"11px 8px",border:"1.5px solid",borderRadius:8,cursor:"pointer",
                       borderColor:act?(v==="preventivo"?"#1A9647":"#C0001A"):"var(--border)",
                       background:act?(v==="preventivo"?"#e8f5e9":"#FFF0F0"):"#fff",
