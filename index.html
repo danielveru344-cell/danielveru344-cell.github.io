@@ -5850,6 +5850,7 @@ function isoDay(iso){
 function nowT(){const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes());}
 function pad(n){return String(n).padStart(2,"0");}
 function todayS(){return new Date().toLocaleDateString("en-CA",{timeZone:"America/Bogota"});}
+function ayerS(){const d=new Date(Date.now()-864e5);return d.toLocaleDateString("en-CA",{timeZone:"America/Bogota"});}
 
 const TURNOS_DEF=["Turno A (6:00-14:00)","Turno B (14:00-22:00)","Turno C (22:00-6:00)"];
 const KS={e:"btk_v1",eq:"btk_eq",tec:"btk_tec",p:"btk_pw",met:"btk_met",loc:"btk_loc",tur:"btk_tur"};
@@ -6786,6 +6787,23 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
     return turnosList[0];
   }
 
+  // Si el turno activo cruza medianoche (ej. 22:00-6:00) y todavía estamos dentro
+  // de esa franja de madrugada, permitimos elegir "ayer" como fecha del reporte,
+  // para poder registrar lo hecho antes de medianoche sin que quede como si fuera hoy.
+  const permiteAyer=React.useMemo(function(){
+    const cm=new Date().getHours()*60+new Date().getMinutes();
+    for(let i=0;i<turnosList.length;i++){
+      const m=turnosList[i].match(/(\d+):(\d+)\s*[-–]\s*(\d+):(\d+)/);
+      if(m){
+        const s=parseInt(m[1])*60+parseInt(m[2]);
+        const e=parseInt(m[3])*60+parseInt(m[4]);
+        if(e<s&&cm<e) return true; // turno nocturno y estamos en la madrugada (ya pasó medianoche)
+      }
+    }
+    return false;
+  },[turnosList]);
+  const fechaMin=permiteAyer?ayerS():todayS();
+
   const tecMap={}; tecs.forEach(function(t){tecMap[t.code]=t;});
 
   // El técnico ES el usuario logueado — buscar su registro solo para cargo/áreas
@@ -6949,8 +6967,9 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
           <div style={{flex:1,padding:"12px 14px",borderRight:"1px solid rgba(13,47,92,0.08)"}}>
             <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",letterSpacing:.5,marginBottom:5}}>FECHA</div>
             <input type="date" className="inp" value={fecha} style={{border:"none",padding:0,background:"transparent",fontSize:14,fontWeight:600,color:NV}}
-              min={todayS()} max={todayS()}
+              min={fechaMin} max={todayS()}
               onChange={function(e){setFecha(e.target.value);}}/>
+            {permiteAyer&&fecha===todayS()&&<div style={{fontSize:10,color:"#8a96a8",marginTop:3,fontFamily:"Montserrat"}}>🌙 Turno nocturno: puedes seleccionar ayer si tu actividad fue antes de medianoche</div>}
           </div>
           <div style={{flex:1,padding:"12px 14px",borderRight:"1px solid rgba(13,47,92,0.08)"}}>
             <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",letterSpacing:.5,marginBottom:5}}>TURNO</div>
