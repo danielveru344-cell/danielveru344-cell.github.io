@@ -5286,7 +5286,10 @@ function EquiposTab({equipos,items,onEdit}){
       ):(
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}} className="eq-grid">
           {filtered.map(eq=>{
-            const spares=items.filter(i=>eq.spares?.includes(i.id));
+            const spares=items.filter(i=>
+              eq.spares?.includes(i.id) ||
+              (i.equipos_asociados||[]).some(a=>(a&&a.id?a.id:a)===eq.id)
+            );
             const alerts=spares.filter(i=>i.quantity<=i.minStock);
             return(
               <div key={eq.id} className="eq-card" onClick={()=>onEdit&&onEdit(eq)} style={{cursor:onEdit?"pointer":"default"}}>
