@@ -2180,7 +2180,7 @@ const CONFIRM_MSG = {
 
 const TRANSICIONES = {
   pendiente:         ["solicitada_compra","entregada","entregada_almacen","rechazada"],
-  solicitada_compra: ["en_cotizacion"],
+  solicitada_compra: ["en_cotizacion","rechazada"],
   en_cotizacion:     ["entregada_almacen"],
   entregada_almacen: ["entregada"],
   entregada:         [],
@@ -2788,6 +2788,7 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
   const [tipoSolicitud,setTipoSolicitud]=useState("repuesto"); // "repuesto" | "locativo" | "apoyo_critico"
   const [equipoSel,setEquipoSel]=useState("");
   const [eqQ,setEqQ]=useState("");
+  const [eqFocused,setEqFocused]=useState(false);
   const [areaQ,setAreaQ]=useState("");
   const [showAreaDrop,setShowAreaDrop]=useState(false);
   const [itemSearch,setItemSearch]=useState("");
@@ -3015,48 +3016,70 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
                 <div style={{position:"relative"}}>
                   <input className="ios-input" value={eqQ}
                     onChange={e=>{setEqQ(e.target.value);setEquipoSel("");s("equipo_name","");}}
+                    onFocus={()=>setEqFocused(true)}
+                    onBlur={()=>setTimeout(()=>setEqFocused(false),180)}
                     placeholder="🔍 Escribe para buscar equipo…"
                     style={{width:"100%"}}/>
-                  {eqQ.length>0&&(()=>{
-                    const hits=(equipos||[]).filter(eq=>
+                  {(()=>{
+                    const itemSel=items.find(i=>i.id===f.item_id);
+                    const asociados=itemSel&&itemSel.equipos_asociados&&itemSel.equipos_asociados.length>0
+                      ? itemSel.equipos_asociados : null;
+                    const dropdownOpen=eqQ.length>0||(asociados&&eqFocused);
+                    if(!dropdownOpen) return null;
+                    const equiposBase=asociados
+                      ? (equipos||[]).filter(eq=>asociados.includes(eq.id))
+                      : (equipos||[]);
+                    const hits=equiposBase.filter(eq=>
                       [eq.name,eq.code,eq.location].filter(Boolean)
                         .some(x=>x.toLowerCase().includes(eqQ.toLowerCase()))
                     );
-                    if(!hits.length) return(
-                      <div style={{padding:"8px 12px",fontSize:12,color:"#8a96a8",fontStyle:"italic",
-                        background:"#fff",border:"1.5px solid rgba(13,47,92,0.12)",borderRadius:9,marginTop:4}}>
-                        Sin coincidencias — <span style={{color:"#0D2F5C",fontStyle:"normal",cursor:"pointer",fontWeight:600}}
-                          onClick={()=>{setEquipoSel("otro");s("equipo_name",eqQ);}}>
-                          usar "{eqQ}" como texto libre
-                        </span>
-                      </div>
-                    );
                     return(
-                      <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:100,
-                        background:"#fff",border:"1.5px solid rgba(13,47,92,0.15)",borderRadius:10,
-                        boxShadow:"0 8px 24px rgba(13,47,92,0.13)",maxHeight:230,overflowY:"auto"}}>
-                        {hits.map(eq=>(
-                          <div key={eq.id} onClick={()=>{
-                            setEquipoSel(eq.id);
-                            s("equipo_name",eq.name+(eq.code?" ("+eq.code+")":""));
-                            setEqQ(eq.name+(eq.code?" ("+eq.code+")":""));
-                          }} style={{padding:"10px 14px",cursor:"pointer",
-                            borderBottom:"0.5px solid rgba(13,47,92,0.07)",
-                            display:"flex",alignItems:"center",gap:10,fontSize:13,color:"#0D2F5C"}}
-                            onMouseEnter={e=>e.currentTarget.style.background="#f4f7fd"}
-                            onMouseLeave={e=>e.currentTarget.style.background=""}>
-                            <span style={{fontSize:18,flexShrink:0}}>{eq.icon||"🔧"}</span>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
-                              {(eq.code||eq.location)&&(
-                                <div style={{fontSize:11,color:"#8a96a8",marginTop:1}}>
-                                  {[eq.code,eq.location].filter(Boolean).join(" · ")}
-                                </div>
-                              )}
-                            </div>
+                      <React.Fragment>
+                        {asociados&&(
+                          <div style={{fontSize:11,color:"#8a96a8",marginTop:4,fontStyle:"italic"}}>
+                            Solo se muestran los equipos asociados a "{itemSel.name}"
                           </div>
-                        ))}
-                      </div>
+                        )}
+                        {!hits.length?(
+                          <div style={{padding:"8px 12px",fontSize:12,color:"#8a96a8",fontStyle:"italic",
+                            background:"#fff",border:"1.5px solid rgba(13,47,92,0.12)",borderRadius:9,marginTop:4}}>
+                            {asociados?(
+                              "Sin coincidencias entre los equipos asociados a este repuesto"
+                            ):(
+                              <React.Fragment>Sin coincidencias — <span style={{color:"#0D2F5C",fontStyle:"normal",cursor:"pointer",fontWeight:600}}
+                                onClick={()=>{setEquipoSel("otro");s("equipo_name",eqQ);}}>
+                                usar "{eqQ}" como texto libre
+                              </span></React.Fragment>
+                            )}
+                          </div>
+                        ):(
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:100,
+                            background:"#fff",border:"1.5px solid rgba(13,47,92,0.15)",borderRadius:10,
+                            boxShadow:"0 8px 24px rgba(13,47,92,0.13)",maxHeight:230,overflowY:"auto"}}>
+                            {hits.map(eq=>(
+                              <div key={eq.id} onClick={()=>{
+                                setEquipoSel(eq.id);
+                                s("equipo_name",eq.name+(eq.code?" ("+eq.code+")":""));
+                                setEqQ(eq.name+(eq.code?" ("+eq.code+")":""));
+                              }} style={{padding:"10px 14px",cursor:"pointer",
+                                borderBottom:"0.5px solid rgba(13,47,92,0.07)",
+                                display:"flex",alignItems:"center",gap:10,fontSize:13,color:"#0D2F5C"}}
+                                onMouseEnter={e=>e.currentTarget.style.background="#f4f7fd"}
+                                onMouseLeave={e=>e.currentTarget.style.background=""}>
+                                <span style={{fontSize:18,flexShrink:0}}>{eq.icon||"🔧"}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
+                                  {(eq.code||eq.location)&&(
+                                    <div style={{fontSize:11,color:"#8a96a8",marginTop:1}}>
+                                      {[eq.code,eq.location].filter(Boolean).join(" · ")}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </React.Fragment>
                     );
                   })()}
                 </div>
@@ -3131,48 +3154,70 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
                 <div style={{position:"relative"}}>
                   <input className="ios-input" value={eqQ}
                     onChange={e=>{setEqQ(e.target.value);setEquipoSel("");s("equipo_name","");}}
+                    onFocus={()=>setEqFocused(true)}
+                    onBlur={()=>setTimeout(()=>setEqFocused(false),180)}
                     placeholder="🔍 Escribe para buscar equipo…"
                     style={{width:"100%"}}/>
-                  {eqQ.length>0&&(()=>{
-                    const hits=(equipos||[]).filter(eq=>
+                  {(()=>{
+                    const itemSel=items.find(i=>i.id===f.item_id);
+                    const asociados=itemSel&&itemSel.equipos_asociados&&itemSel.equipos_asociados.length>0
+                      ? itemSel.equipos_asociados : null;
+                    const dropdownOpen=eqQ.length>0||(asociados&&eqFocused);
+                    if(!dropdownOpen) return null;
+                    const equiposBase=asociados
+                      ? (equipos||[]).filter(eq=>asociados.includes(eq.id))
+                      : (equipos||[]);
+                    const hits=equiposBase.filter(eq=>
                       [eq.name,eq.code,eq.location].filter(Boolean)
                         .some(x=>x.toLowerCase().includes(eqQ.toLowerCase()))
                     );
-                    if(!hits.length) return(
-                      <div style={{padding:"8px 12px",fontSize:12,color:"#8a96a8",fontStyle:"italic",
-                        background:"#fff",border:"1.5px solid rgba(192,0,26,0.15)",borderRadius:9,marginTop:4}}>
-                        Sin coincidencias — <span style={{color:"#C0001A",fontStyle:"normal",cursor:"pointer",fontWeight:600}}
-                          onClick={()=>{setEquipoSel("otro");s("equipo_name",eqQ);}}>
-                          usar "{eqQ}" como texto libre
-                        </span>
-                      </div>
-                    );
                     return(
-                      <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:100,
-                        background:"#fff",border:"1.5px solid rgba(13,47,92,0.15)",borderRadius:10,
-                        boxShadow:"0 8px 24px rgba(13,47,92,0.13)",maxHeight:230,overflowY:"auto"}}>
-                        {hits.map(eq=>(
-                          <div key={eq.id} onClick={()=>{
-                            setEquipoSel(eq.id);
-                            s("equipo_name",eq.name+(eq.code?" ("+eq.code+")":""));
-                            setEqQ(eq.name+(eq.code?" ("+eq.code+")":""));
-                          }} style={{padding:"10px 14px",cursor:"pointer",
-                            borderBottom:"0.5px solid rgba(13,47,92,0.07)",
-                            display:"flex",alignItems:"center",gap:10,fontSize:13,color:"#0D2F5C"}}
-                            onMouseEnter={e=>e.currentTarget.style.background="#f4f7fd"}
-                            onMouseLeave={e=>e.currentTarget.style.background=""}>
-                            <span style={{fontSize:18,flexShrink:0}}>{eq.icon||"🔧"}</span>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
-                              {(eq.code||eq.location)&&(
-                                <div style={{fontSize:11,color:"#8a96a8",marginTop:1}}>
-                                  {[eq.code,eq.location].filter(Boolean).join(" · ")}
-                                </div>
-                              )}
-                            </div>
+                      <React.Fragment>
+                        {asociados&&(
+                          <div style={{fontSize:11,color:"#8a96a8",marginTop:4,fontStyle:"italic"}}>
+                            Solo se muestran los equipos asociados a "{itemSel.name}"
                           </div>
-                        ))}
-                      </div>
+                        )}
+                        {!hits.length?(
+                          <div style={{padding:"8px 12px",fontSize:12,color:"#8a96a8",fontStyle:"italic",
+                            background:"#fff",border:"1.5px solid rgba(192,0,26,0.15)",borderRadius:9,marginTop:4}}>
+                            {asociados?(
+                              "Sin coincidencias entre los equipos asociados a este repuesto"
+                            ):(
+                              <React.Fragment>Sin coincidencias — <span style={{color:"#C0001A",fontStyle:"normal",cursor:"pointer",fontWeight:600}}
+                                onClick={()=>{setEquipoSel("otro");s("equipo_name",eqQ);}}>
+                                usar "{eqQ}" como texto libre
+                              </span></React.Fragment>
+                            )}
+                          </div>
+                        ):(
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:100,
+                            background:"#fff",border:"1.5px solid rgba(13,47,92,0.15)",borderRadius:10,
+                            boxShadow:"0 8px 24px rgba(13,47,92,0.13)",maxHeight:230,overflowY:"auto"}}>
+                            {hits.map(eq=>(
+                              <div key={eq.id} onClick={()=>{
+                                setEquipoSel(eq.id);
+                                s("equipo_name",eq.name+(eq.code?" ("+eq.code+")":""));
+                                setEqQ(eq.name+(eq.code?" ("+eq.code+")":""));
+                              }} style={{padding:"10px 14px",cursor:"pointer",
+                                borderBottom:"0.5px solid rgba(13,47,92,0.07)",
+                                display:"flex",alignItems:"center",gap:10,fontSize:13,color:"#0D2F5C"}}
+                                onMouseEnter={e=>e.currentTarget.style.background="#f4f7fd"}
+                                onMouseLeave={e=>e.currentTarget.style.background=""}>
+                                <span style={{fontSize:18,flexShrink:0}}>{eq.icon||"🔧"}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{eq.name}</div>
+                                  {(eq.code||eq.location)&&(
+                                    <div style={{fontSize:11,color:"#8a96a8",marginTop:1}}>
+                                      {[eq.code,eq.location].filter(Boolean).join(" · ")}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </React.Fragment>
                     );
                   })()}
                 </div>
