@@ -5268,6 +5268,111 @@ function EditModal({item,onClose,onSave,onDelete}){
   );
 }
 
+function EqSparesPanel({spares,alerts,open}){
+  return(
+    <div style={{
+      maxHeight:open?320:0,opacity:open?1:0,
+      transition:"max-height 0.28s cubic-bezier(.4,0,.2,1),opacity 0.2s",
+      overflow:"hidden",
+    }}>
+      <div style={{
+        marginTop:2,paddingTop:10,borderTop:"0.5px solid rgba(13,47,92,0.08)",
+        maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:6,
+        paddingRight:2,
+      }}>
+        {spares.map(s=>{
+          const low=s.quantity<=s.minStock;
+          return(
+            <div key={s.id} style={{
+              display:"flex",alignItems:"center",gap:8,
+              background:low?"#FFF4F4":"#F7FAFF",
+              border:`1px solid ${low?"rgba(192,0,26,0.14)":"rgba(13,47,92,0.08)"}`,
+              borderRadius:9,padding:"7px 10px",
+            }}>
+              <span style={{
+                width:7,height:7,borderRadius:"50%",flexShrink:0,
+                background:low?"#C0001A":"#2FA84F",
+              }}/>
+              <span style={{
+                flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:"#1C1C1E",
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+              }} title={s.name}>{s.name}</span>
+              <span style={{
+                fontFamily:"Montserrat,sans-serif",fontSize:11,fontWeight:800,flexShrink:0,
+                color:low?"#C0001A":"#0D2F5C",
+              }}>{s.quantity}<span style={{color:"#B0BAC8",fontWeight:600}}>/{s.minStock}</span></span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function EqCard({eq,items,onEdit}){
+  const [open,setOpen]=useState(false);
+  const spares=items.filter(i=>
+    eq.spares?.includes(i.id) ||
+    (i.equipos_asociados||[]).some(a=>(a&&a.id?a.id:a)===eq.id)
+  );
+  const alerts=spares.filter(i=>i.quantity<=i.minStock);
+
+  return(
+    <div className="eq-card" style={{cursor:"default",display:"flex",flexDirection:"column"}}>
+      <div onClick={()=>onEdit&&onEdit(eq)} style={{cursor:onEdit?"pointer":"default"}}>
+        {eq.image?(
+          <img src={eq.image} alt={eq.name} style={{width:"100%",height:160,objectFit:"cover",display:"block"}}/>
+        ):(
+          <div className="eq-img-placeholder">{eq.icon||"🔧"}</div>
+        )}
+      </div>
+      <div style={{padding:"14px 16px 16px",display:"flex",flexDirection:"column",flex:1}}>
+        <div onClick={()=>onEdit&&onEdit(eq)} style={{cursor:onEdit?"pointer":"default"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:16,lineHeight:1.2}}>{eq.name}</div>
+              {eq.code&&<div style={{fontSize:12,color:"#0D2F5C",fontWeight:600,marginTop:3}}>{eq.code}</div>}
+            </div>
+            {alerts.length>0&&(
+              <span className="badge badge-orange" style={{flexShrink:0}}>⚠️ {alerts.length}</span>
+            )}
+          </div>
+          {eq.location&&<div style={{fontSize:12,color:"#8E8E93",marginTop:4}}>📍 {eq.location}</div>}
+        </div>
+
+        {spares.length>0&&(
+          <div style={{marginTop:10}}>
+            <div onClick={e=>{e.stopPropagation();setOpen(o=>!o);}}
+              style={{
+                display:"flex",alignItems:"center",justifyContent:"space-between",
+                cursor:"pointer",paddingTop:10,borderTop:"0.5px solid rgba(60,60,67,0.08)",
+                userSelect:"none",
+              }}>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <span style={{fontSize:11,color:"#8E8E93",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px"}}>Repuestos</span>
+                <span style={{
+                  background:alerts.length>0?"#FFDEDE":"#D9ECFF",
+                  color:alerts.length>0?"#C0001A":"#004A9E",
+                  borderRadius:20,padding:"1px 8px",fontSize:11,fontWeight:800,
+                  fontFamily:"Montserrat,sans-serif",
+                }}>{spares.length}</span>
+              </div>
+              <span style={{
+                display:"flex",alignItems:"center",justifyContent:"center",
+                width:22,height:22,borderRadius:"50%",background:"rgba(13,47,92,0.06)",
+                color:"#0D2F5C",fontSize:11,
+                transition:"transform 0.25s",transform:open?"rotate(180deg)":"none",
+                flexShrink:0,
+              }}>▾</span>
+            </div>
+            <EqSparesPanel spares={spares} alerts={alerts} open={open}/>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function EquiposTab({equipos,items,onEdit}){
   const [search,setSearch]=useState("");
   const filtered=equipos.filter(e=>search===""||e.name.toLowerCase().includes(search.toLowerCase())||e.code?.toLowerCase().includes(search.toLowerCase()));
@@ -5285,49 +5390,9 @@ function EquiposTab({equipos,items,onEdit}){
         </div>
       ):(
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}} className="eq-grid">
-          {filtered.map(eq=>{
-            const spares=items.filter(i=>
-              eq.spares?.includes(i.id) ||
-              (i.equipos_asociados||[]).some(a=>(a&&a.id?a.id:a)===eq.id)
-            );
-            const alerts=spares.filter(i=>i.quantity<=i.minStock);
-            return(
-              <div key={eq.id} className="eq-card" onClick={()=>onEdit&&onEdit(eq)} style={{cursor:onEdit?"pointer":"default"}}>
-                {eq.image?(
-                  <img src={eq.image} alt={eq.name} style={{width:"100%",height:160,objectFit:"cover",display:"block"}}/>
-                ):(
-                  <div className="eq-img-placeholder">{eq.icon||"🔧"}</div>
-                )}
-                <div style={{padding:"14px 16px 16px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                    <div>
-                      <div style={{fontWeight:700,fontSize:16,lineHeight:1.2}}>{eq.name}</div>
-                      {eq.code&&<div style={{fontSize:12,color:"#0D2F5C",fontWeight:600,marginTop:3}}>{eq.code}</div>}
-                    </div>
-                    {alerts.length>0&&(
-                      <span className="badge badge-orange" style={{flexShrink:0}}>⚠️ {alerts.length}</span>
-                    )}
-                  </div>
-                  {eq.location&&<div style={{fontSize:12,color:"#8E8E93",marginTop:4}}>📍 {eq.location}</div>}
-                  {spares.length>0&&(
-                    <div style={{marginTop:10,paddingTop:10,borderTop:"0.5px solid rgba(60,60,67,0.08)"}}>
-                      <div style={{fontSize:11,color:"#8E8E93",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:6}}>Repuestos asociados</div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                        {spares.slice(0,3).map(s=>(
-                          <span key={s.id} style={{
-                            background:s.quantity<=s.minStock?"#FFDEDE":"#D9ECFF",
-                            color:s.quantity<=s.minStock?"#C0001A":"#004A9E",
-                            borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:600,
-                          }}>{s.name}</span>
-                        ))}
-                        {spares.length>3&&<span style={{fontSize:11,color:"#8E8E93",padding:"3px 4px"}}>+{spares.length-3} más</span>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {filtered.map(eq=>(
+            <EqCard key={eq.id} eq={eq} items={items} onEdit={onEdit}/>
+          ))}
         </div>
       )}
       <div style={{textAlign:"center",fontSize:13,color:"#C7C7CC"}}>{filtered.length} equipo{filtered.length!==1?"s":""}</div>
