@@ -3027,7 +3027,7 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
                     const dropdownOpen=eqQ.length>0||(asociados&&eqFocused);
                     if(!dropdownOpen) return null;
                     const equiposBase=asociados
-                      ? (equipos||[]).filter(eq=>asociados.includes(eq.id))
+                      ? (equipos||[]).filter(eq=>asociados.some(a=>(a&&a.id?a.id:a)===eq.id))
                       : (equipos||[]);
                     const hits=equiposBase.filter(eq=>
                       [eq.name,eq.code,eq.location].filter(Boolean)
@@ -3165,7 +3165,7 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
                     const dropdownOpen=eqQ.length>0||(asociados&&eqFocused);
                     if(!dropdownOpen) return null;
                     const equiposBase=asociados
-                      ? (equipos||[]).filter(eq=>asociados.includes(eq.id))
+                      ? (equipos||[]).filter(eq=>asociados.some(a=>(a&&a.id?a.id:a)===eq.id))
                       : (equipos||[]);
                     const hits=equiposBase.filter(eq=>
                       [eq.name,eq.code,eq.location].filter(Boolean)
