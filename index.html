@@ -1241,6 +1241,7 @@ function AlmacenApp({onBack, initialUser}){
   const [movs,setMovs]=useState([]);
   const [historial,setHistorial]=useState([]);
   const [equipos,setEquipos]=useState([]);
+  const [cronograma,setCronograma]=useState([]);
   const [proveedoresPorItem,setProveedoresPorItem]=useState({});
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("Todas");
@@ -1494,6 +1495,10 @@ function AlmacenApp({onBack, initialUser}){
         description:r.description, icon:r.icon, image:r.image,
         spares:r.spares||[]
       }))); });
+    sb.from("cronograma_pm").select("*")
+      .then(({data})=>{ if(data) setCronograma(data.map(r=>({
+        codigo:r.codigo, descripcion:r.descripcion, meses:r.meses||[], anio:r.anio
+      }))); });
     sb.from("movimientos").select("*").order("created_at",{ascending:false}).limit(100)
       .then(({data})=>{ if(data) setMovs(data.map(r=>({
         id:r.id, itemId:r.item_id, itemCode:r.item_code, itemName:r.item_name,
@@ -1517,6 +1522,13 @@ function AlmacenApp({onBack, initialUser}){
   };
 
   useEffect(()=>{ if(currentUser) fetchAll(); },[currentUser]);
+
+  const reloadCronograma = async () => {
+    const {data} = await sb.from("cronograma_pm").select("*");
+    if(data) setCronograma(data.map(r=>({
+      codigo:r.codigo, descripcion:r.descripcion, meses:r.meses||[], anio:r.anio
+    })));
+  };
 
   // ── Inicialización: sincronizar usuarios admin ───────────────────────────────
   useEffect(()=>{
@@ -1893,7 +1905,7 @@ function AlmacenApp({onBack, initialUser}){
         )}
 
         {/* PANEL */}
-        {tab==="panel" && <Panel items={items} movs={sorted} alerts={alerts} equipos={equipos} setTab={setTab} setOnlyAlerts={setOnlyAlerts} currentUser={currentUser} flash={flash} reloadHistorial={reloadHistorial}/>}
+        {tab==="panel" && <Panel items={items} movs={sorted} alerts={alerts} equipos={equipos} cronograma={cronograma} setTab={setTab} setOnlyAlerts={setOnlyAlerts} currentUser={currentUser} flash={flash} reloadHistorial={reloadHistorial}/>}
 
         {/* INVENTARIO */}
         {tab==="inventario" && (
@@ -1995,7 +2007,7 @@ function AlmacenApp({onBack, initialUser}){
         {tab==="historial"&&<Historial/>}
 
         {/* EQUIPOS */}
-        {tab==="equipos"&&<EquiposTab equipos={equipos} items={items} onEdit={currentUser.role!=="solicitante"?eq=>{setSel(eq);setModal("editEq");}:null}/>}
+        {tab==="equipos"&&<EquiposTab equipos={equipos} items={items} cronograma={cronograma} flash={flash} onImported={reloadCronograma} canImport={currentUser.role!=="solicitante"} onEdit={currentUser.role!=="solicitante"?eq=>{setSel(eq);setModal("editEq");}:null}/>}
 
         {/* USUARIOS */}
         {tab==="usuarios"&&currentUser.role==="admin"&&<UsuariosTab currentUserId={currentUser.id} currentUsername={currentUser.username} flash={flash}/>}
@@ -4303,8 +4315,17 @@ function AnalisisTab({ items, equipos }) {
   );
 }
 
-function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash,reloadHistorial}){
+function Panel({items,movs,alerts,equipos,cronograma,setTab,setOnlyAlerts,currentUser,flash,reloadHistorial}){
   const total=items.reduce((s,i)=>s+i.quantity,0);
+
+  const equiposCriticosPM = React.useMemo(()=>{
+    return (equipos||[]).map(eq=>{
+      const spares=items.filter(i=>eq.spares?.includes(i.id)||(i.equipos_asociados||[]).some(a=>(a&&a.id?a.id:a)===eq.id));
+      const bajos=spares.filter(i=>i.quantity<=i.minStock);
+      const pm=getProximoPM(eq.code,cronograma);
+      return {eq,bajos,pm};
+    }).filter(r=>r.pm&&r.pm.urgente&&r.bajos.length>0);
+  },[equipos,items,cronograma]);
 
   // Últimos movimientos — fetch propio para estar siempre actualizado
   const [recent,setRecent]=React.useState([]);
@@ -4387,7 +4408,7 @@ function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash
     return ()=>window.removeEventListener("historial-updated",handler);
   },[]);
 
-  const totalAlertas = alerts.length + solisPend.length + solisCompra.length;
+  const totalAlertas = alerts.length + solisPend.length + solisCompra.length + equiposCriticosPM.length;
 
   // Auto-seleccionar tab con más urgencia si el actual está vacío
   React.useEffect(()=>{
@@ -4441,6 +4462,7 @@ function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash
     {key:"stock",    label:"Stock bajo",  icon:"🟠", count:alerts.length,       color:"#7A5200", bg:"#FFF0D9", activeBg:"#E8A838"},
     {key:"pendientes",label:"Pendientes", icon:"📨", count:solisPend.length,    color:"#6B3A1F", bg:"#FAEBD7", activeBg:"#C47B50"},
     {key:"compra",   label:"Para compra", icon:"🛒", count:solisCompra.length,  color:"#1A3D6B", bg:"#E8F0FB", activeBg:"#4A7AB5"},
+    {key:"pm",       label:"Preventivos", icon:"🛠️", count:equiposCriticosPM.length, color:"#8a3a00", bg:"#FFE8D9", activeBg:"#C45200"},
   ];
 
   return(
@@ -4692,6 +4714,52 @@ function Panel({items,movs,alerts,equipos,setTab,setOnlyAlerts,currentUser,flash
               )
             )}
 
+            {/* ── Preventivos con repuesto bajo ── */}
+            {alertTab==="pm"&&(
+              equiposCriticosPM.length===0?(
+                <div style={{padding:28,textAlign:"center"}}>
+                  <div style={{fontSize:28,marginBottom:6}}>✅</div>
+                  <div style={{color:"#34C759",fontWeight:700,fontSize:15}}>Sin cruces críticos</div>
+                  <div style={{color:"#8E8E93",fontSize:13,marginTop:4}}>
+                    {cronograma&&cronograma.length>0
+                      ?"Ningún preventivo próximo depende de un repuesto bajo de stock"
+                      :"Importa el cronograma F-MAN-012 desde la pestaña Equipos para activar esta alerta"}
+                  </div>
+                </div>
+              ):(
+                <>
+                  {equiposCriticosPM.map(({eq,bajos,pm})=>(
+                    <div key={eq.id} className="list-row" style={{cursor:"pointer",alignItems:"flex-start"}} onClick={()=>setTab("equipos")}>
+                      <div style={{display:"flex",alignItems:"center",gap:12,minWidth:0}}>
+                        <div style={{width:40,height:40,borderRadius:10,background:"#FFE8D9",
+                          display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>
+                          🛠️
+                        </div>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontWeight:600,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:190}}>
+                            {eq.name}{eq.code?" · "+eq.code:""}
+                          </div>
+                          <div style={{fontSize:12,color:"#8E8E93",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:190}}>
+                            {bajos.length} repuesto{bajos.length!==1?"s":""} bajo{bajos.length!==1?"s":""}: {bajos.map(b=>b.name).join(", ")}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontWeight:700,fontSize:13,color:"#C45200",textTransform:"capitalize"}}>
+                          {pm.esEsteMes?"Este mes":"Próx. mes"}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{padding:"12px 16px",borderTop:"0.5px solid rgba(13,47,92,0.08)"}}>
+                    <button className="ios-btn ios-btn-blue" style={{width:"100%",fontSize:12,padding:"10px"}}
+                      onClick={()=>setTab("equipos")}>
+                      Ver equipos →
+                    </button>
+                  </div>
+                </>
+              )
+            )}
 
           </div>
         </div>
@@ -5268,6 +5336,24 @@ function EditModal({item,onClose,onSave,onDelete}){
   );
 }
 
+const MESES_LARGO=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+
+function getProximoPM(codigo,cronograma){
+  if(!codigo||!cronograma||cronograma.length===0) return null;
+  const row=cronograma.find(c=>c.codigo&&c.codigo.trim().toUpperCase()===codigo.trim().toUpperCase());
+  if(!row||!row.meses||row.meses.length===0) return null;
+  const meses=[...row.meses].sort((a,b)=>a-b);
+  const hoy=new Date();
+  const mesActual=hoy.getMonth()+1, anioActual=hoy.getFullYear();
+  let mes=meses.find(m=>m>=mesActual);
+  let anio=anioActual;
+  if(mes===undefined){ mes=meses[0]; anio=anioActual+1; }
+  const mesSiguiente=mesActual===12?1:mesActual+1;
+  const esEsteMes=mes===mesActual&&anio===anioActual;
+  const esProximoMes=mes===mesSiguiente&&(mesActual===12?anio===anioActual+1:anio===anioActual);
+  return {mes,anio,nombreMes:MESES_LARGO[mes-1],esEsteMes,esProximoMes,urgente:esEsteMes||esProximoMes};
+}
+
 function EqSparesPanel({spares,alerts,open}){
   return(
     <div style={{
@@ -5309,13 +5395,15 @@ function EqSparesPanel({spares,alerts,open}){
   );
 }
 
-function EqCard({eq,items,onEdit}){
+function EqCard({eq,items,cronograma,onEdit}){
   const [open,setOpen]=useState(false);
   const spares=items.filter(i=>
     eq.spares?.includes(i.id) ||
     (i.equipos_asociados||[]).some(a=>(a&&a.id?a.id:a)===eq.id)
   );
   const alerts=spares.filter(i=>i.quantity<=i.minStock);
+  const proximoPM=getProximoPM(eq.code,cronograma);
+  const crossAlert=proximoPM&&proximoPM.urgente&&alerts.length>0;
 
   return(
     <div className="eq-card" style={{cursor:"default",display:"flex",flexDirection:"column"}}>
@@ -5338,7 +5426,32 @@ function EqCard({eq,items,onEdit}){
             )}
           </div>
           {eq.location&&<div style={{fontSize:12,color:"#8E8E93",marginTop:4}}>📍 {eq.location}</div>}
+          {proximoPM&&(
+            <div style={{
+              display:"flex",alignItems:"center",gap:5,marginTop:5,
+              fontSize:11.5,fontWeight:600,color:proximoPM.esEsteMes?"#C45200":"#8E8E93",
+            }}>
+              <span>🗓️</span>
+              <span style={{textTransform:"capitalize"}}>
+                {proximoPM.esEsteMes?"Preventivo este mes":proximoPM.esProximoMes?"Preventivo el próximo mes":`Próximo preventivo: ${proximoPM.nombreMes}`}
+              </span>
+            </div>
+          )}
         </div>
+
+        {crossAlert&&(
+          <div style={{
+            marginTop:10,padding:"8px 10px",borderRadius:9,
+            background:"linear-gradient(135deg,#FFF0E0,#FFE8E8)",
+            border:"1px solid rgba(196,82,0,0.25)",
+            display:"flex",alignItems:"flex-start",gap:7,
+          }}>
+            <span style={{fontSize:14,lineHeight:1.3}}>⚠️</span>
+            <span style={{fontSize:11.5,fontWeight:700,color:"#8a3a00",lineHeight:1.35}}>
+              Preventivo {proximoPM.esEsteMes?"este mes":"el próximo mes"} con {alerts.length} repuesto{alerts.length!==1?"s":""} bajo{alerts.length!==1?"s":""} de stock
+            </span>
+          </div>
+        )}
 
         {spares.length>0&&(
           <div style={{marginTop:10}}>
@@ -5373,15 +5486,127 @@ function EqCard({eq,items,onEdit}){
   );
 }
 
-function EquiposTab({equipos,items,onEdit}){
+function ImportCronogramaButton({flash,onImported}){
+  const inputRef=useRef(null);
+  const [busy,setBusy]=useState(false);
+
+  const handleFile=async e=>{
+    const file=e.target.files?.[0];
+    if(!file) return;
+    setBusy(true);
+    try{
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:"array"});
+      let best=null;
+      wb.SheetNames.forEach(name=>{
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:""});
+        let anio=0;
+        rows.slice(0,6).forEach(r=>r.forEach(cell=>{
+          if(typeof cell==="string"&&/AÑO/i.test(cell)){
+            const m=cell.match(/(\d{4})/); if(m) anio=parseInt(m[1]);
+          }
+        }));
+        if(anio>=(best?.anio||0)) best={name,rows,anio};
+      });
+      if(!best||!best.anio) throw new Error("No se encontró una hoja con el formato esperado (falta 'AÑO:').");
+
+      let headerIdx=-1;
+      for(let i=0;i<best.rows.length;i++){
+        if(String(best.rows[i][0]||"").trim().toUpperCase()==="CÓDIGO"){ headerIdx=i; break; }
+      }
+      if(headerIdx===-1) throw new Error("No se encontró la fila de encabezados (CÓDIGO/DESCRIPCIÓN).");
+
+      const registros=[];
+      for(let i=headerIdx+1;i<best.rows.length;i++){
+        const r=best.rows[i];
+        const codigo=String(r[0]||"").trim();
+        const descripcion=String(r[1]||"").trim();
+        if(!codigo) continue;
+        if(codigo.toUpperCase()==="TOTAL"||descripcion.toUpperCase()==="TOTAL") break;
+        const meses=[];
+        for(let m=0;m<12;m++){
+          const val=r[2+m];
+          if(val!==undefined&&val!==null&&String(val).trim()!=="") meses.push(m+1);
+        }
+        registros.push({codigo,descripcion,meses,anio:best.anio,updated_at:new Date().toISOString()});
+      }
+      if(registros.length===0) throw new Error("No se encontraron equipos con datos en la hoja.");
+
+      const CHUNK=200;
+      for(let i=0;i<registros.length;i+=CHUNK){
+        const {error}=await sb.from("cronograma_pm").upsert(registros.slice(i,i+CHUNK),{onConflict:"codigo"});
+        if(error) throw error;
+      }
+      flash&&flash(`✓ Cronograma ${best.anio} importado — ${registros.length} equipos`);
+      onImported&&onImported();
+    }catch(err){
+      flash&&flash("Error al importar cronograma: "+err.message,false);
+    }finally{
+      setBusy(false);
+      if(inputRef.current) inputRef.current.value="";
+    }
+  };
+
+  return(
+    <>
+      <input ref={inputRef} type="file" accept=".xlsx,.xlsm,.xls" style={{display:"none"}}
+        id="cronograma-file-input" onChange={handleFile}/>
+      <label htmlFor="cronograma-file-input"
+        style={{
+          display:"flex",alignItems:"center",gap:6,flexShrink:0,
+          padding:"9px 14px",borderRadius:10,cursor:busy?"default":"pointer",
+          background:busy?"rgba(13,47,92,0.06)":"var(--navy)",
+          color:busy?"#8E8E93":"#fff",fontSize:12.5,fontWeight:700,
+          fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap",
+          opacity:busy?0.7:1,
+        }}>
+        <span>{busy?"⏳":"📅"}</span>
+        <span>{busy?"Importando…":"Cronograma"}</span>
+      </label>
+    </>
+  );
+}
+
+function EquiposTab({equipos,items,cronograma,flash,onImported,canImport,onEdit}){
   const [search,setSearch]=useState("");
   const filtered=equipos.filter(e=>search===""||e.name.toLowerCase().includes(search.toLowerCase())||e.code?.toLowerCase().includes(search.toLowerCase()));
+  const cruzados=filtered.filter(eq=>{
+    const spares=items.filter(i=>eq.spares?.includes(i.id)||(i.equipos_asociados||[]).some(a=>(a&&a.id?a.id:a)===eq.id));
+    const bajos=spares.some(i=>i.quantity<=i.minStock);
+    const pm=getProximoPM(eq.code,cronograma);
+    return bajos&&pm&&pm.urgente;
+  }).length;
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{position:"relative"}}>
-        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:16,color:"#8E8E93"}}>🔍</span>
-        <input className="ios-input" placeholder="Buscar equipo…" value={search} onChange={e=>setSearch(e.target.value)} style={{paddingLeft:38}}/>
+      <div style={{display:"flex",gap:10}}>
+        <div style={{position:"relative",flex:1}}>
+          <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:16,color:"#8E8E93"}}>🔍</span>
+          <input className="ios-input" placeholder="Buscar equipo…" value={search} onChange={e=>setSearch(e.target.value)} style={{paddingLeft:38}}/>
+        </div>
+        {canImport&&<ImportCronogramaButton flash={flash} onImported={onImported}/>}
       </div>
+      {cronograma.length===0&&canImport&&(
+        <div style={{
+          display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:10,
+          background:"#F7FAFF",border:"1px solid rgba(13,47,92,0.08)",
+        }}>
+          <span style={{fontSize:16}}>📅</span>
+          <span style={{fontSize:12.5,color:"#0D2F5C",fontWeight:600}}>
+            Sin cronograma cargado. Importa el F-MAN-012 para ver alertas de preventivos próximos.
+          </span>
+        </div>
+      )}
+      {cruzados>0&&(
+        <div style={{
+          display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:10,
+          background:"linear-gradient(135deg,#FFF0E0,#FFE8E8)",border:"1px solid rgba(196,82,0,0.25)",
+        }}>
+          <span style={{fontSize:16}}>⚠️</span>
+          <span style={{fontSize:12.5,color:"#8a3a00",fontWeight:700}}>
+            {cruzados} equipo{cruzados!==1?"s":""} con preventivo próximo y repuestos bajos de stock
+          </span>
+        </div>
+      )}
       {filtered.length===0?(
         <div className="ios-card" style={{padding:48,textAlign:"center"}}>
           <div style={{fontSize:48,marginBottom:12}}>🏭</div>
@@ -5391,7 +5616,7 @@ function EquiposTab({equipos,items,onEdit}){
       ):(
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}} className="eq-grid">
           {filtered.map(eq=>(
-            <EqCard key={eq.id} eq={eq} items={items} onEdit={onEdit}/>
+            <EqCard key={eq.id} eq={eq} items={items} cronograma={cronograma} onEdit={onEdit}/>
           ))}
         </div>
       )}
@@ -5399,6 +5624,7 @@ function EquiposTab({equipos,items,onEdit}){
     </div>
   );
 }
+
 
 function EqModal({items,equipo,onClose,onSave,onDelete}){
   const isEdit=!!equipo;
