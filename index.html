@@ -5516,7 +5516,7 @@ function ImportCronogramaButton({flash,onImported}){
       }
       if(headerIdx===-1) throw new Error("No se encontró la fila de encabezados (CÓDIGO/DESCRIPCIÓN).");
 
-      const registros=[];
+      const registrosMap=new Map();
       for(let i=headerIdx+1;i<best.rows.length;i++){
         const r=best.rows[i];
         const codigo=String(r[0]||"").trim();
@@ -5528,8 +5528,16 @@ function ImportCronogramaButton({flash,onImported}){
           const val=r[2+m];
           if(val!==undefined&&val!==null&&String(val).trim()!=="") meses.push(m+1);
         }
-        registros.push({codigo,descripcion,meses,anio:best.anio,updated_at:new Date().toISOString()});
+        const key=codigo.toUpperCase();
+        if(registrosMap.has(key)){
+          const prev=registrosMap.get(key);
+          const mesesUnidos=Array.from(new Set([...prev.meses,...meses])).sort((a,b)=>a-b);
+          registrosMap.set(key,{...prev,descripcion:prev.descripcion||descripcion,meses:mesesUnidos});
+        } else {
+          registrosMap.set(key,{codigo,descripcion,meses,anio:best.anio,updated_at:new Date().toISOString()});
+        }
       }
+      const registros=Array.from(registrosMap.values());
       if(registros.length===0) throw new Error("No se encontraron equipos con datos en la hoja.");
 
       const CHUNK=200;
