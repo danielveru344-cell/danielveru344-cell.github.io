@@ -9930,6 +9930,620 @@ function BitacoraApp({onBack, initialUser}){
 
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+// MÓDULO MANTENIMIENTOS · Cronograma F-MAN-012 + Órdenes F-MAN-008
+// ═══════════════════════════════════════════════════════════════════════════
+const MTTO_MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const MTTO_MESES_C = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+const MTTO_FREQ = {M:"Mensual",T:"Trimestral",S:"Semestral",A:"Anual"};
+const MTTO_FREQ_STYLE = {
+  M:{bg:"#E5E0FF",col:"#4A3ACF"},
+  T:{bg:"#D6EBFF",col:"#0A66C2"},
+  S:{bg:"#FFF0D9",col:"#C45200"},
+  A:{bg:"#D1F2E0",col:"#1D7A3E"},
+};
+const MTTO_ESTADO = {
+  programado:  {label:"Programado",  cls:"badge-blue"},
+  ejecutado:   {label:"Ejecutado",   cls:"badge-green"},
+  reprogramado:{label:"Reprogramado",cls:"badge-orange"},
+};
+
+// ── Parser del F-MAN-012 (xlsm/xlsx) ─────────────────────────────────────────
+function parseFMAN012(arrayBuffer){
+  var wb = XLSX.read(arrayBuffer,{type:"array"});
+  var name = wb.SheetNames.indexOf("F-MAN-012")>=0 ? "F-MAN-012" : wb.SheetNames[0];
+  var ws = wb.Sheets[name];
+  var rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  // Detectar año en el encabezado ("AÑO: 2026 ...")
+  var anio = new Date().getFullYear();
+  for(var i=0;i<8;i++){
+    var joined = (rows[i]||[]).map(function(c){return c==null?"":String(c);}).join(" ");
+    var m = joined.match(/A[ÑN]O:\s*(\d{4})/i);
+    if(m){ anio = parseInt(m[1],10); break; }
+  }
+  var seccion = "";
+  var acts = [];
+  for(var r=6;r<rows.length;r++){
+    var row = rows[r]||[];
+    var cod  = row[0]==null?"":String(row[0]).trim();
+    var desc = row[1]==null?"":String(row[1]).trim();
+    if(!cod && !desc) continue;
+    if(/PORCENTAJE|EJECUTADO/i.test(desc)) continue;
+    if(cod==="0"||cod==="1") continue;
+    var marks = [];
+    for(var mm=0;mm<12;mm++){
+      var v = row[2+mm];
+      var mk = v==null?"":String(v).trim().toUpperCase();
+      if(["M","T","S","A"].indexOf(mk)>=0) marks.push({mes:mm+1,frecuencia:mk});
+    }
+    // Fila sin descripción y sin marcas = encabezado de sección
+    if(!desc && marks.length===0){ seccion = cod; continue; }
+    if(!cod) continue;
+    marks.forEach(function(mk){
+      acts.push({
+        anio:anio, seccion:seccion,
+        equipo_codigo:cod, equipo_desc:desc,
+        mes:mk.mes, frecuencia:mk.frecuencia,
+        estado:"programado",
+      });
+    });
+  }
+  return {anio:anio, actividades:acts};
+}
+
+// ── Impresión F-MAN-008 (plantilla provisional — reemplazar por formato oficial) ─
+function printFMAN008(ord){
+  var hoy = new Date().toLocaleDateString("es-CO",{timeZone:"America/Bogota"});
+  var esc = function(s){return String(s==null?"":s).replace(/</g,"&lt;");};
+  var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>'+esc(ord.consecutivo||"Orden")+'</title>'+
+  '<style>'+
+  'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:12px;}'+
+  'table{width:100%;border-collapse:collapse;}'+
+  'td,th{border:1px solid #333;padding:6px 8px;vertical-align:top;}'+
+  '.hdr td{font-weight:bold;}'+
+  '.lbl{background:#eef2f7;font-weight:bold;width:22%;}'+
+  '.title{font-size:14px;text-align:center;font-weight:bold;}'+
+  '.obs{height:130px;}'+
+  '.firmas td{height:60px;vertical-align:bottom;text-align:center;}'+
+  '@media print{body{margin:12mm;}}'+
+  '</style></head><body>'+
+  '<table class="hdr"><tr>'+
+  '<td style="width:25%;text-align:center;">LABORATORIOS<br>BUSSIÉ S.A.</td>'+
+  '<td class="title">ORDEN DE MANTENIMIENTO PREVENTIVO</td>'+
+  '<td style="width:22%;">CÓDIGO: F-MAN-008<br>VERSIÓN: __<br>Página 1 de 1</td>'+
+  '</tr></table><br>'+
+  '<table>'+
+  '<tr><td class="lbl">N° Orden</td><td>'+esc(ord.consecutivo||"—")+'</td><td class="lbl">Fecha emisión</td><td>'+hoy+'</td></tr>'+
+  '<tr><td class="lbl">Equipo</td><td>'+esc(ord.equipo_desc)+'</td><td class="lbl">Código equipo</td><td>'+esc(ord.equipo_codigo)+'</td></tr>'+
+  '<tr><td class="lbl">Ubicación</td><td>'+esc(ord.seccion)+'</td><td class="lbl">Tipo mantenimiento</td><td>Preventivo '+esc(MTTO_FREQ[ord.frecuencia]||ord.frecuencia)+'</td></tr>'+
+  '<tr><td class="lbl">Mes programado</td><td>'+esc(MTTO_MESES[ord.mes-1])+' '+esc(ord.anio)+'</td><td class="lbl">Fecha ejecución</td><td>'+esc(ord.fecha_ejecucion||"")+'</td></tr>'+
+  '</table><br>'+
+  '<table><tr><td class="lbl" style="width:100%;background:#eef2f7;">ACTIVIDADES REALIZADAS / OBSERVACIONES</td></tr>'+
+  '<tr><td class="obs">'+esc(ord.observaciones||"")+'</td></tr></table><br>'+
+  '<table><tr><td class="lbl" style="width:100%;background:#eef2f7;">REPUESTOS / MATERIALES UTILIZADOS</td></tr>'+
+  '<tr><td class="obs" style="height:80px;"></td></tr></table><br><br>'+
+  '<table class="firmas"><tr>'+
+  '<td style="width:33%;">'+esc(ord.ejecutor||"")+'<br>_______________________<br>EJECUTADO POR</td>'+
+  '<td style="width:33%;">_______________________<br>REVISADO POR</td>'+
+  '<td style="width:33%;">_______________________<br>Vo.Bo. JEFE DE MANTENIMIENTO</td>'+
+  '</tr></table>'+
+  '<script>window.onload=function(){window.print();};<\/script>'+
+  '</body></html>';
+  var w = window.open("","_blank");
+  if(!w){ alert("Permite ventanas emergentes para imprimir la orden."); return; }
+  w.document.write(html); w.document.close();
+}
+
+// ── Modal ejecutar orden ─────────────────────────────────────────────────────
+function MttoEjecutarModal({ord, currentUser, onClose, onSave}){
+  var f = React.useState(new Date().toISOString().slice(0,10)); var fecha=f[0],setFecha=f[1];
+  var e = React.useState(currentUser&&(currentUser.nombre||currentUser.username)||""); var ejec=e[0],setEjec=e[1];
+  var o = React.useState(""); var obs=o[0],setObs=o[1];
+  var l = React.useState(false); var saving=l[0],setSaving=l[1];
+  return(
+    <div className="overlay" onClick={onClose}>
+      <div className="sheet" onClick={function(ev){ev.stopPropagation();}} style={{maxWidth:440}}>
+        <div className="sheet-handle"/>
+        <div className="sheet-title">Ejecutar orden</div>
+        <div style={{padding:"14px 20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{fontSize:13,color:"var(--gray)",fontWeight:600}}>
+            {ord.equipo_codigo} · {ord.equipo_desc} · {MTTO_MESES[ord.mes-1]}
+          </div>
+          <div>
+            <div className="ios-input-label">Fecha de ejecución</div>
+            <input className="ios-input" type="date" value={fecha} onChange={function(ev){setFecha(ev.target.value);}}/>
+          </div>
+          <div>
+            <div className="ios-input-label">Ejecutado por</div>
+            <input className="ios-input" value={ejec} onChange={function(ev){setEjec(ev.target.value);}}/>
+          </div>
+          <div>
+            <div className="ios-input-label">Observaciones</div>
+            <textarea className="ios-input" rows={3} value={obs} onChange={function(ev){setObs(ev.target.value);}}
+              placeholder="Actividades realizadas, hallazgos…" style={{resize:"vertical"}}/>
+          </div>
+          <button className="ios-btn ios-btn-blue" disabled={saving||!fecha||!ejec}
+            onClick={async function(){
+              setSaving(true);
+              await onSave({estado:"ejecutado",fecha_ejecucion:fecha,ejecutor:ejec.trim(),observaciones:obs.trim()});
+              setSaving(false);
+            }}
+            style={{padding:"13px",fontSize:14}}>
+            {saving?"Guardando…":"✓ Marcar como ejecutada"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal reprogramar ────────────────────────────────────────────────────────
+function MttoReprogramarModal({ord, onClose, onSave}){
+  var m = React.useState(ord.mes<12?ord.mes+1:12); var mes=m[0],setMes=m[1];
+  var o = React.useState(""); var motivo=o[0],setMotivo=o[1];
+  var l = React.useState(false); var saving=l[0],setSaving=l[1];
+  return(
+    <div className="overlay" onClick={onClose}>
+      <div className="sheet" onClick={function(ev){ev.stopPropagation();}} style={{maxWidth:440}}>
+        <div className="sheet-handle"/>
+        <div className="sheet-title">Reprogramar</div>
+        <div style={{padding:"14px 20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{fontSize:13,color:"var(--gray)",fontWeight:600}}>
+            {ord.equipo_codigo} · {ord.equipo_desc} · programada en {MTTO_MESES[ord.mes-1]}
+          </div>
+          <div>
+            <div className="ios-input-label">Nuevo mes</div>
+            <select className="ios-input" value={mes} onChange={function(ev){setMes(parseInt(ev.target.value,10));}}>
+              {MTTO_MESES.map(function(mn,i){return <option key={i} value={i+1}>{mn}</option>;})}
+            </select>
+          </div>
+          <div>
+            <div className="ios-input-label">Motivo</div>
+            <textarea className="ios-input" rows={2} value={motivo} onChange={function(ev){setMotivo(ev.target.value);}}
+              placeholder="Ej: equipo en producción, falta de repuesto…" style={{resize:"vertical"}}/>
+          </div>
+          <button className="ios-btn ios-btn-blue" disabled={saving}
+            onClick={async function(){
+              setSaving(true);
+              var obs = "Reprogramada de "+MTTO_MESES[ord.mes-1]+" a "+MTTO_MESES[mes-1]+(motivo?": "+motivo.trim():"");
+              await onSave({estado:"reprogramado",mes_reprogramado:mes,observaciones:obs});
+              setSaving(false);
+            }}
+            style={{padding:"13px",fontSize:14}}>
+            {saving?"Guardando…":"↻ Reprogramar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Detalle de orden (sheet) ─────────────────────────────────────────────────
+function MttoOrdenSheet({ord, currentUser, onClose, onUpdate}){
+  var m = React.useState(null); var modal=m[0],setModal=m[1];
+  var canEdit = currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0;
+  var fq = MTTO_FREQ_STYLE[ord.frecuencia]||MTTO_FREQ_STYLE.T;
+  var est = MTTO_ESTADO[ord.estado]||MTTO_ESTADO.programado;
+  var hoyMes = new Date().getMonth()+1;
+  var vencida = ord.estado==="programado" && ord.anio<=new Date().getFullYear() && ord.mes<hoyMes;
+  return(
+    <div className="overlay" onClick={onClose}>
+      <div className="sheet" onClick={function(ev){ev.stopPropagation();}} style={{maxWidth:480}}>
+        <div className="sheet-handle"/>
+        <div className="sheet-title" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          {ord.equipo_codigo}
+          <span className={"badge "+(vencida?"badge-red":est.cls)} style={{textTransform:"none"}}>
+            {vencida?"Vencida":est.label}
+          </span>
+        </div>
+        <div style={{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:14}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:"var(--navy)"}}>{ord.equipo_desc}</div>
+            <div style={{fontSize:12,color:"var(--gray)",marginTop:3,fontWeight:600}}>{ord.seccion||"—"}</div>
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <span className="badge" style={{background:fq.bg,color:fq.col}}>{MTTO_FREQ[ord.frecuencia]||ord.frecuencia}</span>
+            <span className="badge badge-blue">{MTTO_MESES[ord.mes-1]} {ord.anio}</span>
+            {ord.consecutivo&&<span className="badge" style={{background:"var(--light)",color:"var(--navy)"}}>{ord.consecutivo}</span>}
+          </div>
+          {ord.estado==="ejecutado"&&(
+            <div style={{background:"#F2FBF6",border:"1px solid #C6EBD6",borderRadius:12,padding:"11px 14px",fontSize:13}}>
+              <div><b>Ejecutada:</b> {ord.fecha_ejecucion||"—"}</div>
+              <div><b>Por:</b> {ord.ejecutor||"—"}</div>
+              {ord.observaciones&&<div style={{marginTop:4,color:"#3c5a49"}}>{ord.observaciones}</div>}
+            </div>
+          )}
+          {ord.estado==="reprogramado"&&(
+            <div style={{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:12,padding:"11px 14px",fontSize:13}}>
+              <div><b>Nuevo mes:</b> {ord.mes_reprogramado?MTTO_MESES[ord.mes_reprogramado-1]:"—"}</div>
+              {ord.observaciones&&<div style={{marginTop:4,color:"#7a5a2e"}}>{ord.observaciones}</div>}
+            </div>
+          )}
+          <div style={{display:"flex",flexDirection:"column",gap:9}}>
+            {canEdit&&ord.estado!=="ejecutado"&&(
+              <button className="ios-btn ios-btn-blue" style={{padding:"13px",fontSize:14}}
+                onClick={function(){setModal("ejecutar");}}>✓ Marcar ejecutada</button>
+            )}
+            {canEdit&&ord.estado==="programado"&&(
+              <button className="ios-btn" style={{padding:"13px",fontSize:14,background:"var(--light)",color:"var(--navy)"}}
+                onClick={function(){setModal("reprogramar");}}>↻ Reprogramar</button>
+            )}
+            <button className="ios-btn" style={{padding:"13px",fontSize:14,background:"var(--navy-deep)",color:"#fff"}}
+              onClick={function(){printFMAN008(ord);}}>🖨️ Imprimir F-MAN-008</button>
+            {canEdit&&ord.estado==="ejecutado"&&(
+              <button className="ios-btn" style={{padding:"11px",fontSize:13,background:"transparent",color:"#C0001A"}}
+                onClick={async function(){ await onUpdate({estado:"programado",fecha_ejecucion:null,ejecutor:null,observaciones:null}); }}>
+                Revertir a programada</button>
+            )}
+          </div>
+        </div>
+        {modal==="ejecutar"&&<MttoEjecutarModal ord={ord} currentUser={currentUser}
+          onClose={function(){setModal(null);}}
+          onSave={async function(patch){ await onUpdate(patch); setModal(null); }}/>}
+        {modal==="reprogramar"&&<MttoReprogramarModal ord={ord}
+          onClose={function(){setModal(null);}}
+          onSave={async function(patch){ await onUpdate(patch); setModal(null); }}/>}
+      </div>
+    </div>
+  );
+}
+
+// ── App principal del módulo ─────────────────────────────────────────────────
+function MantenimientosApp({onBack, initialUser}){
+  var t = React.useState("calendario"); var tab=t[0],setTab=t[1];
+  var y = React.useState(new Date().getFullYear()); var anio=y[0],setAnio=y[1];
+  var mo = React.useState(new Date().getMonth()+1); var mes=mo[0],setMes=mo[1];
+  var d = React.useState([]); var ordenes=d[0],setOrdenes=d[1];
+  var ld = React.useState(true); var loading=ld[0],setLoading=ld[1];
+  var q = React.useState(""); var busca=q[0],setBusca=q[1];
+  var sel = React.useState(null); var selOrd=sel[0],setSelOrd=sel[1];
+  var im = React.useState(false); var importing=im[0],setImporting=im[1];
+  var fl = React.useState(null); var flashMsg=fl[0],setFlashMsg=fl[1];
+  var fileRef = React.useRef(null);
+  var canImport = initialUser&&initialUser.role==="admin";
+  var hoyMes = new Date().getMonth()+1;
+  var hoyAnio = new Date().getFullYear();
+
+  function flash(msg, ok){
+    setFlashMsg({msg:msg,ok:ok!==false});
+    setTimeout(function(){setFlashMsg(null);},3500);
+  }
+
+  async function load(){
+    setLoading(true);
+    var r = await sb.from("mtto_ordenes").select("*").eq("anio",anio)
+      .order("seccion").order("equipo_codigo").order("mes");
+    if(r.error){ flash("Error cargando: "+r.error.message,false); setLoading(false); return; }
+    setOrdenes(r.data||[]);
+    setLoading(false);
+  }
+  React.useEffect(function(){ load(); },[anio]);
+
+  // ── Import F-MAN-012 ──
+  async function handleImport(ev){
+    var file = ev.target.files&&ev.target.files[0];
+    ev.target.value = "";
+    if(!file) return;
+    setImporting(true);
+    try{
+      var buf = await file.arrayBuffer();
+      var parsed = parseFMAN012(buf);
+      if(parsed.actividades.length===0){ flash("No se encontraron actividades en el archivo.",false); setImporting(false); return; }
+      // Traer existentes del año para no duplicar ni borrar ejecuciones
+      var ex = await sb.from("mtto_ordenes").select("equipo_codigo,mes").eq("anio",parsed.anio);
+      if(ex.error) throw ex.error;
+      var existentes = {};
+      (ex.data||[]).forEach(function(o){ existentes[o.equipo_codigo+"|"+o.mes]=true; });
+      var nuevas = parsed.actividades.filter(function(a){ return !existentes[a.equipo_codigo+"|"+a.mes]; });
+      // Consecutivos
+      var base = (ex.data||[]).length;
+      nuevas.forEach(function(a,i){
+        a.consecutivo = "OT-"+parsed.anio+"-"+String(base+i+1).padStart(4,"0");
+      });
+      if(nuevas.length===0){
+        flash("Cronograma "+parsed.anio+" ya estaba importado ("+parsed.actividades.length+" actividades). Sin cambios.");
+      } else {
+        // Insertar por lotes de 200
+        for(var i=0;i<nuevas.length;i+=200){
+          var ins = await sb.from("mtto_ordenes").insert(nuevas.slice(i,i+200));
+          if(ins.error) throw ins.error;
+        }
+        flash("Importadas "+nuevas.length+" actividades del cronograma "+parsed.anio+" ✓");
+        registrarHistorial("mtto_import","Import F-MAN-012 "+parsed.anio+" ("+nuevas.length+" órdenes)",initialUser&&(initialUser.nombre||initialUser.username));
+      }
+      if(parsed.anio!==anio) setAnio(parsed.anio); else load();
+    }catch(e){
+      flash("Error al importar: "+(e.message||JSON.stringify(e)),false);
+    }
+    setImporting(false);
+  }
+
+  async function updateOrden(ord, patch){
+    var r = await sb.from("mtto_ordenes").update(patch).eq("id",ord.id).select();
+    if(r.error){ flash("Error: "+r.error.message,false); return; }
+    var upd = r.data&&r.data[0];
+    setOrdenes(function(prev){ return prev.map(function(o){ return o.id===ord.id?(upd||Object.assign({},o,patch)):o; }); });
+    if(upd) setSelOrd(upd);
+    if(patch.estado==="ejecutado"){
+      flash("Orden ejecutada ✓");
+      registrarHistorial("mtto_ejecutada",ord.equipo_codigo+" "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+")",patch.ejecutor);
+    } else if(patch.estado==="reprogramado"){
+      flash("Orden reprogramada ↻");
+    }
+  }
+
+  // ── Derivados ──
+  var esVencida = function(o){ return o.estado==="programado" && o.anio<=hoyAnio && (o.anio<hoyAnio || o.mes<hoyMes); };
+  var porMes = React.useMemo(function(){
+    var arr = [];
+    for(var m=1;m<=12;m++){
+      var os = ordenes.filter(function(o){return o.mes===m;});
+      arr.push({
+        mes:m, total:os.length,
+        ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,
+        venc:os.filter(esVencida).length,
+        repr:os.filter(function(o){return o.estado==="reprogramado";}).length,
+      });
+    }
+    return arr;
+  },[ordenes]);
+
+  var delMes = React.useMemo(function(){
+    var lista = ordenes.filter(function(o){return o.mes===mes;});
+    if(busca.trim()){
+      var b = busca.trim().toLowerCase();
+      lista = lista.filter(function(o){
+        return (o.equipo_codigo||"").toLowerCase().indexOf(b)>=0 ||
+               (o.equipo_desc||"").toLowerCase().indexOf(b)>=0 ||
+               (o.seccion||"").toLowerCase().indexOf(b)>=0;
+      });
+    }
+    return lista;
+  },[ordenes,mes,busca]);
+
+  var secciones = React.useMemo(function(){
+    var map = {};
+    delMes.forEach(function(o){
+      var s = o.seccion||"SIN SECCIÓN";
+      (map[s]=map[s]||[]).push(o);
+    });
+    return Object.keys(map).map(function(s){return {seccion:s,items:map[s]};});
+  },[delMes]);
+
+  var totAnio = ordenes.length;
+  var totEjec = ordenes.filter(function(o){return o.estado==="ejecutado";}).length;
+  var totVenc = ordenes.filter(esVencida).length;
+
+  return(
+    <div style={{minHeight:"100vh",background:"var(--lighter)",paddingBottom:40}}>
+      {/* Header */}
+      <div className="brand-bar">
+        <img className="brand-bar-logo" src={LOGO_SRC} alt="Bussié" style={{mixBlendMode:"screen",borderRadius:12}}/>
+        <button onClick={onBack} style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.15)",
+          borderRadius:8,padding:"6px 14px",color:"rgba(255,255,255,0.8)",fontFamily:"Montserrat,sans-serif",
+          fontWeight:700,fontSize:11,cursor:"pointer"}}>← Suite</button>
+      </div>
+      <div className="nav-bar">
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+          <div>
+            <div className="nav-title">Mantenimientos</div>
+            <div className="nav-subtitle">Cronograma preventivo · F-MAN-012</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <select className="ios-input" value={anio} style={{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"}}
+              onChange={function(ev){setAnio(parseInt(ev.target.value,10));}}>
+              {[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return <option key={a} value={a}>{a}</option>;})}
+            </select>
+            {canImport&&(
+              <React.Fragment>
+                <input ref={fileRef} type="file" accept=".xlsm,.xlsx" style={{display:"none"}} onChange={handleImport}/>
+                <button className="ios-btn ios-btn-blue" disabled={importing} style={{padding:"8px 14px",fontSize:12}}
+                  onClick={function(){fileRef.current&&fileRef.current.click();}}>
+                  {importing?"Importando…":"⬆ Importar F-MAN-012"}
+                </button>
+              </React.Fragment>
+            )}
+          </div>
+        </div>
+        <div className="seg-ctrl" style={{marginTop:12,maxWidth:460}}>
+          {[["calendario","Calendario"],["ordenes","Órdenes"],["cumplimiento","Cumplimiento"]].map(function(tb){
+            return <button key={tb[0]} className={"seg-btn"+(tab===tb[0]?" active":"")}
+              onClick={function(){setTab(tb[0]);}}>{tb[1]}</button>;
+          })}
+        </div>
+      </div>
+
+      {flashMsg&&(
+        <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,
+          background:flashMsg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 20px",borderRadius:12,
+          fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}}>
+          {flashMsg.msg}
+        </div>
+      )}
+
+      <div style={{maxWidth:860,margin:"0 auto",padding:"18px 16px"}}>
+        {loading?(
+          <div style={{textAlign:"center",padding:60,color:"var(--gray)",fontWeight:600}}>Cargando cronograma…</div>
+        ):totAnio===0?(
+          <div style={{textAlign:"center",padding:"70px 20px",color:"var(--gray)"}}>
+            <div style={{fontSize:44,marginBottom:12}}>🗓️</div>
+            <div style={{fontWeight:700,color:"var(--navy)",fontSize:16,marginBottom:6}}>Sin cronograma para {anio}</div>
+            <div style={{fontSize:13}}>{canImport?"Importa el archivo F-MAN-012 para cargar las actividades programadas.":"Aún no se ha importado el cronograma de este año."}</div>
+          </div>
+        ):(
+          <React.Fragment>
+            {/* ── TAB CALENDARIO ── */}
+            {tab==="calendario"&&(
+              <React.Fragment>
+                <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                  <div className="stat-card" style={{flex:1,minWidth:120}}>
+                    <div style={{fontSize:24,fontWeight:800,color:"var(--navy)"}}>{totAnio}</div>
+                    <div style={{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Programadas {anio}</div>
+                  </div>
+                  <div className="stat-card" style={{flex:1,minWidth:120}}>
+                    <div style={{fontSize:24,fontWeight:800,color:"#1D7A3E"}}>{totEjec}</div>
+                    <div style={{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Ejecutadas</div>
+                  </div>
+                  <div className="stat-card" style={{flex:1,minWidth:120}}>
+                    <div style={{fontSize:24,fontWeight:800,color:totVenc>0?"#C0001A":"var(--gray)"}}>{totVenc}</div>
+                    <div style={{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Vencidas</div>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}}>
+                  {porMes.map(function(pm){
+                    var actual = pm.mes===hoyMes&&anio===hoyAnio;
+                    var pct = pm.total>0?Math.round(pm.ejec/pm.total*100):null;
+                    return(
+                      <button key={pm.mes} onClick={function(){setMes(pm.mes);setTab("ordenes");}}
+                        className="stat-card"
+                        style={{cursor:"pointer",textAlign:"left",border:actual?"2px solid var(--accent)":"1px solid var(--border)",
+                          background:"#fff",padding:"13px 14px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:"var(--navy)",textTransform:"uppercase"}}>
+                            {MTTO_MESES_C[pm.mes-1]}
+                          </span>
+                          {actual&&<span style={{fontSize:9,fontWeight:800,color:"var(--accent)",letterSpacing:0.8}}>HOY</span>}
+                        </div>
+                        <div style={{fontSize:22,fontWeight:800,color:"var(--navy)",marginTop:4}}>{pm.total}</div>
+                        <div style={{display:"flex",gap:8,marginTop:5,fontSize:11,fontWeight:700}}>
+                          <span style={{color:"#1D7A3E"}}>✓ {pm.ejec}</span>
+                          {pm.venc>0&&<span style={{color:"#C0001A"}}>⚠ {pm.venc}</span>}
+                          {pm.repr>0&&<span style={{color:"#C45200"}}>↻ {pm.repr}</span>}
+                        </div>
+                        {pct!==null&&(
+                          <div style={{height:5,background:"var(--light)",borderRadius:3,marginTop:8,overflow:"hidden"}}>
+                            <div style={{height:"100%",width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)",borderRadius:3}}/>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </React.Fragment>
+            )}
+
+            {/* ── TAB ÓRDENES ── */}
+            {tab==="ordenes"&&(
+              <React.Fragment>
+                <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+                  <select className="ios-input" value={mes} style={{width:"auto",padding:"9px 12px",fontWeight:700,fontSize:13}}
+                    onChange={function(ev){setMes(parseInt(ev.target.value,10));}}>
+                    {MTTO_MESES.map(function(mn,i){
+                      var pm = porMes[i];
+                      return <option key={i} value={i+1}>{mn} ({pm.total})</option>;
+                    })}
+                  </select>
+                  <input className="ios-input" placeholder="Buscar equipo, código o sección…" value={busca}
+                    onChange={function(ev){setBusca(ev.target.value);}} style={{flex:1,minWidth:180,padding:"9px 12px",fontSize:13}}/>
+                </div>
+                {delMes.length===0?(
+                  <div style={{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600}}>
+                    Sin actividades {busca?"que coincidan con la búsqueda":"programadas en "+MTTO_MESES[mes-1]}.
+                  </div>
+                ):secciones.map(function(sec){
+                  return(
+                    <div key={sec.seccion} style={{marginBottom:18}}>
+                      <div style={{fontFamily:"Montserrat,sans-serif",fontSize:11,fontWeight:800,color:"var(--gray)",
+                        textTransform:"uppercase",letterSpacing:1,margin:"0 2px 8px"}}>
+                        {sec.seccion} · {sec.items.length}
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {sec.items.map(function(o){
+                          var fq = MTTO_FREQ_STYLE[o.frecuencia]||MTTO_FREQ_STYLE.T;
+                          var venc = esVencida(o);
+                          var est = MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado;
+                          return(
+                            <button key={o.id} onClick={function(){setSelOrd(o);}}
+                              style={{background:"#fff",border:"1px solid var(--border)",borderRadius:14,
+                                padding:"12px 14px",cursor:"pointer",textAlign:"left",display:"flex",
+                                alignItems:"center",gap:12,boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}}>
+                              <div style={{width:42,height:42,borderRadius:11,background:fq.bg,color:fq.col,
+                                display:"flex",alignItems:"center",justifyContent:"center",
+                                fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:15,flexShrink:0}}>
+                                {o.frecuencia}
+                              </div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13.5,fontWeight:700,color:"var(--navy)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                  {o.equipo_desc}
+                                </div>
+                                <div style={{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}}>
+                                  {o.equipo_codigo}{o.consecutivo?" · "+o.consecutivo:""}
+                                </div>
+                              </div>
+                              <span className={"badge "+(venc?"badge-red":est.cls)} style={{flexShrink:0}}>
+                                {venc?"Vencida":est.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            )}
+
+            {/* ── TAB CUMPLIMIENTO ── */}
+            {tab==="cumplimiento"&&(
+              <React.Fragment>
+                <div className="stat-card" style={{marginBottom:16,textAlign:"center",padding:"20px"}}>
+                  <div style={{fontSize:36,fontWeight:800,color:"var(--navy)"}}>
+                    {totAnio>0?Math.round(totEjec/totAnio*100):0}%
+                  </div>
+                  <div style={{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.8}}>
+                    Cumplimiento anual {anio} · {totEjec}/{totAnio} órdenes
+                  </div>
+                </div>
+                <div style={{background:"#fff",border:"1px solid var(--border)",borderRadius:16,padding:"18px 16px"}}>
+                  {porMes.map(function(pm){
+                    var pct = pm.total>0?Math.round(pm.ejec/pm.total*100):0;
+                    var pasado = anio<hoyAnio||(anio===hoyAnio&&pm.mes<hoyMes);
+                    var col = pm.total===0?"var(--light)":(pct>=100?"#1D9A50":(pasado&&pct<100?"#E0483E":"var(--accent)"));
+                    return(
+                      <div key={pm.mes} style={{display:"flex",alignItems:"center",gap:10,marginBottom:9}}>
+                        <div style={{width:34,fontSize:11,fontWeight:800,color:"var(--gray)",fontFamily:"Montserrat,sans-serif",textTransform:"uppercase"}}>
+                          {MTTO_MESES_C[pm.mes-1]}
+                        </div>
+                        <div style={{flex:1,height:16,background:"var(--light)",borderRadius:8,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:(pm.total>0?pct:0)+"%",background:col,borderRadius:8,
+                            transition:"width 0.4s ease"}}/>
+                        </div>
+                        <div style={{width:72,fontSize:11.5,fontWeight:700,color:"var(--navy)",textAlign:"right"}}>
+                          {pm.total>0?(pm.ejec+"/"+pm.total+" · "+pct+"%"):"—"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button className="ios-btn ios-btn-blue" style={{marginTop:14,padding:"12px 18px",fontSize:13}}
+                  onClick={function(){
+                    var wsData = [["CUMPLIMIENTO MANTENIMIENTO PREVENTIVO "+anio],[],
+                      ["Mes","Programadas","Ejecutadas","Reprogramadas","Vencidas","% Cumplimiento"]];
+                    porMes.forEach(function(pm){
+                      wsData.push([MTTO_MESES[pm.mes-1],pm.total,pm.ejec,pm.repr,pm.venc,
+                        pm.total>0?Math.round(pm.ejec/pm.total*100)+"%":"—"]);
+                    });
+                    wsData.push(["TOTAL",totAnio,totEjec,"","",totAnio>0?Math.round(totEjec/totAnio*100)+"%":"—"]);
+                    var wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(wsData),"Cumplimiento "+anio);
+                    XLSX.writeFile(wb,"Cumplimiento_MttoPreventivo_"+anio+".xlsx");
+                  }}>
+                  ⬇ Exportar resumen a Excel
+                </button>
+              </React.Fragment>
+            )}
+          </React.Fragment>
+        )}
+      </div>
+
+      {selOrd&&<MttoOrdenSheet ord={selOrd} currentUser={initialUser}
+        onClose={function(){setSelOrd(null);}}
+        onUpdate={function(patch){return updateOrden(selOrd,patch);}}/>}
+    </div>
+  );
+}
+
+
 function SuiteSelector({onSelect, currentUser, onLogout}){
   var LOGO="data:image/jpeg;base64,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";
   // ── Conteo pendientes Req. Planta ──────────────────────────────────────────
@@ -9969,6 +10583,10 @@ function SuiteSelector({onSelect, currentUser, onLogout}){
     React.createElement("path",{d:"M9 12.5H17",stroke:"white",strokeWidth:"1.75",strokeLinecap:"round"}),
     React.createElement("path",{d:"M9 16H14.5",stroke:"white",strokeWidth:"1.75",strokeLinecap:"round"})
   );
+  var IconMtto = React.createElement("svg",{width:26,height:26,viewBox:"0 0 26 26",fill:"none",xmlns:"http://www.w3.org/2000/svg"},
+    React.createElement("path",{d:"M15.5 6.5C15.5 6.5 17 5 19 5.5L16.5 8L17.5 10L20 9.5C20.5 11.5 19 13 19 13C17.5 14.5 15.5 14 15.5 14L9 20.5C8.2 21.3 6.8 21.3 6 20.5C5.2 19.7 5.2 18.3 6 17.5L12.5 11C12.5 11 12 9 13.5 7.5C13.5 7.5 14.5 6.5 15.5 6.5Z",stroke:"white",strokeWidth:"1.75",strokeLinejoin:"round"}),
+    React.createElement("circle",{cx:"7",cy:"19.5",r:"0.5",fill:"white"})
+  );
   var IconChevron = React.createElement("svg",{width:7,height:13,viewBox:"0 0 7 13",fill:"none"},
     React.createElement("path",{d:"M1 1L6 6.5L1 12",stroke:"rgba(255,255,255,0.32)",strokeWidth:"1.75",strokeLinecap:"round",strokeLinejoin:"round"})
   );
@@ -9991,6 +10609,15 @@ function SuiteSelector({onSelect, currentUser, onLogout}){
       // Apple amber + Bussié warm tone
       grad:"linear-gradient(148deg, #FF9F0A 0%, #E06400 100%)",
       glow:"rgba(255,155,10,0.38)",
+    },
+    {
+      id:"mantenimientos",
+      icon: IconMtto,
+      label:"Mantenimientos",
+      tags:["Cronograma","Órdenes","Cumplimiento"],
+      // Bussié blue accent
+      grad:"linear-gradient(148deg, #3D8BE8 0%, #1a4a82 100%)",
+      glow:"rgba(45,125,210,0.42)",
     }
   ];
 
@@ -10152,6 +10779,7 @@ function RootApp(){
 
   if(mod==="almacen") return <AlmacenApp onBack={handleLogout} initialUser={rootUser}/>;
   if(mod==="bitacora") return <BitacoraApp onBack={function(){setMod(null);}} initialUser={rootUser}/>;
+  if(mod==="mantenimientos") return <MantenimientosApp onBack={function(){setMod(null);}} initialUser={rootUser}/>;
   return null;
 }
 ReactDOM.render(React.createElement(RootApp),document.getElementById("root"));
