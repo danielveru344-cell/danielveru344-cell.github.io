@@ -10230,11 +10230,18 @@ function MantenimientosApp({onBack, initialUser}){
       var parsed = parseFMAN012(buf);
       if(parsed.actividades.length===0){ flash("No se encontraron actividades en el archivo.",false); setImporting(false); return; }
       // Traer existentes del año para no duplicar ni borrar ejecuciones
-      var ex = await sb.from("mtto_ordenes").select("equipo_codigo,mes").eq("anio",parsed.anio);
+      var ex = await sb.from("mtto_ordenes").select("equipo_codigo,equipo_desc,mes").eq("anio",parsed.anio);
       if(ex.error) throw ex.error;
+      var mkey = function(o){ return o.equipo_codigo+"|"+(o.equipo_desc||"")+"|"+o.mes; };
       var existentes = {};
-      (ex.data||[]).forEach(function(o){ existentes[o.equipo_codigo+"|"+o.mes]=true; });
-      var nuevas = parsed.actividades.filter(function(a){ return !existentes[a.equipo_codigo+"|"+a.mes]; });
+      (ex.data||[]).forEach(function(o){ existentes[mkey(o)]=true; });
+      var nuevas = [];
+      parsed.actividades.forEach(function(a){
+        var k = mkey(a);
+        if(existentes[k]) return;
+        existentes[k] = true; // dedupe también dentro del mismo archivo
+        nuevas.push(a);
+      });
       // Consecutivos
       var base = (ex.data||[]).length;
       nuevas.forEach(function(a,i){
