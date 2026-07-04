@@ -10017,6 +10017,7 @@ function printFMAN008(ord){
   '<tr><td class="lbl">Equipo</td><td>'+esc(ord.equipo_desc)+'</td><td class="lbl">Código equipo</td><td>'+esc(ord.equipo_codigo)+'</td></tr>'+
   '<tr><td class="lbl">Ubicación</td><td>'+esc(ord.seccion)+'</td><td class="lbl">Tipo mantenimiento</td><td>Preventivo '+esc(MTTO_FREQ[ord.frecuencia]||ord.frecuencia)+'</td></tr>'+
   '<tr><td class="lbl">Mes programado</td><td>'+esc(MTTO_MESES[ord.mes-1])+' '+esc(ord.anio)+'</td><td class="lbl">Fecha ejecución</td><td>'+esc(ord.fecha_ejecucion||"")+'</td></tr>'+
+  '<tr><td class="lbl">Asignada a</td><td>'+esc(ord.asignado_a||"")+'</td><td class="lbl">Estado</td><td>'+esc((MTTO_ESTADO[ord.estado]||{}).label||ord.estado)+'</td></tr>'+
   '</table><br>'+
   '<table><tr><td class="lbl" style="width:100%;background:#eef2f7;">ACTIVIDADES REALIZADAS / OBSERVACIONES</td></tr>'+
   '<tr><td class="obs">'+esc(ord.observaciones||"")+'</td></tr></table><br>'+
@@ -10037,7 +10038,7 @@ function printFMAN008(ord){
 // ── Modal ejecutar orden ─────────────────────────────────────────────────────
 function MttoEjecutarModal({ord, currentUser, onClose, onSave}){
   var f = React.useState(new Date().toISOString().slice(0,10)); var fecha=f[0],setFecha=f[1];
-  var e = React.useState(currentUser&&(currentUser.nombre||currentUser.username)||""); var ejec=e[0],setEjec=e[1];
+  var e = React.useState(ord.asignado_a||(currentUser&&(currentUser.nombre||currentUser.username))||""); var ejec=e[0],setEjec=e[1];
   var o = React.useState(""); var obs=o[0],setObs=o[1];
   var l = React.useState(false); var saving=l[0],setSaving=l[1];
   return(
@@ -10119,8 +10120,11 @@ function MttoReprogramarModal({ord, onClose, onSave}){
 }
 
 // ── Detalle de orden (sheet) ─────────────────────────────────────────────────
-function MttoOrdenSheet({ord, currentUser, onClose, onUpdate}){
+function MttoOrdenSheet({ord, currentUser, usuarios, onClose, onUpdate}){
   var m = React.useState(null); var modal=m[0],setModal=m[1];
+  var a = React.useState(ord.asignado_a||""); var asig=a[0],setAsig=a[1];
+  var sv = React.useState(false); var savingAsig=sv[0],setSavingAsig=sv[1];
+  React.useEffect(function(){ setAsig(ord.asignado_a||""); },[ord.id,ord.asignado_a]);
   var canEdit = currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0;
   var fq = MTTO_FREQ_STYLE[ord.frecuencia]||MTTO_FREQ_STYLE.T;
   var est = MTTO_ESTADO[ord.estado]||MTTO_ESTADO.programado;
@@ -10146,6 +10150,41 @@ function MttoOrdenSheet({ord, currentUser, onClose, onUpdate}){
             <span className="badge badge-blue">{MTTO_MESES[ord.mes-1]} {ord.anio}</span>
             {ord.consecutivo&&<span className="badge" style={{background:"var(--light)",color:"var(--navy)"}}>{ord.consecutivo}</span>}
           </div>
+          {/* ── Asignación ── */}
+          {canEdit&&ord.estado!=="ejecutado"?(
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <select className="ios-input" value={asig} style={{flex:1,padding:"10px 12px",fontSize:13,fontWeight:600}}
+                onChange={function(ev){setAsig(ev.target.value);}}>
+                <option value="">— Sin asignar —</option>
+                {(usuarios||[]).map(function(u){
+                  var n = u.nombre||u.username;
+                  return <option key={u.id} value={n}>{n}</option>;
+                })}
+              </select>
+              {asig!==(ord.asignado_a||"")&&(
+                <button className="ios-btn ios-btn-blue" disabled={savingAsig}
+                  style={{padding:"10px 14px",fontSize:12,flexShrink:0}}
+                  onClick={async function(){
+                    setSavingAsig(true);
+                    await onUpdate({
+                      asignado_a: asig||null,
+                      asignado_por: currentUser&&(currentUser.nombre||currentUser.username)||null,
+                      fecha_asignacion: asig?new Date().toISOString():null,
+                    });
+                    if(asig) pushNotificacion("🔧 Orden asignada",
+                      (ord.consecutivo||ord.equipo_codigo)+" · "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+") → "+asig);
+                    setSavingAsig(false);
+                  }}>
+                  {savingAsig?"…":"Asignar"}
+                </button>
+              )}
+            </div>
+          ):ord.asignado_a?(
+            <div style={{fontSize:13,fontWeight:700,color:"var(--accent)"}}>
+              👤 Asignada a {ord.asignado_a}
+              {ord.asignado_por&&<span style={{color:"var(--gray)",fontWeight:600}}> · por {ord.asignado_por}</span>}
+            </div>
+          ):null}
           {ord.estado==="ejecutado"&&(
             <div style={{background:"#F2FBF6",border:"1px solid #C6EBD6",borderRadius:12,padding:"11px 14px",fontSize:13}}>
               <div><b>Ejecutada:</b> {ord.fecha_ejecucion||"—"}</div>
@@ -10199,6 +10238,8 @@ function MantenimientosApp({onBack, initialUser}){
   var sel = React.useState(null); var selOrd=sel[0],setSelOrd=sel[1];
   var im = React.useState(false); var importing=im[0],setImporting=im[1];
   var fl = React.useState(null); var flashMsg=fl[0],setFlashMsg=fl[1];
+  var us = React.useState([]); var usuarios=us[0],setUsuarios=us[1];
+  var ft = React.useState(""); var filtroTec=ft[0],setFiltroTec=ft[1];
   var fileRef = React.useRef(null);
   var canImport = initialUser&&initialUser.role==="admin";
   var hoyMes = new Date().getMonth()+1;
@@ -10218,6 +10259,10 @@ function MantenimientosApp({onBack, initialUser}){
     setLoading(false);
   }
   React.useEffect(function(){ load(); },[anio]);
+  React.useEffect(function(){
+    sb.from("usuarios").select("id,username,nombre,role").eq("activo",true).order("nombre")
+      .then(function(r){ if(!r.error) setUsuarios(r.data||[]); });
+  },[]);
 
   // ── Import F-MAN-012 ──
   async function handleImport(ev){
@@ -10297,6 +10342,9 @@ function MantenimientosApp({onBack, initialUser}){
 
   var delMes = React.useMemo(function(){
     var lista = ordenes.filter(function(o){return o.mes===mes;});
+    if(filtroTec){
+      lista = lista.filter(function(o){return (o.asignado_a||"")===filtroTec;});
+    }
     if(busca.trim()){
       var b = busca.trim().toLowerCase();
       lista = lista.filter(function(o){
@@ -10306,7 +10354,7 @@ function MantenimientosApp({onBack, initialUser}){
       });
     }
     return lista;
-  },[ordenes,mes,busca]);
+  },[ordenes,mes,busca,filtroTec]);
 
   var secciones = React.useMemo(function(){
     var map = {};
@@ -10442,6 +10490,14 @@ function MantenimientosApp({onBack, initialUser}){
                   </select>
                   <input className="ios-input" placeholder="Buscar equipo, código o sección…" value={busca}
                     onChange={function(ev){setBusca(ev.target.value);}} style={{flex:1,minWidth:180,padding:"9px 12px",fontSize:13}}/>
+                  <select className="ios-input" value={filtroTec} style={{width:"auto",maxWidth:180,padding:"9px 12px",fontSize:13,fontWeight:600}}
+                    onChange={function(ev){setFiltroTec(ev.target.value);}}>
+                    <option value="">👤 Todos</option>
+                    {usuarios.map(function(u){
+                      var n = u.nombre||u.username;
+                      return <option key={u.id} value={n}>{n}</option>;
+                    })}
+                  </select>
                 </div>
                 {delMes.length===0?(
                   <div style={{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600}}>
@@ -10476,6 +10532,11 @@ function MantenimientosApp({onBack, initialUser}){
                                 <div style={{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}}>
                                   {o.equipo_codigo}{o.consecutivo?" · "+o.consecutivo:""}
                                 </div>
+                                {o.asignado_a&&(
+                                  <div style={{fontSize:11,color:"var(--accent)",fontWeight:700,marginTop:3}}>
+                                    👤 {o.asignado_a}
+                                  </div>
+                                )}
                               </div>
                               <span className={"badge "+(venc?"badge-red":est.cls)} style={{flexShrink:0}}>
                                 {venc?"Vencida":est.label}
@@ -10543,7 +10604,7 @@ function MantenimientosApp({onBack, initialUser}){
         )}
       </div>
 
-      {selOrd&&<MttoOrdenSheet ord={selOrd} currentUser={initialUser}
+      {selOrd&&<MttoOrdenSheet ord={selOrd} currentUser={initialUser} usuarios={usuarios}
         onClose={function(){setSelOrd(null);}}
         onUpdate={function(patch){return updateOrden(selOrd,patch);}}/>}
     </div>
