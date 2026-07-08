@@ -90,7 +90,7 @@
       solicitante: soli.solicitante_name || "—",
       equipo:      soli.equipo_name || "—",
       cantidad:    soli.quantity    || "—",
-      unidad:      soli.unit        || "",
+      unidad:      soli.unidad || soli.unit || "",
       notas:       (soli.consecutivo ? "Solicitud: " + soli.consecutivo + "\n" : "") + (soli.notes || "Sin notas"),
       fecha:       new Date().toLocaleString("es-CO",{timeZone:"America/Bogota"}),
     };
@@ -110,7 +110,7 @@
       item_name:   soli.item_name   || "—",
       solicitante: soli.solicitante_name || soli.solicitante || "—",
       cantidad:    soli.quantity    || "—",
-      unidad:      soli.unit        || "",
+      unidad:      soli.unidad || soli.unit || "",
       equipo:      soli.equipo_name || "—",
       notas:       "Solicitud: " + numSoli + "\n" + (esConfirmacion
         ? "Tu solicitud fue recibida y está siendo procesada."
@@ -2232,6 +2232,18 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
   const [dispRemision,setDispRemision] = useState("");   // número de remisión
   const [dispCantidad,setDispCantidad] = useState("");   // cantidad recibida en almacén
 
+  // Unidad de la solicitud: usa la guardada o la busca en el inventario por item_id/código/nombre
+  const unidadDe = (s) => {
+    if(!s) return "";
+    if(s.unidad) return s.unidad;
+    const art = (items||[]).find(i=>
+      (s.item_id&&i.id===s.item_id) ||
+      (s.item_code&&i.code===s.item_code) ||
+      (s.item_name&&i.name===s.item_name)
+    );
+    return art?.unit || "";
+  };
+
   // Disponible: llega la mercancía → ENTRADA al almacén
   const handleDisponible = async (soli) => {
     const cant = parseInt(dispCantidad);
@@ -2484,7 +2496,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                     {s.tipo_material==="apoyo_critico"?"⚡ APOYO CRÍTICO":"🏢 LOCATIVO"}
                   </span>
                 )}
-                <span style={{fontWeight:600,color:"#1C1C1E"}}>×{s.quantity} {s.unidad||""}</span>
+                <span style={{fontWeight:600,color:"#1C1C1E"}}>×{s.quantity} {unidadDe(s)}</span>
                 {s.item_code&&<><span style={{color:"#C7C7CC"}}>·</span><span style={{fontFamily:"monospace",fontSize:11,background:"#F2F2F7",padding:"1px 5px",borderRadius:4}}>{s.item_code}</span></>}
                 {s.equipo_name&&<><span style={{color:"#C7C7CC"}}>·</span><span>🔧 {s.equipo_name}</span></>}
                 
@@ -2579,7 +2591,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                     👤 {soli.solicitante_name}
                     {soli.equipo_name&&<> · 🔧 {soli.equipo_name}</>}
                   </div>
-                  <div style={{fontSize:12,color:"#636366"}}>Solicitado: <strong>{cantSoli} {soli.unidad||""}</strong>{stockActual!==null&&<> · Stock actual: <strong>{stockActual} {soli.unidad||""}</strong></>}</div>
+                  <div style={{fontSize:12,color:"#636366"}}>Solicitado: <strong>{cantSoli} {unidadDe(soli)}</strong>{stockActual!==null&&<> · Stock actual: <strong>{stockActual} {unidadDe(soli)}</strong></>}</div>
                 </div>
                 <div>
                   <div className="ios-input-label">Cantidad a entregar *</div>
@@ -2594,7 +2606,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                     <div style={{fontWeight:700,fontSize:11,color:"var(--navy)",textTransform:"uppercase",letterSpacing:1,fontFamily:"Montserrat,sans-serif",marginBottom:6}}>Movimiento a registrar</div>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <span style={{background:"#FFDEDE",color:"#C0001A",borderRadius:6,padding:"2px 8px",fontWeight:700,fontSize:12}}>↓ Salida</span>
-                      <span>{cant} {soli.unidad||""} → {soli.solicitante_name}</span>
+                      <span>{cant} {unidadDe(soli)} → {soli.solicitante_name}</span>
                       {stockFinal!==null&&<span style={{marginLeft:"auto",fontWeight:700,color:sinStock?"#C0001A":bajoMinimo?"#C45200":"#1D7A3E"}}>Stock: {stockFinal}</span>}
                     </div>
                   </div>
@@ -2604,7 +2616,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                     <span style={{fontSize:18}}>🚫</span>
                     <div>
                       <div style={{fontWeight:700,fontSize:13,color:"#C0001A"}}>Stock insuficiente</div>
-                      <div style={{fontSize:12,color:"#C0001A",marginTop:2}}>Solo hay {stockActual} {soli.unidad||"unidades"} disponibles.</div>
+                      <div style={{fontSize:12,color:"#C0001A",marginTop:2}}>Solo hay {stockActual} {unidadDe(soli)||"unidades"} disponibles.</div>
                     </div>
                   </div>
                 )}
@@ -2613,7 +2625,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                     <span style={{fontSize:18}}>⚠️</span>
                     <div>
                       <div style={{fontWeight:700,fontSize:13,color:"#C45200"}}>Quedará por debajo del mínimo</div>
-                      <div style={{fontSize:12,color:"#C45200",marginTop:2}}>Stock final: {stockFinal} {soli.unidad||""} · Mínimo: {art.minStock} {soli.unidad||""}</div>
+                      <div style={{fontSize:12,color:"#C45200",marginTop:2}}>Stock final: {stockFinal} {unidadDe(soli)} · Mínimo: {art.minStock} {unidadDe(soli)}</div>
                     </div>
                   </div>
                 )}
@@ -2639,7 +2651,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
             <div style={{padding:"16px 20px 28px",display:"flex",flexDirection:"column",gap:14}}>
               <div style={{background:"var(--light)",borderRadius:10,padding:"12px 14px",display:"flex",flexDirection:"column",gap:3}}>
                 <div style={{fontWeight:700,fontSize:14,color:"var(--navy)"}}>{dispModal.item_name}</div>
-                <div style={{fontSize:12,color:"#636366"}}>Solicitado: ×{dispModal.quantity} {dispModal.unidad||""} · 👤 {dispModal.solicitante_name}</div>
+                <div style={{fontSize:12,color:"#636366"}}>Solicitado: ×{dispModal.quantity} {unidadDe(dispModal)} · 👤 {dispModal.solicitante_name}</div>
               </div>
               <div>
                 <div className="ios-input-label">Cantidad recibida en almacén *</div>
@@ -2686,7 +2698,7 @@ function SolicitudesTab({ currentUser, items, equipos, flash, reloadHistorial, r
                   <div style={{fontWeight:700,fontSize:11,color:"var(--navy)",textTransform:"uppercase",letterSpacing:1,fontFamily:"Montserrat,sans-serif",marginBottom:6}}>Movimiento a registrar</div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{background:"#D1F2E0",color:"#1D7A3E",borderRadius:6,padding:"2px 8px",fontWeight:700,fontSize:12}}>↑ Entrada</span>
-                    <span>{dispCantidad} {dispModal.unidad||""} → Almacén{dispProveedor&&` · ${dispProveedor}`}</span>
+                    <span>{dispCantidad} {unidadDe(dispModal)} → Almacén{dispProveedor&&` · ${dispProveedor}`}</span>
                   </div>
                 </div>
               )}
@@ -2786,6 +2798,7 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
     item_name: "",
     item_code: "",
     quantity: 1,
+    unidad: "",
     equipo_name: "",
     reason: "",
     proveedor: "",
@@ -2825,8 +2838,8 @@ function SolicitudModal({ items, equipos: equiposProp, currentUser, onClose, onS
 
   const handleArticuloSelect=(id)=>{
     const item=items.find(i=>i.id===id);
-    if(item){ s("item_id",id); s("item_name",item.name); s("item_code",item.code); setValidErr(""); }
-    else { s("item_id",null); s("item_name",""); s("item_code",""); }
+    if(item){ s("item_id",id); s("item_name",item.name); s("item_code",item.code); s("unidad",item.unit||""); setValidErr(""); }
+    else { s("item_id",null); s("item_name",""); s("item_code",""); s("unidad",""); }
   };
 
   const handleSave=async()=>{
@@ -4316,6 +4329,17 @@ function AnalisisTab({ items, equipos }) {
 }
 
 function Panel({items,movs,alerts,equipos,cronograma,setTab,setOnlyAlerts,currentUser,flash,reloadHistorial}){
+  // Unidad de una solicitud: usa la guardada o la busca en el inventario
+  const unidadDe = (s) => {
+    if(!s) return "";
+    if(s.unidad) return s.unidad;
+    const art = (items||[]).find(i=>
+      (s.item_id&&i.id===s.item_id) ||
+      (s.item_code&&i.code===s.item_code) ||
+      (s.item_name&&i.name===s.item_name)
+    );
+    return art?.unit || "";
+  };
   const total=items.reduce((s,i)=>s+i.quantity,0);
 
   const equiposCriticosPM = React.useMemo(()=>{
@@ -4433,6 +4457,7 @@ function Panel({items,movs,alerts,equipos,cronograma,setTab,setOnlyAlerts,curren
       item_name: a.name,
       item_code: a.code||"",
       quantity: needed,
+      unidad: a.unit||"",
       status: "solicitada_compra",
       reason: "Reposición por stock bajo",
       solicitante_id: currentUser?.id||null,
@@ -4657,7 +4682,7 @@ function Panel({items,movs,alerts,equipos,cronograma,setTab,setOnlyAlerts,curren
                         </div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
-                        <div style={{fontWeight:700,fontSize:18,color:"#C45200",letterSpacing:-0.5}}>{s.quantity||s.cantidad||"?"} <span style={{fontSize:12,fontWeight:500,color:"#8E8E93"}}>{s.unidad||""}</span></div>
+                        <div style={{fontWeight:700,fontSize:18,color:"#C45200",letterSpacing:-0.5}}>{s.quantity||s.cantidad||"?"} <span style={{fontSize:12,fontWeight:500,color:"#8E8E93"}}>{unidadDe(s)}</span></div>
                         <div style={{fontSize:11,color:"#8E8E93"}}>{fmtSoliDate(s.created_at)}</div>
                       </div>
                     </div>
@@ -4699,7 +4724,7 @@ function Panel({items,movs,alerts,equipos,cronograma,setTab,setOnlyAlerts,curren
                         </div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
-                        <div style={{fontWeight:700,fontSize:18,color:"#004A9E",letterSpacing:-0.5}}>{s.quantity||s.cantidad||"?"} <span style={{fontSize:12,fontWeight:500,color:"#8E8E93"}}>{s.unidad||""}</span></div>
+                        <div style={{fontWeight:700,fontSize:18,color:"#004A9E",letterSpacing:-0.5}}>{s.quantity||s.cantidad||"?"} <span style={{fontSize:12,fontWeight:500,color:"#8E8E93"}}>{unidadDe(s)}</span></div>
                         <div style={{fontSize:11,color:"#8E8E93"}}>{fmtSoliDate(s.created_at)}</div>
                       </div>
                     </div>
