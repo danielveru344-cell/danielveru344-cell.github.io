@@ -10410,43 +10410,84 @@ function MantenimientosApp({onBack, initialUser}){
   var totVenc = ordenes.filter(esVencida).length;
 
   return(
-    <div style={{minHeight:"100vh",background:"var(--lighter)",paddingBottom:40}}>
-      {/* Header */}
+    <div className="app-root" style={{minHeight:"100vh",background:"#f4f7fd"}}>
+      <div className="app-topbar" style={{position:"sticky",top:0,zIndex:50}}>
+
+      {/* BRAND BAR */}
       <div className="brand-bar">
-        <img className="brand-bar-logo" src={LOGO_SRC} alt="Bussié" style={{mixBlendMode:"screen",borderRadius:12}}/>
-        <button onClick={onBack} style={{background:"rgba(255,255,255,0.10)",border:"1px solid rgba(255,255,255,0.15)",
-          borderRadius:8,padding:"6px 14px",color:"rgba(255,255,255,0.8)",fontFamily:"Montserrat,sans-serif",
-          fontWeight:700,fontSize:11,cursor:"pointer"}}>← Suite</button>
+        {onBack&&<button onClick={onBack} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",padding:"6px 10px",display:"flex",alignItems:"center",gap:5,fontFamily:"Montserrat",fontWeight:700,fontSize:11,marginRight:8,flexShrink:0}}>← Suite</button>}
+        <img src={LOGO_SRC} alt="Bussié" className="brand-bar-logo" style={{height:56,width:"auto",display:"block",mixBlendMode:"screen",background:"transparent",borderRadius:14}}/>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:1}}>
+          <span style={{fontFamily:'"Montserrat",sans-serif',fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.75)",textTransform:"uppercase",letterSpacing:2,lineHeight:1.4}}>Mantenimientos</span>
+          <span style={{fontFamily:'"Montserrat",sans-serif',fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.75)",textTransform:"uppercase",letterSpacing:2,lineHeight:1.4}}>Preventivos</span>
+        </div>
       </div>
+
+      {/* NAV */}
       <div className="nav-bar">
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}} className="nav-toprow">
           <div>
-            <div className="nav-title">Mantenimientos</div>
-            <div className="nav-subtitle">Cronograma preventivo · F-MAN-012</div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span className="nav-title nav-title-text" style={{fontFamily:'"Montserrat",sans-serif',fontSize:18,fontWeight:800,color:"var(--navy)",letterSpacing:1,textTransform:"uppercase"}}>Mantenimientos</span>
+            </div>
+            {initialUser&&(
+              <div className="nav-user-badge" style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+                <div className="chibi-wrap" style={{width:40,height:48,flexShrink:0,filter:"drop-shadow(0 2px 6px rgba(0,0,0,0.25))"}}>
+                  {(typeof ROLE_AVATAR!=="undefined"&&(ROLE_AVATAR[initialUser.role]||ROLE_AVATAR.solicitante))||null}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div className="user-name" style={{fontFamily:"'Montserrat',sans-serif",fontWeight:700,fontSize:12,
+                    color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                    {initialUser.nombre||initialUser.username}
+                  </div>
+                  <div className="user-role" style={{fontSize:10,color:"rgba(255,255,255,0.42)",fontWeight:600,
+                    letterSpacing:0.4,marginTop:1}}>
+                    {(typeof ROLE_LABEL!=="undefined"&&ROLE_LABEL[initialUser.role])||initialUser.role}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <select className="ios-input" value={anio} style={{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"}}
-              onChange={function(ev){setAnio(parseInt(ev.target.value,10));}}>
-              {[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return <option key={a} value={a}>{a}</option>;})}
-            </select>
+          <div className="nav-actions" style={{display:"flex",gap:6,alignItems:"center"}}>
             {canImport&&(
               <React.Fragment>
                 <input ref={fileRef} type="file" accept=".xlsm,.xlsx" style={{display:"none"}} onChange={handleImport}/>
-                <button className="ios-btn ios-btn-blue" disabled={importing} style={{padding:"8px 14px",fontSize:12}}
+                <button className="nav-act-btn" disabled={importing}
+                  title={importing?"Importando…":"Importar F-MAN-012"}
+                  style={{background:importing?"#8a96a8":"var(--navy)",color:"#fff",opacity:importing?0.7:1}}
                   onClick={function(){fileRef.current&&fileRef.current.click();}}>
-                  {importing?"Importando…":"⬆ Importar F-MAN-012"}
+                  <span>{importing?"⏳":"⬆"}</span>
+                  <span className="nav-act-label">{importing?"Importando…":"Importar F-MAN-012"}</span>
                 </button>
               </React.Fragment>
             )}
           </div>
         </div>
-        <div className="mtto-tabs" style={{marginTop:12,maxWidth:460}}>
-          {[["calendario","Calendario"],["ordenes","Órdenes"],["cumplimiento","Cumplimiento"]].map(function(tb){
-            return <button key={tb[0]} className={"mtto-tab-btn"+(tab===tb[0]?" active":"")}
-              onClick={function(){setTab(tb[0]);}}>{tb[1]}</button>;
+        <div className="seg-ctrl">
+          {[["calendario","🗓️","Calendario"],["ordenes","🛠️","Órdenes"],["cumplimiento","📈","Cumplimiento"]].map(function(tb){
+            return(
+              <button key={tb[0]} className={"seg-btn"+(tab===tb[0]?" active":"")} onClick={function(){setTab(tb[0]);}}>
+                <span style={{
+                  width:28,height:28,borderRadius:8,flexShrink:0,
+                  background:tab===tb[0]?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.09)",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:15,transition:"background 0.2s",
+                }}>{tb[1]}</span>
+                {tb[2]}
+              </button>
+            );
           })}
         </div>
       </div>
+
+      {/* Desktop sidebar footer */}
+      <div className="sidebar-footer">
+        <button className="ios-btn ios-btn-red ios-btn-sm" onClick={function(){ if(onBack) onBack(); }}>
+          ← Volver a la Suite
+        </button>
+      </div>
+
+      </div>{/* end sticky / app-topbar */}
 
       {flashMsg&&(
         <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,
@@ -10456,7 +10497,20 @@ function MantenimientosApp({onBack, initialUser}){
         </div>
       )}
 
-      <div style={{maxWidth:860,margin:"0 auto",padding:"18px 16px"}}>
+      <div className="app-content" style={{padding:"16px 16px 40px",maxWidth:900}}>
+
+        {/* Selector de año */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+          <div style={{fontFamily:"Montserrat,sans-serif",fontSize:11,fontWeight:800,color:"var(--gray)",
+            textTransform:"uppercase",letterSpacing:1}}>
+            Cronograma preventivo · F-MAN-012
+          </div>
+          <select className="ios-input" value={anio} style={{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"}}
+            onChange={function(ev){setAnio(parseInt(ev.target.value,10));}}>
+            {[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return <option key={a} value={a}>{a}</option>;})}
+          </select>
+        </div>
+
         {loading?(
           <div style={{textAlign:"center",padding:60,color:"var(--gray)",fontWeight:600}}>Cargando cronograma…</div>
         ):totAnio===0?(
@@ -10642,6 +10696,21 @@ function MantenimientosApp({onBack, initialUser}){
             )}
           </React.Fragment>
         )}
+      </div>
+
+      {/* ── Mobile bottom tab bar ── */}
+      <div className="bottom-tab-bar">
+        {[["calendario","🗓️","Calendario"],["ordenes","🛠️","Órdenes"],["cumplimiento","📈","Cumplimiento"]].map(function(tb){
+          return(
+            <button key={tb[0]} className={"btab-btn"+(tab===tb[0]?" btab-active":"")}
+              onClick={function(){setTab(tb[0]);}}>
+              <div style={{position:"relative",display:"inline-block"}}>
+                <span className="btab-icon">{tb[1]}</span>
+              </div>
+              <span className="btab-label">{tb[2]}</span>
+            </button>
+          );
+        })}
       </div>
 
       {selOrd&&<MttoOrdenSheet ord={selOrd} currentUser={initialUser} usuarios={usuarios}
