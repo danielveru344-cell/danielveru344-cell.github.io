@@ -10065,10 +10065,15 @@ var FMAN008_SECCIONES = [
   ]}
 ];
 
+var FMAN008_LOGO_B64 = "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";
+// Anchos reales de columna del Excel oficial (A..M), convertidos a % del ancho de la tabla
+var FMAN008_COLS = [7.752,10.855,10.37,7.945,9.108,7.945,12.694,3.874,6.201,7.073,2.324,5.329,8.528];
+
 function printFMAN008(ord){
   var esc = function(s){return String(s==null?"":s).replace(/</g,"&lt;");};
   var freq = MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"";
   var progMes = (MTTO_MESES[ord.mes-1]||"")+" "+(ord.anio||"");
+  var colgroup = '<colgroup>'+FMAN008_COLS.map(function(w){return '<col style="width:'+w+'%;">';}).join("")+'</colgroup>';
 
   var checklistRows = FMAN008_SECCIONES.map(function(sec){
     var hdr = '<tr class="subhdr"><td>'+esc(sec.titulo)+'</td><td class="chkhdr">Bueno</td><td class="chkhdr">Malo</td></tr>';
@@ -10085,83 +10090,83 @@ function printFMAN008(ord){
 
   var obsFirstRow = '<tr><td class="fecha">'+esc(ord.fecha_ejecucion||"")+'</td><td class="detalle">'+esc(ord.observaciones||"")+'</td></tr>';
   var obsBlankRows = "";
-  for(var i=0;i<6;i++){ obsBlankRows += '<tr><td class="fecha">&nbsp;</td><td class="detalle">&nbsp;</td></tr>'; }
+  for(var i=0;i<10;i++){ obsBlankRows += '<tr><td class="fecha">&nbsp;</td><td class="detalle">&nbsp;</td></tr>'; }
 
   var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>'+esc(ord.consecutivo||"Orden F-MAN-008")+'</title>'+
   '<style>'+
-  'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:20px;font-size:10.5px;}'+
-  'table{width:100%;border-collapse:collapse;}'+
-  'td,th{border:1px solid #333;padding:4px 6px;vertical-align:top;}'+
-  '.formhdr{display:flex;border:1px solid #333;border-bottom:none;}'+
-  '.formhdr .logo{width:22%;padding:8px;text-align:center;font-weight:bold;border-right:1px solid #333;display:flex;align-items:center;justify-content:center;}'+
-  '.formhdr .titlebox{flex:1;padding:8px;text-align:center;font-weight:bold;font-size:14px;border-right:1px solid #333;display:flex;align-items:center;justify-content:center;}'+
-  '.formhdr .codebox{width:24%;padding:8px;font-size:9.5px;line-height:1.5;}'+
-  '.lbl{background:#eef2f7;font-weight:bold;}'+
-  '.chk{display:inline-block;width:10px;height:10px;border:1px solid #333;margin-right:5px;vertical-align:middle;}'+
-  '.chkhdr{width:8%;text-align:center;font-weight:bold;background:#eef2f7;}'+
-  '.chkbox{width:8%;text-align:center;}'+
-  '.subhdr td{font-weight:bold;background:#f6f8fb;}'+
-  '.instr{font-size:9.5px;line-height:1.4;padding:8px;border:1px solid #333;border-top:none;}'+
-  '.codeline{text-align:center;font-size:9.5px;font-weight:bold;margin:6px 0;}'+
-  '.num{width:4%;text-align:center;}'+
+  'body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:16px;font-size:9.5px;}'+
+  'table{width:100%;border-collapse:collapse;table-layout:fixed;}'+
+  'td{border:1px solid #000;padding:2px 5px;vertical-align:middle;overflow-wrap:break-word;}'+
+  '.outer{border:2px solid #000;border-bottom:none;}'+
+  '.outer:last-of-type{border-bottom:2px solid #000;}'+
+  '.title{font-size:12px;font-weight:bold;text-align:center;}'+
+  '.lbl{font-weight:bold;}'+
+  '.lblc{font-weight:bold;text-align:center;}'+
+  '.gray{background:#d9d9d9;}'+
+  '.graylight{background:#f2f2f2;}'+
+  '.chk{display:inline-block;width:9px;height:9px;border:1px solid #000;margin-right:4px;vertical-align:middle;text-align:center;font-size:8px;line-height:9px;}'+
+  '.instr{font-size:8px;line-height:1.35;padding:5px 6px;}'+
+  '.chkhdr{text-align:center;font-weight:bold;}'+
+  '.chkbox{text-align:center;}'+
+  '.side{writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;font-weight:bold;font-size:10px;}'+
+  '.codeline{font-size:9px;font-weight:bold;margin:4px 0;}'+
+  '.num{width:4%;text-align:center;font-weight:bold;}'+
   '.cant{width:10%;}'+
-  '.fecha{width:14%;}'+
-  '.firmas td{height:55px;vertical-align:bottom;text-align:center;font-size:9.5px;}'+
-  '@media print{body{margin:10mm;} .subhdr{break-inside:avoid;} tr{break-inside:avoid;}}'+
+  '.fecha{width:9%;text-align:center;}'+
+  '.firmas td{height:50px;vertical-align:bottom;text-align:center;font-size:8.5px;border:none;}'+
+  '.firmas{border-collapse:collapse;}'+
+  '@media print{body{margin:8mm;} tr{break-inside:avoid;}}'+
   '</style></head><body>'+
 
-  '<div class="formhdr">'+
-    '<div class="logo">LABORATORIOS<br>BUSSIÉ S.A.</div>'+
-    '<div class="titlebox">ORDEN DE MANTENIMIENTO</div>'+
-    '<div class="codebox">CÓDIGO: F-MAN-008<br>VERSIÓN: 02<br>FECHA DE APLICACIÓN: 01-08-2024</div>'+
-  '</div>'+
-  '<table>'+
+  '<table class="outer">'+colgroup+
+    '<tr><td class="title" colspan="12">ORDEN&nbsp;&nbsp;DE MANTENIMIENTO</td>'+
+      '<td rowspan="4" style="text-align:center;padding:4px;">'+(FMAN008_LOGO_B64&&FMAN008_LOGO_B64.indexOf("PASTE")<0?('<img src="data:image/png;base64,'+FMAN008_LOGO_B64+'" style="width:100%;max-width:70px;"/>'):'<b>Bussié</b>')+'</td></tr>'+
+    '<tr><td class="lblc" colspan="3">NOMBRE DE LA EMPRESA:</td><td class="lblc" colspan="5">TIPO DE MANTENIMIENTO</td><td class="lblc" colspan="4">Frecuencia Mantenimiento:</td></tr>'+
+    '<tr><td rowspan="2" colspan="3" style="text-align:center;font-weight:bold;">Laboratorios Bussié S.A</td>'+
+      '<td colspan="4">MANTENIMIENTO PREVENTIVO</td><td style="text-align:center;">&#10003;</td>'+
+      '<td rowspan="2" colspan="4" style="text-align:center;">'+esc(freq)+'</td></tr>'+
+    '<tr><td colspan="4">MANTENIMIENTO CORRECTIVO</td><td></td></tr>'+
     '<tr>'+
-      '<td class="lbl" style="width:14%;">Nombre empresa</td><td style="width:20%;">Laboratorios Bussié S.A</td>'+
-      '<td class="lbl" style="width:16%;">Tipo mantenimiento</td>'+
-      '<td style="width:22%;"><span class="chk">&#10003;</span>Preventivo&nbsp;&nbsp;&nbsp;<span class="chk"></span>Correctivo</td>'+
-      '<td class="lbl" style="width:12%;">Frecuencia</td><td>'+esc(freq)+'</td>'+
-    '</tr>'+
-    '<tr>'+
-      '<td class="lbl">N° Orden</td><td>'+esc(ord.consecutivo||"—")+'</td>'+
-      '<td class="lbl">Área</td><td>'+esc(ord.seccion||"")+'</td>'+
-      '<td class="lbl">Según programa</td><td>'+esc(progMes)+'</td>'+
-    '</tr>'+
-    '<tr>'+
-      '<td class="lbl">Equipo</td><td>'+esc(ord.equipo_desc||"")+'</td>'+
-      '<td class="lbl">Código equipo</td><td>'+esc(ord.equipo_codigo||"")+'</td>'+
-      '<td class="lbl">Fecha realización</td><td>'+esc(ord.fecha_ejecucion||"")+'</td>'+
-    '</tr>'+
-    '<tr>'+
-      '<td class="lbl">Asignada a</td><td>'+esc(ord.asignado_a||"")+'</td>'+
-      '<td class="lbl">Próximo mantenimiento</td><td></td>'+
-      '<td class="lbl">Tiempo utilizado (min)</td><td></td>'+
+      '<td class="lbl">EQUIPO</td><td colspan="2">'+esc(ord.equipo_desc||"")+'</td>'+
+      '<td class="lblc">CÓDIGO<br>EQUIPO</td><td>'+esc(ord.equipo_codigo||"")+'</td>'+
+      '<td class="lbl">Fecha<br>realización:</td><td>'+esc(ord.fecha_ejecucion||"")+'</td>'+
+      '<td class="lbl" colspan="2">Próximo<br>Mantenimiento:</td>'+
+      '<td class="lbl">Según<br>Programa<br>'+esc(progMes)+'</td>'+
+      '<td class="lbl" colspan="2">Tiempo utilizado<br>(min)</td><td></td>'+
     '</tr>'+
   '</table>'+
 
-  '<div class="instr">Confirme con el Supervisor de Producción la disponibilidad del equipo. Antes de iniciar la labor, verifique que cuenta con los elementos de protección personal que se necesiten: mono gafas, guantes, botas de seguridad con suela antiestática. Asegúrese que el equipo se encuentra desconectado de la toma trifásica, de lo contrario desconéctelo. Realice el mantenimiento según el P-MAN-002 "Mantenimiento preventivo de equipos", realizando las actividades y siguiendo el cronograma de equipos significativos encontradas en el anexo según el equipo que corresponda.<br><br>'+
-  'A continuación se debe realizar la inspección de cada uno de los elementos listados, si el elemento a verificar se encuentra en mal estado se debe cambiar inmediatamente o programar el cambio del mismo en la misma rutina, no debe quedar pendiente. Describa en el detalle las acciones realizadas durante el trabajo y si el ítem mencionado no aplica coloque N/A. No dejar espacios sin cerrar.</div>'+
+  '<table class="outer">'+colgroup+
+  '<tr><td colspan="13" class="instr">Confirme con el Supervisor de Producción la disponibilidad del equipo. Antes de iniciar la labor, verifique que cuenta con los elementos de protección personal que se necesiten: mono gafas, guantes, botas de seguridad con suela antiestática. Asegúrese que el equipo se encuentra desconectado de la toma trifásica, de lo contrario desconéctelo. Realice el mantenimiento según el P-MAN-002 "Mantenimiento preventivo de equipos" Realizando las actividades y siguiendo el cronograma de equipos significativos encontradas en el anexo según el equipo que corresponda.</td></tr>'+
+  '<tr><td colspan="13" class="instr">A continuación se debe realizar la inspección de cada uno de los elementos listados, si el elemento a verificar se encuentra en mal estado se debe cambiar inmediatamente o programar el cambio del mismo en la misma rutina no debe quedar pendiente, describir en el detalle las acciones realizadas durante el trabajo y si el ítem mencionado no aplica colocar N/A. No dejar espacios sin cerrar.</td></tr>'+
+  '</table>'+
 
-  '<table><tr><td class="lbl" style="width:70%;">SISTEMA MECÁNICO Y ELÉCTRICO — ACTIVIDAD QUE SE DEBE REALIZAR</td><td class="chkhdr" colspan="2">ESTADO</td></tr>'+
+  '<table class="outer">'+
+  '<colgroup><col style="width:7.75%;"><col style="width:78.37%;"><col style="width:5.33%;"><col style="width:8.55%;"></colgroup>'+
+  '<tr class="gray"><td rowspan="'+(2+FMAN008_SECCIONES.reduce(function(a,s){return a+1+s.items.length;},0))+'" class="side">SISTEMA MECÁNICO Y ELÉCTRICO</td>'+
+  '<td class="lblc">ACTIVIDAD QUE SE DEBE REALIZAR</td><td class="chkhdr" colspan="2">ESTADO</td></tr>'+
   checklistRows+
   '</table>'+
 
   '<div class="codeline">CÓDIGO: F-MAN-008 &nbsp;&nbsp;&nbsp; VERSIÓN: 02 &nbsp;&nbsp;&nbsp; FECHA DE APLICACIÓN: 01-08-2024</div>'+
 
-  '<table><tr><td class="lbl" colspan="6" style="text-align:center;">REPUESTOS UTILIZADOS</td></tr>'+
-  '<tr><td class="num"></td><td class="lbl">Repuesto</td><td class="lbl">Cantidad</td><td class="num"></td><td class="lbl">Repuesto</td><td class="lbl">Cantidad</td></tr>'+
+  '<table class="outer" style="width:100%;">'+
+  '<colgroup><col style="width:4%;"><col style="width:36%;"><col style="width:10%;"><col style="width:4%;"><col style="width:36%;"><col style="width:10%;"></colgroup>'+
+  '<tr><td class="lblc" colspan="3">REPUESTOS UTILIZADOS</td><td class="lblc" colspan="3">CANTIDAD</td></tr>'+
   repuestosRows+
   '</table><br>'+
 
-  '<table><tr><td class="lbl" colspan="2" style="text-align:center;">OBSERVACIONES</td></tr>'+
-  '<tr><td class="lbl fecha">FECHA</td><td class="lbl">DETALLE DEL MANTENIMIENTO REALIZADO</td></tr>'+
+  '<table class="outer">'+
+  '<colgroup><col style="width:9%;"><col style="width:91%;"></colgroup>'+
+  '<tr><td class="lblc" colspan="2">OBSERVACIONES</td></tr>'+
+  '<tr><td class="lblc">FECHA</td><td class="lblc">DETALLE DEL MANTENIMIENTO REALIZADO</td></tr>'+
   obsFirstRow+obsBlankRows+
-  '</table><br>'+
+  '</table><br><br>'+
 
   '<table class="firmas"><tr>'+
-  '<td style="width:33%;">'+esc(ord.ejecutor||"")+'<br>_______________________<br>ENCARGADO DEL MANTENIMIENTO<br><span style="font-weight:normal;">(Técnico de Mantenimiento, Técnico de Metrología, Técnico de Aguas, Auxiliar de Mantenimiento, otro)</span></td>'+
-  '<td style="width:33%;">_______________________<br>FIRMA DE ENTERADO DE PRODUCCIÓN<br>(Gerente o Supervisor)</td>'+
-  '<td style="width:33%;">_______________________<br>GERENTE Y/O JEFE DE MANTENIMIENTO</td>'+
+  '<td style="width:33%;">'+esc(ord.ejecutor||"")+'<br>_______________________<br><b>ENCARGADO DEL MANTENIMIENTO</b><br>(Técnico de Mantenimiento, Técnico de Metrología,<br>Técnico de Aguas, Auxiliar de Mantenimiento, otro)</td>'+
+  '<td style="width:33%;">_______________________<br><b>FIRMA DE ENTERADO DE PRODUCCIÓN</b><br>(Gerente o Supervisor)</td>'+
+  '<td style="width:33%;">_______________________<br><b>GERENTE Y/O JEFE DE MANTENIMIENTO</b></td>'+
   '</tr></table>'+
 
   '<div class="codeline">CÓDIGO: F-MAN-008 &nbsp;&nbsp;&nbsp; VERSIÓN: 02 &nbsp;&nbsp;&nbsp; FECHA DE APLICACIÓN: 01-08-2024</div>'+
