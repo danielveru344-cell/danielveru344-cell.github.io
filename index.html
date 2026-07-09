@@ -10031,43 +10031,141 @@ function parseFMAN012(arrayBuffer){
   return {anio:anio, actividades:acts};
 }
 
-// ── Impresión F-MAN-008 (plantilla provisional — reemplazar por formato oficial) ─
+// ── Impresión F-MAN-008 (formato oficial V02, vigente 01-08-2024) ──────────────
+var FMAN008_SECCIONES = [
+  { titulo:"Con el equipo encendido, sin producto, y sin material verifique:", items:[
+    "Sonidos extraños en el motor, rodamientos, reductor, ejes, bujes, poleas, piñones, hélice ,etc., de escucharse detenga el equipo revise, desmonte y corrija.",
+    "Sistema neumático en general, fugas de aire, válvulas, cilindros, acoples, unidad de mantenimiento, manómetros, mangueras, si encuentra anomalía detenga el equipo alivie la presión y corrija. Verifique la lubricación de los elementos neumáticos si estos se encuentran sin lubricación lubrique.",
+    "Sistema hidráulico en general, fugas de agua, de aceite, de refrigerante, sellos, empaques, tubería, mangueras, si encuentra anomalía detenga el equipo y corrija",
+    "Sistema de bombeo, succión y descarga, empaques y sello de la bomba, verifique el impeler y si encuentra anomalía detenga el equipo y corrija.",
+    "Sistema de vacío en general, ventury, ventosas, acoples, mangueras. Verifique la hermeticidad del sistema.",
+    "Sistemas en general: serpentín, empaquetaduras, orings, arandelas de presión, cintas, sin-fin, volante, embrague, válvula o sistema de carga/descarga de producto, reductor, rodillos, tensores, bandas, mordazas, cadenas, rotulas, ruedas, etc. y según el caso de encontrar anomalía detenga el equipo y corrija.",
+    "Verifique que los sistemas de seguridad del equipo se encuentran funcionando, de no ser así detenga el equipo y corrija.",
+    "Revise que el sistema de sellado lateral esta cumpliendo y que no hay escape de producto, de ser así detenga el equipo y corrija."
+  ]},
+  { titulo:"Con el equipo apagado realice las siguientes revisiones si aplica:", items:[
+    "Verifique la limpieza interna del cajón de control eléctrico. En caso de encontrarse exceso de producto proceda a desconectar los cables de potencia y control y realice la limpieza completa del sistema eléctrico soplete el tablero y elementos en general que encuentre con producto, cambie los filtros de los ventiladores.",
+    "Limpie todas las conexiones eléctricas de los contactores de arranque, paro, parada de emergencia, con limpiador de contactos.",
+    "Verifique el ajuste de las conexiones eléctricas en general de ser necesario reapreté. Si encuentra cables, terminales sulfatados o recalentados reemplace.",
+    "Verifique las partes móviles que se encuentran en contacto con producto, límpielas y aplique grasa Grado alimenticio. Retire grasa y aceite contaminados de los elementos del armario mecánico. Realice limpieza y lubricación general al sistema mecánico del equipo.",
+    "Revise el ajuste de los acloples triclamp y sus sellos, en caso de encontrarse en mal estado, cámbielos inmediatamente",
+    "Revise la limpieza del hausing, del radiador, y de la unidad en general, verifique el estado de los filtros, y de los cartuchos. Cambie de ser necesario.",
+    "Verifique la alineación, tensión, y estado de las correas, si presenta anomalía desmonte y corrija.",
+    "Verifique el chasis general, pintura, soldaduras, que no presente fisuras ni anomalías, de ser así corrija.",
+    "Verifique la ventaviola del motor, observe su estado y el ajuste, si encuentra anomalía desmonte y corrija.",
+    "Verifique las conexiones de los sensores de temperatura, verifique las conexiones de las resistencias y mida su consumo si presentan anomalía corrija.",
+    "Verifique la tornillería en general, tuercas, arandelas, y de mas elementos de sujeción si encuentra faltante o deterioro en ellas cambie de ser necesario.",
+    "Verifique el torque de los tornillos de sujeción del motor, poleas, piñones, etc., de ser necesario reapreté."
+  ]},
+  { titulo:"Encienda el equipo, y verifique con el equipo sin carga:", items:[
+    "Mida el amperaje en cada una de las líneas con la pinza amperimétrica y comparar con las especificaciones de la placa del motor, anote la medición. Haga Prueba de funcionamiento en vacío. Mida el consumo de las resistencias y registre la medición.",
+    "Diferencial de presión, manómetro, vacuometro, panel de control, variador de velocidad y según el caso registre la lectura.",
+    "Si el equipo posee variador de velocidad verifique que en la pantalla queda visualizando las rpm o los hz del equipo.",
+    "Haga entrega del equipo en funcionamiento al supervisor de producción"
+  ]}
+];
+
 function printFMAN008(ord){
-  var hoy = new Date().toLocaleDateString("es-CO",{timeZone:"America/Bogota"});
   var esc = function(s){return String(s==null?"":s).replace(/</g,"&lt;");};
-  var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>'+esc(ord.consecutivo||"Orden")+'</title>'+
+  var freq = MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"";
+  var progMes = (MTTO_MESES[ord.mes-1]||"")+" "+(ord.anio||"");
+
+  var checklistRows = FMAN008_SECCIONES.map(function(sec){
+    var hdr = '<tr class="subhdr"><td>'+esc(sec.titulo)+'</td><td class="chkhdr">Bueno</td><td class="chkhdr">Malo</td></tr>';
+    var rows = sec.items.map(function(it){
+      return '<tr><td>'+esc(it)+'</td><td class="chkbox"></td><td class="chkbox"></td></tr>';
+    }).join("");
+    return hdr+rows;
+  }).join("");
+
+  var repuestosRows = [1,2,3,4,5].map(function(n){
+    return '<tr><td class="num">'+n+'</td><td class="fill"></td><td class="cant"></td>'+
+           '<td class="num">'+(n+5)+'</td><td class="fill"></td><td class="cant"></td></tr>';
+  }).join("");
+
+  var obsFirstRow = '<tr><td class="fecha">'+esc(ord.fecha_ejecucion||"")+'</td><td class="detalle">'+esc(ord.observaciones||"")+'</td></tr>';
+  var obsBlankRows = "";
+  for(var i=0;i<6;i++){ obsBlankRows += '<tr><td class="fecha">&nbsp;</td><td class="detalle">&nbsp;</td></tr>'; }
+
+  var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>'+esc(ord.consecutivo||"Orden F-MAN-008")+'</title>'+
   '<style>'+
-  'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:12px;}'+
+  'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:20px;font-size:10.5px;}'+
   'table{width:100%;border-collapse:collapse;}'+
-  'td,th{border:1px solid #333;padding:6px 8px;vertical-align:top;}'+
-  '.hdr td{font-weight:bold;}'+
-  '.lbl{background:#eef2f7;font-weight:bold;width:22%;}'+
-  '.title{font-size:14px;text-align:center;font-weight:bold;}'+
-  '.obs{height:130px;}'+
-  '.firmas td{height:60px;vertical-align:bottom;text-align:center;}'+
-  '@media print{body{margin:12mm;}}'+
+  'td,th{border:1px solid #333;padding:4px 6px;vertical-align:top;}'+
+  '.formhdr{display:flex;border:1px solid #333;border-bottom:none;}'+
+  '.formhdr .logo{width:22%;padding:8px;text-align:center;font-weight:bold;border-right:1px solid #333;display:flex;align-items:center;justify-content:center;}'+
+  '.formhdr .titlebox{flex:1;padding:8px;text-align:center;font-weight:bold;font-size:14px;border-right:1px solid #333;display:flex;align-items:center;justify-content:center;}'+
+  '.formhdr .codebox{width:24%;padding:8px;font-size:9.5px;line-height:1.5;}'+
+  '.lbl{background:#eef2f7;font-weight:bold;}'+
+  '.chk{display:inline-block;width:10px;height:10px;border:1px solid #333;margin-right:5px;vertical-align:middle;}'+
+  '.chkhdr{width:8%;text-align:center;font-weight:bold;background:#eef2f7;}'+
+  '.chkbox{width:8%;text-align:center;}'+
+  '.subhdr td{font-weight:bold;background:#f6f8fb;}'+
+  '.instr{font-size:9.5px;line-height:1.4;padding:8px;border:1px solid #333;border-top:none;}'+
+  '.codeline{text-align:center;font-size:9.5px;font-weight:bold;margin:6px 0;}'+
+  '.num{width:4%;text-align:center;}'+
+  '.cant{width:10%;}'+
+  '.fecha{width:14%;}'+
+  '.firmas td{height:55px;vertical-align:bottom;text-align:center;font-size:9.5px;}'+
+  '@media print{body{margin:10mm;} .subhdr{break-inside:avoid;} tr{break-inside:avoid;}}'+
   '</style></head><body>'+
-  '<table class="hdr"><tr>'+
-  '<td style="width:25%;text-align:center;">LABORATORIOS<br>BUSSIÉ S.A.</td>'+
-  '<td class="title">ORDEN DE MANTENIMIENTO PREVENTIVO</td>'+
-  '<td style="width:22%;">CÓDIGO: F-MAN-008<br>VERSIÓN: __<br>Página 1 de 1</td>'+
-  '</tr></table><br>'+
+
+  '<div class="formhdr">'+
+    '<div class="logo">LABORATORIOS<br>BUSSIÉ S.A.</div>'+
+    '<div class="titlebox">ORDEN DE MANTENIMIENTO</div>'+
+    '<div class="codebox">CÓDIGO: F-MAN-008<br>VERSIÓN: 02<br>FECHA DE APLICACIÓN: 01-08-2024</div>'+
+  '</div>'+
   '<table>'+
-  '<tr><td class="lbl">N° Orden</td><td>'+esc(ord.consecutivo||"—")+'</td><td class="lbl">Fecha emisión</td><td>'+hoy+'</td></tr>'+
-  '<tr><td class="lbl">Equipo</td><td>'+esc(ord.equipo_desc)+'</td><td class="lbl">Código equipo</td><td>'+esc(ord.equipo_codigo)+'</td></tr>'+
-  '<tr><td class="lbl">Ubicación</td><td>'+esc(ord.seccion)+'</td><td class="lbl">Tipo mantenimiento</td><td>Preventivo '+esc(MTTO_FREQ[ord.frecuencia]||ord.frecuencia)+'</td></tr>'+
-  '<tr><td class="lbl">Mes programado</td><td>'+esc(MTTO_MESES[ord.mes-1])+' '+esc(ord.anio)+'</td><td class="lbl">Fecha ejecución</td><td>'+esc(ord.fecha_ejecucion||"")+'</td></tr>'+
-  '<tr><td class="lbl">Asignada a</td><td>'+esc(ord.asignado_a||"")+'</td><td class="lbl">Estado</td><td>'+esc((MTTO_ESTADO[ord.estado]||{}).label||ord.estado)+'</td></tr>'+
+    '<tr>'+
+      '<td class="lbl" style="width:14%;">Nombre empresa</td><td style="width:20%;">Laboratorios Bussié S.A</td>'+
+      '<td class="lbl" style="width:16%;">Tipo mantenimiento</td>'+
+      '<td style="width:22%;"><span class="chk">&#10003;</span>Preventivo&nbsp;&nbsp;&nbsp;<span class="chk"></span>Correctivo</td>'+
+      '<td class="lbl" style="width:12%;">Frecuencia</td><td>'+esc(freq)+'</td>'+
+    '</tr>'+
+    '<tr>'+
+      '<td class="lbl">N° Orden</td><td>'+esc(ord.consecutivo||"—")+'</td>'+
+      '<td class="lbl">Área</td><td>'+esc(ord.seccion||"")+'</td>'+
+      '<td class="lbl">Según programa</td><td>'+esc(progMes)+'</td>'+
+    '</tr>'+
+    '<tr>'+
+      '<td class="lbl">Equipo</td><td>'+esc(ord.equipo_desc||"")+'</td>'+
+      '<td class="lbl">Código equipo</td><td>'+esc(ord.equipo_codigo||"")+'</td>'+
+      '<td class="lbl">Fecha realización</td><td>'+esc(ord.fecha_ejecucion||"")+'</td>'+
+    '</tr>'+
+    '<tr>'+
+      '<td class="lbl">Asignada a</td><td>'+esc(ord.asignado_a||"")+'</td>'+
+      '<td class="lbl">Próximo mantenimiento</td><td></td>'+
+      '<td class="lbl">Tiempo utilizado (min)</td><td></td>'+
+    '</tr>'+
+  '</table>'+
+
+  '<div class="instr">Confirme con el Supervisor de Producción la disponibilidad del equipo. Antes de iniciar la labor, verifique que cuenta con los elementos de protección personal que se necesiten: mono gafas, guantes, botas de seguridad con suela antiestática. Asegúrese que el equipo se encuentra desconectado de la toma trifásica, de lo contrario desconéctelo. Realice el mantenimiento según el P-MAN-002 "Mantenimiento preventivo de equipos", realizando las actividades y siguiendo el cronograma de equipos significativos encontradas en el anexo según el equipo que corresponda.<br><br>'+
+  'A continuación se debe realizar la inspección de cada uno de los elementos listados, si el elemento a verificar se encuentra en mal estado se debe cambiar inmediatamente o programar el cambio del mismo en la misma rutina, no debe quedar pendiente. Describa en el detalle las acciones realizadas durante el trabajo y si el ítem mencionado no aplica coloque N/A. No dejar espacios sin cerrar.</div>'+
+
+  '<table><tr><td class="lbl" style="width:70%;">SISTEMA MECÁNICO Y ELÉCTRICO — ACTIVIDAD QUE SE DEBE REALIZAR</td><td class="chkhdr" colspan="2">ESTADO</td></tr>'+
+  checklistRows+
+  '</table>'+
+
+  '<div class="codeline">CÓDIGO: F-MAN-008 &nbsp;&nbsp;&nbsp; VERSIÓN: 02 &nbsp;&nbsp;&nbsp; FECHA DE APLICACIÓN: 01-08-2024</div>'+
+
+  '<table><tr><td class="lbl" colspan="6" style="text-align:center;">REPUESTOS UTILIZADOS</td></tr>'+
+  '<tr><td class="num"></td><td class="lbl">Repuesto</td><td class="lbl">Cantidad</td><td class="num"></td><td class="lbl">Repuesto</td><td class="lbl">Cantidad</td></tr>'+
+  repuestosRows+
   '</table><br>'+
-  '<table><tr><td class="lbl" style="width:100%;background:#eef2f7;">ACTIVIDADES REALIZADAS / OBSERVACIONES</td></tr>'+
-  '<tr><td class="obs">'+esc(ord.observaciones||"")+'</td></tr></table><br>'+
-  '<table><tr><td class="lbl" style="width:100%;background:#eef2f7;">REPUESTOS / MATERIALES UTILIZADOS</td></tr>'+
-  '<tr><td class="obs" style="height:80px;"></td></tr></table><br><br>'+
+
+  '<table><tr><td class="lbl" colspan="2" style="text-align:center;">OBSERVACIONES</td></tr>'+
+  '<tr><td class="lbl fecha">FECHA</td><td class="lbl">DETALLE DEL MANTENIMIENTO REALIZADO</td></tr>'+
+  obsFirstRow+obsBlankRows+
+  '</table><br>'+
+
   '<table class="firmas"><tr>'+
-  '<td style="width:33%;">'+esc(ord.ejecutor||"")+'<br>_______________________<br>EJECUTADO POR</td>'+
-  '<td style="width:33%;">_______________________<br>REVISADO POR</td>'+
-  '<td style="width:33%;">_______________________<br>Vo.Bo. JEFE DE MANTENIMIENTO</td>'+
+  '<td style="width:33%;">'+esc(ord.ejecutor||"")+'<br>_______________________<br>ENCARGADO DEL MANTENIMIENTO<br><span style="font-weight:normal;">(Técnico de Mantenimiento, Técnico de Metrología, Técnico de Aguas, Auxiliar de Mantenimiento, otro)</span></td>'+
+  '<td style="width:33%;">_______________________<br>FIRMA DE ENTERADO DE PRODUCCIÓN<br>(Gerente o Supervisor)</td>'+
+  '<td style="width:33%;">_______________________<br>GERENTE Y/O JEFE DE MANTENIMIENTO</td>'+
   '</tr></table>'+
+
+  '<div class="codeline">CÓDIGO: F-MAN-008 &nbsp;&nbsp;&nbsp; VERSIÓN: 02 &nbsp;&nbsp;&nbsp; FECHA DE APLICACIÓN: 01-08-2024</div>'+
+
   '<script>window.onload=function(){window.print();};<\/script>'+
   '</body></html>';
   var w = window.open("","_blank");
