@@ -9669,22 +9669,31 @@ function BitacoraApp({onBack, initialUser}){
     // Fetch latest from Supabase first to avoid overwriting other users' reports
     let remoto=null;
     try{ remoto=await btkGet(KS.e); }catch(ex){}
-    setEntries(function(p){
-      // Merge: start from remote (authoritative), add any local entries not in remote, then prepend new entry
-      const base=Array.isArray(remoto)&&remoto.length>0?remoto:p;
-      // ── Consecutivo automático del reporte (correlativo por año: BTK-AAAA-####) ──
-      if(!entry.consecutivo){
-        const anioRep=(entry.fecha||"").slice(0,4)||String(new Date().getFullYear());
+    // ── Consecutivo automático del reporte (atómico vía RPC en Supabase) ──
+    if(!entry.consecutivo){
+      const anioRep=parseInt((entry.fecha||"").slice(0,4)||String(new Date().getFullYear()),10);
+      try{
+        const {data,error}=await sb.rpc("siguiente_consecutivo_bitacora",{p_anio:anioRep});
+        if(error) throw error;
+        entry.consecutivo=data;
+      }catch(ex){
+        console.warn("RPC consecutivo bitacora falló, usando fallback local",ex);
+        // Fallback local (sin conexión): correlativo basado en lo ya cargado
+        const base=Array.isArray(remoto)&&remoto.length>0?remoto:entries;
         let maxNum=0;
-        base.concat(p).forEach(function(e){
+        base.forEach(function(e){
           const m=e.consecutivo&&e.consecutivo.match(/^BTK-(\d{4})-(\d+)$/);
-          if(m&&m[1]===anioRep){
+          if(m&&parseInt(m[1],10)===anioRep){
             const n=parseInt(m[2],10);
             if(n>maxNum) maxNum=n;
           }
         });
         entry.consecutivo="BTK-"+anioRep+"-"+String(maxNum+1).padStart(4,"0");
       }
+    }
+    setEntries(function(p){
+      // Merge: start from remote (authoritative), add any local entries not in remote, then prepend new entry
+      const base=Array.isArray(remoto)&&remoto.length>0?remoto:p;
       // Include local entries that might not be in remote yet (created in this session before sync)
       const localIds=new Set(base.map(function(e){return e.id;}));
       const localOnly=p.filter(function(e){return !localIds.has(e.id);});
