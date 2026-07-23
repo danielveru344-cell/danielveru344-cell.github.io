@@ -25,6 +25,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
@@ -1011,6 +1012,93 @@ const SUPA_URL = "https://mysqkhttdquwicrsjcmg.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15c3FraHR0ZHF1d2ljcnNqY21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTAxMzMsImV4cCI6MjA5MzA2NjEzM30.RBw3DwjQZvoJUhqBIkR6p3LdYhpc3PVMcyZiIe0uGUE";
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
+// ── Exportación profesional a Excel (ExcelJS) ──────────────────────────────────
+// sheetsDef: [{ name, title, columns:[{header,key,width,numFmt}], rows:[...], totals?:{...} }]
+async function exportStyledExcel(sheetsDef, filename){
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Bussié Suite";
+  wb.created = new Date();
+
+  const NAVY = "FF0D2F5C";
+  const GOLD = "FFC9A24B";
+  const LIGHT = "FFF4F7FD";
+  const BORDER_COL = "FFD7DEEA";
+
+  const thinBorder = {
+    top:{style:"thin",color:{argb:BORDER_COL}}, left:{style:"thin",color:{argb:BORDER_COL}},
+    bottom:{style:"thin",color:{argb:BORDER_COL}}, right:{style:"thin",color:{argb:BORDER_COL}}
+  };
+
+  sheetsDef.forEach(function(def){
+    const ws = wb.addWorksheet(def.name.slice(0,31), {
+      views:[{state:"frozen", ySplit: def.title?2:1}]
+    });
+    const cols = def.columns||[];
+    let rowCursor = 1;
+
+    if(def.title){
+      ws.mergeCells(1,1,1,Math.max(cols.length,1));
+      const tCell = ws.getCell(1,1);
+      tCell.value = def.title;
+      tCell.font = {bold:true, size:13, color:{argb:NAVY}};
+      tCell.alignment = {vertical:"middle", horizontal:"left"};
+      ws.getRow(1).height = 24;
+      rowCursor = 2;
+    }
+
+    ws.columns = cols.map(function(c){return {key:c.key, width:c.width||18};});
+
+    // Encabezado
+    const headerRow = ws.getRow(rowCursor);
+    cols.forEach(function(c,i){
+      const cell = headerRow.getCell(i+1);
+      cell.value = c.header;
+      cell.font = {bold:true, color:{argb:"FFFFFFFF"}, size:11};
+      cell.fill = {type:"pattern", pattern:"solid", fgColor:{argb:NAVY}};
+      cell.alignment = {vertical:"middle", horizontal:"center", wrapText:true};
+      cell.border = thinBorder;
+    });
+    headerRow.height = 22;
+    ws.autoFilter = {
+      from:{row:rowCursor, column:1},
+      to:{row:rowCursor, column:cols.length}
+    };
+
+    // Filas de datos
+    (def.rows||[]).forEach(function(r,ri){
+      const row = ws.addRow(cols.map(function(c){return r[c.key];}));
+      const zebra = ri%2===1;
+      cols.forEach(function(c,ci){
+        const cell = row.getCell(ci+1);
+        cell.border = thinBorder;
+        cell.alignment = {vertical:"middle", horizontal: c.align||"left", wrapText:false};
+        if(zebra) cell.fill = {type:"pattern", pattern:"solid", fgColor:{argb:LIGHT}};
+        if(c.numFmt) cell.numFmt = c.numFmt;
+      });
+    });
+
+    // Fila de totales opcional
+    if(def.totals){
+      const tr = ws.addRow(cols.map(function(c){return def.totals[c.key]!==undefined?def.totals[c.key]:"";}));
+      cols.forEach(function(c,ci){
+        const cell = tr.getCell(ci+1);
+        cell.font = {bold:true, color:{argb:NAVY}};
+        cell.border = {top:{style:"double",color:{argb:NAVY}}};
+        cell.fill = {type:"pattern", pattern:"solid", fgColor:{argb:"FFEFF3FB"}};
+      });
+    }
+  });
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);}, 4000);
+}
+
+
 function pushNotificacion(titulo, mensaje){
   // Ejecutar fuera del contexto async para evitar conflicto con OneSignal SDK
   setTimeout(async function(){
@@ -1384,98 +1472,151 @@ function AlmacenApp({onBack, initialUser}){
     try {
       const now = new Date();
       const fecha = now.toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"America/Bogota"});
+      const horaStamp = now.toLocaleTimeString("es-CO",{hour:"2-digit",minute:"2-digit",timeZone:"America/Bogota"});
       const stamp = fecha.replace(/\//g,"-");
-      const wb = XLSX.utils.book_new();
+      const MOV_LABELS={
+        entrada:"Entrada",salida:"Salida",devolucion:"Devolución",
+        alta_articulo:"Alta artículo",edicion_articulo:"Edición artículo",baja_articulo:"Baja artículo",
+        alta_equipo:"Alta equipo",edicion_equipo:"Edición equipo",baja_equipo:"Baja equipo",
+        nueva_solicitud:"Nueva solicitud",estado_solicitud:"Cambio estado solicitud",
+        baja_solicitud:"Solicitud eliminada",en_cotizacion:"En cotización"
+      };
+      const estadoLabel=function(k){const f=ESTADOS.find(function(e){return e.key===k;});return f?f.label:(k||"Pendiente");};
 
-      if(tab==="inventario"){
-        const rows = items.map(i=>({
-          "Código":i.code, "Artículo":i.name, "Categoría":i.category,
-          "Cantidad":i.quantity, "Stock Mínimo":i.minStock,
-          "Unidad":i.unit, "Ubicación":i.location,
-          "Estado":i.quantity===0?"Sin stock":i.quantity<=i.minStock?"Stock bajo":"OK"
-        }));
-        const ws=XLSX.utils.json_to_sheet(rows);
-        ws["!cols"]=[{wch:12},{wch:30},{wch:14},{wch:10},{wch:14},{wch:10},{wch:14},{wch:14}];
-        XLSX.utils.book_append_sheet(wb,ws,"Inventario");
-        const resumen=[
-          {" ":"Total artículos","Valor":items.length},
-          {" ":"Stock bajo","Valor":items.filter(i=>i.quantity>0&&i.quantity<=i.minStock).length},
-          {" ":"Sin stock","Valor":items.filter(i=>i.quantity===0).length},
-          {" ":"Exportado","Valor":fecha},
+      if(tab==="inventario"||tab==="panel"){
+        const rows=items.slice().sort(function(a,b){return (a.name||"").localeCompare(b.name||"");}).map(function(i){
+          return {
+            codigo:i.code||"", articulo:i.name||"", categoria:i.category||"",
+            cantidad:i.quantity||0, stockMin:i.minStock||0, unidad:i.unit||"",
+            ubicacion:i.location||"",
+            estado:i.quantity===0?"Sin stock":i.quantity<=i.minStock?"Stock bajo":"OK"
+          };
+        });
+        const resumenRows=[
+          {campo:"Total artículos", valor:items.length},
+          {campo:"Stock bajo", valor:items.filter(function(i){return i.quantity>0&&i.quantity<=i.minStock;}).length},
+          {campo:"Sin stock", valor:items.filter(function(i){return i.quantity===0;}).length},
+          {campo:"Categorías distintas", valor:new Set(items.map(function(i){return i.category;}).filter(Boolean)).size},
+          {campo:"Exportado", valor:fecha+" "+horaStamp}
         ];
-        const ws2=XLSX.utils.json_to_sheet(resumen);
-        ws2["!cols"]=[{wch:22},{wch:16}];
-        XLSX.utils.book_append_sheet(wb,ws2,"Resumen");
+        await exportStyledExcel([
+          {
+            name:"Inventario", title:"Inventario completo · Bussié Suite · "+fecha,
+            columns:[
+              {header:"Código", key:"codigo", width:14},
+              {header:"Artículo", key:"articulo", width:34},
+              {header:"Categoría", key:"categoria", width:16},
+              {header:"Cantidad", key:"cantidad", width:11, align:"center"},
+              {header:"Stock Mínimo", key:"stockMin", width:13, align:"center"},
+              {header:"Unidad", key:"unidad", width:10, align:"center"},
+              {header:"Ubicación", key:"ubicacion", width:16},
+              {header:"Estado", key:"estado", width:14, align:"center"}
+            ],
+            rows: rows,
+            totals:{codigo:"TOTAL", cantidad:rows.reduce(function(s,r){return s+(r.cantidad||0);},0)}
+          },
+          {
+            name:"Resumen", title:"Resumen de inventario",
+            columns:[{header:"Indicador",key:"campo",width:26},{header:"Valor",key:"valor",width:16}],
+            rows: resumenRows
+          }
+        ], "Bussie_Inventario_"+stamp+".xlsx");
 
       } else if(tab==="solicitudes"){
         const {data,error}=await sb.from("solicitudes").select("*").order("created_at",{ascending:false});
         if(error) throw error;
-        const rows=(data||[]).map(s=>({
-          "Fecha":fmtDate(s.created_at),
-          "Artículo":s.item_name,
-          "Cantidad":s.cantidad,
-          "Unidad":s.unidad,
-          "Equipo":s.equipo||"",
-          "Notas":s.notas||"",
-          "Estado":s.estado||s.status||"pendiente",
-          "Solicitante":s.solicitante_name||""
-        }));
-        const ws=XLSX.utils.json_to_sheet(rows);
-        ws["!cols"]=[{wch:20},{wch:28},{wch:10},{wch:10},{wch:18},{wch:24},{wch:14},{wch:18}];
-        XLSX.utils.book_append_sheet(wb,ws,"Solicitudes");
+        const rows=(data||[]).map(function(s){
+          return {
+            consecutivo:s.consecutivo||"", fecha:fmtDate(s.created_at),
+            articulo:s.item_name||"", cantidad:s.quantity||s.cantidad||0,
+            unidad:s.unidad||s.unit||"", equipo:s.equipo_name||s.equipo||"",
+            notas:s.notes||s.notas||"", estado:estadoLabel(s.status||s.estado),
+            solicitante:s.solicitante_name||"", proveedor:s.proveedor||"",
+            remision:s.remision||"", cantidadRecibida:s.cantidad_recibida||""
+          };
+        });
+        await exportStyledExcel([{
+          name:"Solicitudes", title:"Solicitudes completas · "+fecha,
+          columns:[
+            {header:"Consecutivo", key:"consecutivo", width:14},
+            {header:"Fecha", key:"fecha", width:18},
+            {header:"Artículo", key:"articulo", width:30},
+            {header:"Cantidad", key:"cantidad", width:10, align:"center"},
+            {header:"Unidad", key:"unidad", width:10, align:"center"},
+            {header:"Equipo", key:"equipo", width:18},
+            {header:"Estado", key:"estado", width:20, align:"center"},
+            {header:"Solicitante", key:"solicitante", width:20},
+            {header:"Proveedor", key:"proveedor", width:18},
+            {header:"Remisión", key:"remision", width:14},
+            {header:"Cant. Recibida", key:"cantidadRecibida", width:13, align:"center"},
+            {header:"Notas", key:"notas", width:30}
+          ],
+          rows: rows
+        }], "Bussie_Solicitudes_"+stamp+".xlsx");
 
       } else if(tab==="historial"){
-        const {data,error}=await sb.from("movimientos").select("*").order("created_at",{ascending:false}).limit(500);
+        const {data,error}=await sb.from("movimientos").select("*").order("created_at",{ascending:false}).limit(10000);
         if(error) throw error;
-        const rows=(data||[]).map(m=>({
-          "Fecha":fmtDate(m.created_at),
-          "Tipo":m.type,
-          "Artículo":m.item_name||"",
-          "Código":m.item_code||"",
-          "Cantidad":m.quantity||0,
-          "Nuevo stock":m.new_qty||0,
-          "Motivo":m.reason||""
-        }));
-        const ws=XLSX.utils.json_to_sheet(rows);
-        ws["!cols"]=[{wch:20},{wch:10},{wch:28},{wch:12},{wch:10},{wch:12},{wch:24}];
-        XLSX.utils.book_append_sheet(wb,ws,"Historial");
+        const rows=(data||[]).map(function(m){
+          return {
+            fecha:fmtDate(m.created_at), tipo:MOV_LABELS[m.type]||m.type||"",
+            articulo:m.item_name||"", codigo:m.item_code||"",
+            cantidad:m.quantity||0, nuevoStock:m.new_qty||0, motivo:m.reason||""
+          };
+        });
+        await exportStyledExcel([{
+          name:"Historial", title:"Historial completo de movimientos · "+fecha,
+          columns:[
+            {header:"Fecha", key:"fecha", width:18},
+            {header:"Tipo", key:"tipo", width:18},
+            {header:"Artículo", key:"articulo", width:30},
+            {header:"Código", key:"codigo", width:14},
+            {header:"Cantidad", key:"cantidad", width:11, align:"center"},
+            {header:"Nuevo Stock", key:"nuevoStock", width:13, align:"center"},
+            {header:"Motivo", key:"motivo", width:34}
+          ],
+          rows: rows
+        }], "Bussie_Historial_"+stamp+".xlsx");
 
       } else if(tab==="equipos"){
-        const rows=equipos.map(e=>({
-          "Código":e.code||"", "Equipo":e.name,
-          "Ubicación":e.location||"", "Descripción":e.description||""
-        }));
-        const ws=XLSX.utils.json_to_sheet(rows);
-        ws["!cols"]=[{wch:14},{wch:28},{wch:16},{wch:32}];
-        XLSX.utils.book_append_sheet(wb,ws,"Equipos");
+        const rows=equipos.slice().sort(function(a,b){return (a.name||"").localeCompare(b.name||"");}).map(function(e){
+          return {codigo:e.code||"", equipo:e.name||"", ubicacion:e.location||"", descripcion:e.description||""};
+        });
+        await exportStyledExcel([{
+          name:"Equipos", title:"Equipos registrados · "+fecha,
+          columns:[
+            {header:"Código", key:"codigo", width:14},
+            {header:"Equipo", key:"equipo", width:30},
+            {header:"Ubicación", key:"ubicacion", width:18},
+            {header:"Descripción", key:"descripcion", width:36}
+          ],
+          rows: rows
+        }], "Bussie_Equipos_"+stamp+".xlsx");
 
       } else if(tab==="usuarios"){
         const {data,error}=await sb.from("usuarios").select("id,username,nombre,role,activo,email,created_at").order("created_at");
         if(error) throw error;
-        const rows=(data||[]).map(u=>({
-          "Usuario":u.username, "Nombre":u.nombre,
-          "Rol":u.role, "Activo":u.activo?"Sí":"No",
-          "Creado":fmtDate(u.created_at)
-        }));
-        const ws=XLSX.utils.json_to_sheet(rows);
-        ws["!cols"]=[{wch:16},{wch:22},{wch:14},{wch:8},{wch:20}];
-        XLSX.utils.book_append_sheet(wb,ws,"Usuarios");
-
-      } else if(tab==="panel"){
-        // Panel: exporta resumen general
-        const rows=items.map(i=>({
-          "Código":i.code,"Artículo":i.name,"Categoría":i.category,
-          "Cantidad":i.quantity,"Stock Mínimo":i.minStock,"Unidad":i.unit,
-          "Ubicación":i.location,
-          "Estado":i.quantity===0?"Sin stock":i.quantity<=i.minStock?"Stock bajo":"OK"
-        }));
-        const ws=XLSX.utils.json_to_sheet(rows);
-        ws["!cols"]=[{wch:12},{wch:30},{wch:14},{wch:10},{wch:14},{wch:10},{wch:14},{wch:14}];
-        XLSX.utils.book_append_sheet(wb,ws,"Inventario");
+        const rows=(data||[]).map(function(u){
+          return {
+            usuario:u.username||"", nombre:u.nombre||"", rol:u.role||"",
+            activo:u.activo?"Sí":"No", email:u.email||"", creado:fmtDate(u.created_at)
+          };
+        });
+        await exportStyledExcel([{
+          name:"Usuarios", title:"Usuarios registrados · "+fecha,
+          columns:[
+            {header:"Usuario", key:"usuario", width:16},
+            {header:"Nombre", key:"nombre", width:24},
+            {header:"Rol", key:"rol", width:14, align:"center"},
+            {header:"Activo", key:"activo", width:9, align:"center"},
+            {header:"Email", key:"email", width:26},
+            {header:"Creado", key:"creado", width:18}
+          ],
+          rows: rows
+        }], "Bussie_Usuarios_"+stamp+".xlsx");
 
       }
 
-      XLSX.writeFile(wb,"Bussie_"+tab.charAt(0).toUpperCase()+tab.slice(1)+"_"+stamp+".xlsx");
       flash("Exportado a Excel correctamente");
     } catch(e) {
       flash("Error al exportar: "+e.message, false);
@@ -10839,17 +10980,59 @@ function MantenimientosApp({onBack, initialUser}){
                   })}
                 </div>
                 <button className="ios-btn ios-btn-blue" style={{marginTop:14,padding:"12px 18px",fontSize:13}}
-                  onClick={function(){
-                    var wsData = [["CUMPLIMIENTO MANTENIMIENTO PREVENTIVO "+anio],[],
-                      ["Mes","Programadas","Ejecutadas","Reprogramadas","Vencidas","% Cumplimiento"]];
-                    porMes.forEach(function(pm){
-                      wsData.push([MTTO_MESES[pm.mes-1],pm.total,pm.ejec,pm.repr,pm.venc,
-                        pm.total>0?Math.round(pm.ejec/pm.total*100)+"%":"—"]);
+                  onClick={async function(){
+                    var fechaHoy=new Date().toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"America/Bogota"});
+                    var resumenRows=porMes.map(function(pm){
+                      return {
+                        mes:MTTO_MESES[pm.mes-1], programadas:pm.total, ejecutadas:pm.ejec,
+                        reprogramadas:pm.repr, vencidas:pm.venc,
+                        pct: pm.total>0?Math.round(pm.ejec/pm.total*100)+"%":"—"
+                      };
                     });
-                    wsData.push(["TOTAL",totAnio,totEjec,"","",totAnio>0?Math.round(totEjec/totAnio*100)+"%":"—"]);
-                    var wb = XLSX.utils.book_new();
-                    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(wsData),"Cumplimiento "+anio);
-                    XLSX.writeFile(wb,"Cumplimiento_MttoPreventivo_"+anio+".xlsx");
+                    var ordenesRows=ordenes.slice().sort(function(a,b){
+                      return (a.seccion||"").localeCompare(b.seccion||"")||(a.equipo_codigo||"").localeCompare(b.equipo_codigo||"")||a.mes-b.mes;
+                    }).map(function(o){
+                      return {
+                        seccion:o.seccion||"", codigo:o.equipo_codigo||"", equipo:o.equipo_desc||"",
+                        mes:MTTO_MESES[o.mes-1]||o.mes, frecuencia:MTTO_FREQ[o.frecuencia]||o.frecuencia||"",
+                        estado:o.estado==="ejecutado"?"Ejecutado":o.estado==="reprogramado"?"Reprogramado":"Programado",
+                        asignado:o.asignado_a||"", fechaEjecucion:o.fecha_ejecucion||"",
+                        ejecutor:o.ejecutor||"", observaciones:o.observaciones||"", consecutivo:o.consecutivo||""
+                      };
+                    });
+                    await exportStyledExcel([
+                      {
+                        name:"Cumplimiento "+anio, title:"Cumplimiento Mantenimiento Preventivo "+anio+" · "+fechaHoy,
+                        columns:[
+                          {header:"Mes", key:"mes", width:14},
+                          {header:"Programadas", key:"programadas", width:13, align:"center"},
+                          {header:"Ejecutadas", key:"ejecutadas", width:12, align:"center"},
+                          {header:"Reprogramadas", key:"reprogramadas", width:14, align:"center"},
+                          {header:"Vencidas", key:"vencidas", width:11, align:"center"},
+                          {header:"% Cumplimiento", key:"pct", width:15, align:"center"}
+                        ],
+                        rows: resumenRows,
+                        totals:{mes:"TOTAL", programadas:totAnio, ejecutadas:totEjec,
+                          pct: totAnio>0?Math.round(totEjec/totAnio*100)+"%":"—"}
+                      },
+                      {
+                        name:"Órdenes "+anio, title:"Detalle completo de órdenes "+anio+" · "+ordenesRows.length+" órdenes",
+                        columns:[
+                          {header:"Sección", key:"seccion", width:16},
+                          {header:"Código Equipo", key:"codigo", width:14},
+                          {header:"Equipo", key:"equipo", width:30},
+                          {header:"Mes", key:"mes", width:12},
+                          {header:"Frecuencia", key:"frecuencia", width:12, align:"center"},
+                          {header:"Estado", key:"estado", width:14, align:"center"},
+                          {header:"Asignado a", key:"asignado", width:18},
+                          {header:"Fecha Ejecución", key:"fechaEjecucion", width:14, align:"center"},
+                          {header:"Ejecutor", key:"ejecutor", width:18},
+                          {header:"Consecutivo", key:"consecutivo", width:14},
+                          {header:"Observaciones", key:"observaciones", width:34}
+                        ],
+                        rows: ordenesRows
+                      }
+                    ], "Bussie_Cumplimiento_MttoPreventivo_"+anio+".xlsx");
                   }}>
                   ⬇ Exportar resumen a Excel
                 </button>
