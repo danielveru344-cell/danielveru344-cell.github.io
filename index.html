@@ -7210,6 +7210,8 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
   const [turno,setTurno]=useState(function(){return detectTurno();});
   const [fecha,setFecha]=useState(new Date().toISOString().slice(0,10));
   const [tipo,setTipo]=useState(""); // "fallo" | "ajuste" | "preventivo" | ""
+  const [operarioTurno,setOperarioTurno]=useState("na"); // "na" | "si"
+  const [operarioTurnoNombre,setOperarioTurnoNombre]=useState("");
   const tecObj=tecMap[tecCode]||null;
   // Cargo: prioridad al cargo del usuario logueado, fallback al tecObj
   const cargoActivo = (initialUser&&initialUser.cargo) || (tecObj&&tecObj.cargo) || "";
@@ -7266,6 +7268,7 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
   function doSave(){
     if(!tecNombreActivo){alert("No se pudo identificar al usuario.");return;}
     if(!tipo){alert("⚠️ Selecciona el tipo de reporte: Fallo o Ajuste.");return;}
+    if(operarioTurno==="si"&&!operarioTurnoNombre.trim()){alert("⚠️ Escribe el nombre del operario en turno o selecciona N/A.");return;}
     if(fecha>todayS()){alert("⚠️ La fecha del reporte no puede ser futura.");return;}
     // Intentar agregar la tarjeta actual si tiene contenido
     var allReal=real.slice();
@@ -7314,10 +7317,13 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
     });
     var tecLabel=tecCode?("M"+tecCode+" · "+tecNombreActivo):tecNombreActivo;
     onSave({id:gid(),createdAt:ts(),fecha:fecha,turno:turno,tipo:tipo,tecnico:tecLabel,
+      operarioTurno:operarioTurno==="si"?operarioTurnoNombre.trim():"N/A",
       realizadas:allReal,pendientes:pends,obs:""});
     // Resetear form para nuevo reporte en la misma sesión
     setReal([]);
     setTipo("");
+    setOperarioTurno("na");
+    setOperarioTurnoNombre("");
     setCurrent(emptyCard());
   }
   // ── Formulario de reporte ─────────────────────────────────────────────────
@@ -7385,6 +7391,34 @@ function NewForm({onSave,onCancel,eqs,tecs,metEqs,locEqs,turnos,initialUser,sess
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Operario en turno */}
+      <div style={{background:"#fff",border:"1.5px solid rgba(13,47,92,0.10)",borderRadius:16,padding:"12px 14px"}}>
+        <div style={{fontFamily:"Montserrat",fontWeight:700,fontSize:10,color:"#8a96a8",letterSpacing:.5,marginBottom:8}}>OPERARIO EN TURNO</div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={function(){setOperarioTurno("na");setOperarioTurnoNombre("");}}
+            style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid",cursor:"pointer",
+              borderColor:operarioTurno==="na"?NV:"rgba(13,47,92,0.15)",
+              background:operarioTurno==="na"?"rgba(13,47,92,0.08)":"transparent",
+              fontFamily:"Montserrat",fontWeight:700,fontSize:12,color:NV}}>
+            N/A
+          </button>
+          <button onClick={function(){setOperarioTurno("si");}}
+            style={{flex:1,padding:"7px 0",borderRadius:8,border:"1.5px solid",cursor:"pointer",
+              borderColor:operarioTurno==="si"?NV:"rgba(13,47,92,0.15)",
+              background:operarioTurno==="si"?"rgba(13,47,92,0.08)":"transparent",
+              fontFamily:"Montserrat",fontWeight:700,fontSize:12,color:NV}}>
+            Sí
+          </button>
+        </div>
+        {operarioTurno==="si"&&(
+          <input type="text" className="inp" placeholder="Nombre del operario"
+            value={operarioTurnoNombre}
+            onChange={function(e){setOperarioTurnoNombre(e.target.value);}}
+            style={{marginTop:8,width:"100%",border:"1.5px solid rgba(13,47,92,0.15)",borderRadius:8,
+              padding:"8px 10px",fontSize:13,fontWeight:600,color:NV,fontFamily:"Montserrat",boxSizing:"border-box"}}/>
+        )}
       </div>
 
       {/* Tarjeta única activa */}
@@ -7692,6 +7726,7 @@ function EntryDetail(props){
             </div>
             <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:"Montserrat"}}>{entry.tecnico}</div>
             <div style={{color:"rgba(255,255,255,0.6)",marginTop:4,fontSize:13}}>{entry.turno}</div>
+            {entry.operarioTurno&&<div style={{color:"rgba(255,255,255,0.45)",marginTop:2,fontSize:11,fontFamily:"Montserrat"}}>Operario en turno: {entry.operarioTurno}</div>}
           </div>
           <div>
             <div style={{fontFamily:"Montserrat",fontSize:15,color:"#7dd3fc",fontWeight:700}}>{fD(entry.fecha+"T12:00:00")}</div>
