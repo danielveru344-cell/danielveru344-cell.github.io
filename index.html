@@ -8367,6 +8367,9 @@ function EntryCard(props){
               <span style={{fontWeight:700,fontSize:15,color:NV,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:"Montserrat"}}>{e.tecnico}</span>
             </div>
             <div style={{fontSize:12,color:"#8a96a8",fontWeight:500}}>{e.turno}</div>
+            {e.operarioTurno&&e.operarioTurno!=="N/A"&&(
+              <div style={{fontSize:11,color:"#8a96a8",marginTop:2}}>👤 Operario en turno: <span style={{fontWeight:700,color:NV}}>{e.operarioTurno}</span></div>
+            )}
           </div>
           <div style={{flexShrink:0,textAlign:"right"}}>
             <div style={{fontFamily:"Montserrat",color:NV,fontWeight:800,fontSize:13}}>{fD(e.fecha+"T12:00:00")}</div>
@@ -8402,6 +8405,7 @@ function EntryCard(props){
 function ReportesView(props){
   const [q,setQ]=useState("");
   const [trn,setTrn]=useState("Todos");
+  const [opF,setOpF]=useState("Todos");
   const [ar,setAr]=useState("Todas");
   const [pr,setPr]=useState("Todas");
   const [sp,setSp]=useState(props.filtroInicial==="pendientes");
@@ -8414,8 +8418,8 @@ function ReportesView(props){
   // sortBy opciones: fecha_desc|fecha_asc|persona_az|persona_za|turno_az|turno_za|horas_desc|horas_asc
 
   function toggleExp(id){const n=Object.assign({},exp);n[id]=!n[id];setExp(n);}
-  function reset(){setQ("");setTrn("Todos");setAr("Todas");setPr("Todas");setSp(false);setSv(false);setTp("todos");setDe("");setHa("");setSortBy("fecha_desc");}
-  const fa=!!(q||trn!=="Todos"||ar!=="Todas"||pr!=="Todas"||sp||sv||tp!=="todos"||de||ha||sortBy!=="fecha_desc");
+  function reset(){setQ("");setTrn("Todos");setOpF("Todos");setAr("Todas");setPr("Todas");setSp(false);setSv(false);setTp("todos");setDe("");setHa("");setSortBy("fecha_desc");}
+  const fa=!!(q||trn!=="Todos"||opF!=="Todos"||ar!=="Todas"||pr!=="Todas"||sp||sv||tp!=="todos"||de||ha||sortBy!=="fecha_desc");
 
   const entries=props.entries;
   const allAreas=[];
@@ -8424,6 +8428,7 @@ function ReportesView(props){
     e.pendientes.forEach(function(p){if(allAreas.indexOf(p.area)<0)allAreas.push(p.area);});
   });
   allAreas.sort();
+  const allOperarios=Array.from(new Set(entries.map(function(e){return (e.operarioTurno||"").trim();}).filter(function(v){return v&&v!=="N/A";}))).sort();
 
   function getTotalHoras(e){
     var mins=0;
@@ -8444,6 +8449,7 @@ function ReportesView(props){
       ||(e.pendientes||[]).some(function(p){return p.desc.toLowerCase().indexOf(ql)>=0;})
       ||(e.obs||"").toLowerCase().indexOf(ql)>=0))return false;
     if(trn!=="Todos"&&e.turno!==trn)return false;
+    if(opF!=="Todos"&&(e.operarioTurno||"").trim()!==opF)return false;
     if(ar!=="Todas"&&!e.realizadas.some(function(r){return r.area===ar;})&&!(e.pendientes||[]).some(function(p){return p.area===ar;}))return false;
     if(pr!=="Todas"&&!(e.pendientes||[]).some(function(p){return p.p===pr;}))return false;
     if(sp&&(e.pendientes||[]).filter(function(p){return !p.cerrado;}).length===0)return false;
@@ -8519,6 +8525,7 @@ function ReportesView(props){
             </div>
             <div className="fg3" style={{marginBottom:10}}>
               <BtkField label="Turno"><select className="inp" value={trn} onChange={function(e){setTrn(e.target.value);}}><option>Todos</option>{(props.turnos||TURNOS_DEF).map(function(t){return <option key={t}>{t}</option>;})}</select></BtkField>
+              <BtkField label="Operario en turno"><select className="inp" value={opF} onChange={function(e){setOpF(e.target.value);}}><option>Todos</option>{allOperarios.map(function(o){return <option key={o}>{o}</option>;})}</select></BtkField>
               <BtkField label="Equipo/Área"><select className="inp" value={ar} onChange={function(e){setAr(e.target.value);}}><option>Todas</option>{allAreas.map(function(a){return <option key={a}>{a}</option>;})}</select></BtkField>
               <BtkField label="Prioridad"><select className="inp" value={pr} onChange={function(e){setPr(e.target.value);}}><option>Todas</option>{PRIOS.map(function(p){return <option key={p}>{p}</option>;})}</select></BtkField>
             </div>
@@ -8999,19 +9006,41 @@ function AnalisisView(props){
 
   const eqMap={};
   filtradasFallo.forEach(function(entry){
+    var opNombre=(entry.operarioTurno||"").trim();
+    var opValido=opNombre&&opNombre!=="N/A";
     entry.realizadas.forEach(function(r){
       var key=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
       if(!key||key==="✏ Otra actividad...")return;
-      if(!eqMap[key])eqMap[key]={area:key,iv:0,min:0,pend:0,alta:0};
+      if(!eqMap[key])eqMap[key]={area:key,iv:0,min:0,pend:0,alta:0,operarios:{}};
       eqMap[key].iv++;eqMap[key].min+=dm(r.hi,r.hf);
+      if(opValido)eqMap[key].operarios[opNombre]=(eqMap[key].operarios[opNombre]||0)+1;
     });
     (entry.pendientes||[]).forEach(function(p){
       var key=p.equipo&&p.equipo.trim()?p.equipo.trim():p.area&&p.area.trim()?p.area.trim():null;
       if(!key)return;
-      if(!eqMap[key])eqMap[key]={area:key,iv:0,min:0,pend:0,alta:0};
+      if(!eqMap[key])eqMap[key]={area:key,iv:0,min:0,pend:0,alta:0,operarios:{}};
       eqMap[key].pend++;if(p.p==="Alta")eqMap[key].alta++;
     });
   });
+
+  // ── Operarios en turno con más fallas ──────────────────────────
+  const opMap={};
+  filtradasFallo.forEach(function(entry){
+    var opNombre=(entry.operarioTurno||"").trim();
+    if(!opNombre||opNombre==="N/A")return;
+    if(!opMap[opNombre])opMap[opNombre]={total:0,equipos:{}};
+    opMap[opNombre].total++;
+    var vistos={};
+    entry.realizadas.forEach(function(r){
+      var key=r.equipo&&r.equipo.trim()?r.equipo.trim():r.area&&r.area.trim()?r.area.trim():null;
+      if(!key||key==="✏ Otra actividad..."||vistos[key])return;
+      vistos[key]=true;
+      opMap[opNombre].equipos[key]=(opMap[opNombre].equipos[key]||0)+1;
+    });
+  });
+  const optop=Object.entries(opMap).sort(function(a,b){return b[1].total-a[1].total;});
+  const mxOp=optop[0]?optop[0][1].total:1;
+  const [expandedOp,setExpandedOp]=useState(null);
   const eqs=Object.values(eqMap);
   const topI=eqs.slice().sort(function(a,b){return b.iv-a.iv;}).slice(0,8);
   const topT=eqs.filter(function(e){return e.min>0;}).sort(function(a,b){return b.min-a.min;}).slice(0,8);
@@ -9586,6 +9615,60 @@ function AnalisisView(props){
         }
       </AnalCard>
 
+      {/* Operarios en turno con más fallas */}
+      <AnalCard id="ac-operarios" title="Operarios en turno · Fallas" icon={IC.user} col="#C0001A">
+        {optop.length===0
+          ?<span style={{color:"#8a96a8",fontSize:13}}>Aún no hay reportes de fallo con operario en turno registrado.</span>
+          :<div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <div style={{fontSize:11,color:"#8a96a8",marginBottom:6}}>
+              Toca un operario para ver en qué equipos estuvo presente durante la falla.
+            </div>
+            {optop.map(function(kv){
+              const nombre=kv[0];const datos=kv[1];
+              const isOpen=expandedOp===nombre;
+              const pct=Math.round(datos.total/mxOp*100);
+              const eqsSorted=Object.entries(datos.equipos).sort(function(a,b){return b[1]-a[1];});
+              return(
+                <div key={nombre} style={{border:"1px solid rgba(13,47,92,0.10)",borderRadius:10,overflow:"hidden"}}>
+                  <div onClick={function(){setExpandedOp(isOpen?null:nombre);}}
+                    style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                      padding:"10px 14px",cursor:"pointer",background:isOpen?"#FFF3F0":"#fff"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                      <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:13,color:NV,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{nombre}</span>
+                      <span style={{background:"#FFDEDE",color:"#C0001A",borderRadius:8,padding:"2px 9px",fontSize:11,fontWeight:800,fontFamily:"Montserrat",flexShrink:0}}>{datos.total} falla{datos.total!==1?"s":""}</span>
+                    </div>
+                    <div style={{color:"#8a96a8",transition:"transform .2s",transform:isOpen?"rotate(180deg)":"none",display:"flex",flexShrink:0}}>
+                      <Ico d={IC.chev} sz={14} c="#8a96a8"/>
+                    </div>
+                  </div>
+                  <div style={{height:5,background:"#f4f7fd"}}>
+                    <div style={{height:"100%",width:pct+"%",background:"#C0001A"}}/>
+                  </div>
+                  {isOpen&&(
+                    <div style={{borderTop:"1px solid rgba(13,47,92,0.08)",background:"#f9fafb",padding:"8px 14px 10px",display:"flex",flexDirection:"column",gap:6}}>
+                      {eqsSorted.length===0
+                        ?<span style={{fontSize:11,color:"#8a96a8"}}>Sin equipo asociado en estos reportes.</span>
+                        :eqsSorted.map(function(ev){
+                          const p2=Math.round(ev[1]/datos.total*100);
+                          return(
+                            <div key={ev[0]} style={{display:"flex",alignItems:"center",gap:8}}>
+                              <span style={{fontSize:11,color:"#555",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ev[0]}>{ev[0]}</span>
+                              <div style={{width:60,height:6,background:"#e8f0fb",borderRadius:3,flexShrink:0}}>
+                                <div style={{height:"100%",width:p2+"%",background:"#C0001A",borderRadius:3}}/>
+                              </div>
+                              <span style={{fontFamily:"Montserrat",fontWeight:800,fontSize:11,color:"#C0001A",minWidth:24,textAlign:"right",flexShrink:0}}>{ev[1]}x</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        }
+      </AnalCard>
+
       {/* Técnicos — análisis detallado */}
       <TecnicosCard entries={entries} eqColorFn={eqColor} fmFn={fm} dmFn={dm}/>
 
@@ -9594,7 +9677,7 @@ function AnalisisView(props){
         <div style={{overflowX:"auto"}}>
           <table className="atbl">
             <thead><tr>
-              {[["Equipo",""],["Interv.","nº"],["Tiempo","h:min"],["Pendientes","nº"],["Pend. Alta","nº"]].map(function(h){return(
+              {[["Equipo",""],["Interv.","nº"],["Tiempo","h:min"],["Pendientes","nº"],["Pend. Alta","nº"],["Operario(s)","en falla"]].map(function(h){return(
                 <th key={h[0]}>
                   {h[0]}
                   {h[1]&&<span style={{display:"block",fontSize:9,color:"#b0bac8",fontWeight:500,textTransform:"lowercase"}}>{h[1]}</span>}
@@ -9602,13 +9685,18 @@ function AnalisisView(props){
               );})}
             </tr></thead>
             <tbody>
-              {eqs.slice().sort(function(a,b){return b.iv-a.iv;}).map(function(e){return(
+              {eqs.slice().sort(function(a,b){return b.iv-a.iv;}).map(function(e){
+                const opsSorted=Object.entries(e.operarios||{}).sort(function(a,b){return b[1]-a[1];});
+                return(
                 <tr key={e.area}>
                   <td style={{fontWeight:700,color:NV,fontFamily:"Montserrat"}}>{e.area}</td>
                   <td style={{fontFamily:"Montserrat",color:NV,fontWeight:800}}>{e.iv}</td>
                   <td style={{fontFamily:"Montserrat",color:"#2d7dd2",fontSize:12,fontWeight:700}}>{e.min>0?fm(e.min):"--"}</td>
                   <td style={{fontFamily:"Montserrat",color:e.pend>0?"#C45200":"#8a96a8",fontWeight:e.pend>0?700:400}}>{e.pend||"--"}</td>
                   <td>{e.alta>0?<span style={{background:"#FFDEDE",color:"#C0001A",padding:"2px 7px",borderRadius:10,fontSize:11,fontWeight:800,fontFamily:"Montserrat"}}>{e.alta}</span>:<span style={{color:"#8a96a8"}}>--</span>}</td>
+                  <td style={{fontSize:11,color:"#555",fontFamily:"Montserrat",maxWidth:160}}>
+                    {opsSorted.length===0?<span style={{color:"#8a96a8"}}>--</span>:opsSorted.map(function(ov){return ov[0]+" ("+ov[1]+")";}).join(", ")}
+                  </td>
                 </tr>
               );})}
             </tbody>
