@@ -7687,7 +7687,9 @@ function EntryDetail(props){
       <div style={{background:NV,borderRadius:14,padding:"18px 20px"}}>
         <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
           <div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",fontFamily:"Montserrat",letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Reporte de Turno</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",fontFamily:"Montserrat",letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>
+              Reporte de Turno{entry.consecutivo&&<span style={{color:"#7dd3fc",textTransform:"none",letterSpacing:0.3}}> · {entry.consecutivo}</span>}
+            </div>
             <div style={{fontSize:20,fontWeight:800,color:"#fff",fontFamily:"Montserrat"}}>{entry.tecnico}</div>
             <div style={{color:"rgba(255,255,255,0.6)",marginTop:4,fontSize:13}}>{entry.turno}</div>
           </div>
@@ -7997,6 +7999,10 @@ function EntryExpanded({entry, onPrint, initialUser, onConfirmar, onAgregarSegui
               </span>
             </div>
             <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+              {e.consecutivo&&(<>
+                <span style={{color:"#7dd3fc",fontWeight:700}}>{e.consecutivo}</span>
+                <span style={{opacity:.4}}>·</span>
+              </>)}
               <span>{fD(e.fecha+"T12:00:00")}</span>
               <span style={{opacity:.4}}>·</span>
               <span>{e.turno}</span>
@@ -9666,6 +9672,19 @@ function BitacoraApp({onBack, initialUser}){
     setEntries(function(p){
       // Merge: start from remote (authoritative), add any local entries not in remote, then prepend new entry
       const base=Array.isArray(remoto)&&remoto.length>0?remoto:p;
+      // ── Consecutivo automático del reporte (correlativo por año: BTK-AAAA-####) ──
+      if(!entry.consecutivo){
+        const anioRep=(entry.fecha||"").slice(0,4)||String(new Date().getFullYear());
+        let maxNum=0;
+        base.concat(p).forEach(function(e){
+          const m=e.consecutivo&&e.consecutivo.match(/^BTK-(\d{4})-(\d+)$/);
+          if(m&&m[1]===anioRep){
+            const n=parseInt(m[2],10);
+            if(n>maxNum) maxNum=n;
+          }
+        });
+        entry.consecutivo="BTK-"+anioRep+"-"+String(maxNum+1).padStart(4,"0");
+      }
       // Include local entries that might not be in remote yet (created in this session before sync)
       const localIds=new Set(base.map(function(e){return e.id;}));
       const localOnly=p.filter(function(e){return !localIds.has(e.id);});
