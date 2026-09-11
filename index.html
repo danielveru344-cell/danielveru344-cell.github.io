@@ -13447,10 +13447,23 @@ function SolicitudesMetrologiaApp(_ref36){var onBack=_ref36.onBack,initialUser=_
     return d.toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric"});
   }
 
-  function kpiCard(valor,label,color){
-    return React.createElement("div",{className:"stat-card",style:{flex:"1 1 100px",minWidth:100,padding:"12px 10px",textAlign:"center"}},
-      React.createElement("div",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:22,color:color||"var(--navy)"}},valor),
-      React.createElement("div",{style:{fontSize:11,color:"var(--gray)",marginTop:2}},label)
+  function hdrIco(icon,text,margin){
+    return React.createElement("div",{className:"section-hdr",style:{margin:margin||"0 0 10px",display:"flex",alignItems:"center",gap:8}},
+      React.createElement(Ico,{d:icon,sz:16,c:"var(--navy)"}),
+      React.createElement("span",null,text)
+    );
+  }
+
+  function kpiCard(valor,label,color,icon){
+    return React.createElement("div",{
+        className:"stat-card",
+        style:{transition:"transform .12s,box-shadow .12s"},
+        onMouseEnter:function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(13,47,92,0.13)";},
+        onMouseLeave:function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}
+      },
+      React.createElement(Ico,{d:icon,sz:18,c:color||"var(--navy)"}),
+      React.createElement("div",{className:"stat-value",style:{color:color||"var(--navy)",marginTop:8}},valor),
+      React.createElement("div",{className:"stat-label"},label)
     );
   }
 
@@ -13460,7 +13473,7 @@ function SolicitudesMetrologiaApp(_ref36){var onBack=_ref36.onBack,initialUser=_
 
   return React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:14}},
     React.createElement("div",{className:"stat-card",style:{padding:14,display:"flex",flexDirection:"column",gap:10}},
-      React.createElement("div",{className:"section-hdr",style:{margin:0}},"\uD83D\uDD0D Filtros"),
+      hdrIco(IC.filter,"Filtros",0),
       React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:8}},
         React.createElement("input",{type:"date",value:fDesde,onChange:function(e){setFDesde(e.target.value);},className:"sm-native-select",style:{flex:"1 1 130px"}}),
         React.createElement("input",{type:"date",value:fHasta,onChange:function(e){setFHasta(e.target.value);},className:"sm-native-select",style:{flex:"1 1 130px"}}),
@@ -13485,36 +13498,36 @@ function SolicitudesMetrologiaApp(_ref36){var onBack=_ref36.onBack,initialUser=_
         (fDesde||fHasta||fEstado||fTipo||fTecnico)&&React.createElement("button",{className:"ios-btn ios-btn-sm",onClick:function(){setFDesde("");setFHasta("");setFEstado("");setFTipo("");setFTecnico("");}},"Limpiar")
       )
     ),
-    React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:8}},
-      kpiCard(totalGlobal,"Total global","var(--navy)"),
-      kpiCard(total,"En filtro","#0D6EFD"),
-      kpiCard(pendientes,"Pendientes","#C45200"),
-      kpiCard(asignadas,"Asignadas","#0D6EFD"),
-      kpiCard(cerradas,"Cerradas","#1D7A3E"),
-      kpiCard(rechazadas,"Rechazadas","#C0001A"),
-      kpiCard(pctCierre+"%","% Cierre","#1D7A3E")
+    React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(115px,1fr))",gap:10}},
+      kpiCard(pad(totalGlobal),"Total global","var(--navy)",IC.docs),
+      kpiCard(pad(total),"En filtro","#0D6EFD",IC.filter),
+      kpiCard(pad(pendientes),"Pendientes","#C45200",IC.alert),
+      kpiCard(pad(asignadas),"Asignadas","#0D6EFD",IC.user),
+      kpiCard(pad(cerradas),"Cerradas","#1D7A3E",IC.check),
+      kpiCard(pad(rechazadas),"Rechazadas","#C0001A",IC.x),
+      kpiCard(pctCierre+"%","% Cierre","#1D7A3E",IC.bar)
     ),
     React.createElement("div",{className:"stat-card",style:{padding:"10px 14px",fontSize:12,color:"var(--gray)"}},
       "\uD83D\uDCC5 Registrando solicitudes desde el ",React.createElement("b",null,fmtFecha(primeraFecha))," \u00B7 ",totalGlobal," solicitudes hist\u00F3ricas en total."
     ),
     porTecnico.length>0?React.createElement("div",{className:"stat-card",style:{padding:14}},
-      React.createElement("div",{className:"section-hdr",style:{margin:"0 0 10px"}},"\uD83D\uDC77 Por t\u00E9cnico \u2014 asignadas vs cerradas"),
+      hdrIco(IC.user,"Por t\u00E9cnico \u2014 asignadas vs cerradas"),
       React.createElement("div",{style:{position:"relative",height:Math.max(180,porTecnico.length*38)}},
         React.createElement("canvas",{ref:refTecnico})
       )
     ):React.createElement("div",{className:"stat-card",style:{padding:20,textAlign:"center",color:"var(--gray)",fontSize:13}},"No hay solicitudes asignadas con los filtros actuales."),
     React.createElement("div",{style:{display:"flex",gap:14,flexWrap:"wrap"}},
       React.createElement("div",{className:"stat-card",style:{padding:14,flex:"1 1 260px"}},
-        React.createElement("div",{className:"section-hdr",style:{margin:"0 0 10px"}},"\uD83E\uDDC1 Distribuci\u00F3n por estado"),
+        hdrIco(IC.bar,"Distribuci\u00F3n por estado"),
         React.createElement("div",{style:{position:"relative",height:220}},React.createElement("canvas",{ref:refEstado}))
       ),
       React.createElement("div",{className:"stat-card",style:{padding:14,flex:"2 1 320px"}},
-        React.createElement("div",{className:"section-hdr",style:{margin:"0 0 10px"}},"\uD83D\uDCC8 Tendencia mensual"),
+        hdrIco(IC.clk,"Tendencia mensual"),
         React.createElement("div",{style:{position:"relative",height:220}},React.createElement("canvas",{ref:refMes}))
       )
     ),
     porTecnico.length>0&&React.createElement("div",{className:"stat-card",style:{padding:14,overflowX:"auto"}},
-      React.createElement("div",{className:"section-hdr",style:{margin:"0 0 10px"}},"\uD83D\uDCCB Detalle por t\u00E9cnico"),
+      hdrIco(IC.docs,"Detalle por t\u00E9cnico"),
       React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:13}},
         React.createElement("thead",null,React.createElement("tr",{style:{textAlign:"left",borderBottom:"1px solid var(--border)"}},
           React.createElement("th",{style:{padding:"6px 8px"}},"T\u00E9cnico"),
