@@ -13477,20 +13477,20 @@ function SolicitudesMetrologiaApp(_ref36){var onBack=_ref36.onBack,initialUser=_
       React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:8}},
         React.createElement("input",{type:"date",value:fDesde,onChange:function(e){setFDesde(e.target.value);},className:"sm-native-select",style:{flex:"1 1 130px"}}),
         React.createElement("input",{type:"date",value:fHasta,onChange:function(e){setFHasta(e.target.value);},className:"sm-native-select",style:{flex:"1 1 130px"}}),
-        React.createElement("select",{value:fEstado,onChange:function(e){setFEstado(e.target.value);},className:"sm-native-select",style:{flex:"1 1 130px"}},
+        React.createElement("select",{value:fEstado,onChange:function(e){setFEstado(e.target.value);},className:"ios-input",style:{flex:"1 1 130px"}},
           React.createElement("option",{value:""},"Todos los estados"),
           React.createElement("option",{value:"pendiente"},"Pendiente"),
           React.createElement("option",{value:"asignada"},"Asignada"),
           React.createElement("option",{value:"cerrada"},"Cerrada"),
           React.createElement("option",{value:"rechazada"},"Rechazada")
         ),
-        React.createElement("select",{value:fTipo,onChange:function(e){setFTipo(e.target.value);},className:"sm-native-select",style:{flex:"1 1 130px"}},
+        React.createElement("select",{value:fTipo,onChange:function(e){setFTipo(e.target.value);},className:"ios-input",style:{flex:"1 1 130px"}},
           React.createElement("option",{value:""},"Todos los tipos"),
           React.createElement("option",{value:"area"},"\u00C1rea"),
           React.createElement("option",{value:"equipo"},"Equipo"),
           React.createElement("option",{value:"instrumento"},"Instrumento")
         ),
-        React.createElement("select",{value:fTecnico,onChange:function(e){setFTecnico(e.target.value);},className:"sm-native-select",style:{flex:"1 1 150px"}},
+        React.createElement("select",{value:fTecnico,onChange:function(e){setFTecnico(e.target.value);},className:"ios-input",style:{flex:"1 1 150px"}},
           [React.createElement("option",{value:"",key:"all"},"Todos los t\u00E9cnicos")].concat(
             tecnicosAll.map(function(t){return React.createElement("option",{value:t,key:t},t);})
           )
