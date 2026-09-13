@@ -291,8 +291,12 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 
 /* Stat cards */
 .stat-card{
-  background:#fff;border-radius:12px;padding:16px 18px;
-  box-shadow:0 2px 16px rgba(13,47,92,0.08);border:1px solid var(--border);
+  background:rgba(255,255,255,0.65);
+  backdrop-filter:blur(18px) saturate(160%);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);
+  border-radius:12px;padding:16px 18px;
+  box-shadow:0 2px 16px rgba(13,47,92,0.08),inset 0 1px 0 rgba(255,255,255,0.6);
+  border:1px solid rgba(255,255,255,0.55);
   display:flex;flex-direction:column;gap:4px;
 }
 .stat-value{font-size:32px;font-weight:700;letter-spacing:-0.5px;line-height:1;}
@@ -306,11 +310,16 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 }
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
 .sheet{
-  background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:600px;
+  background:rgba(255,255,255,0.78);
+  backdrop-filter:blur(30px) saturate(180%);
+  -webkit-backdrop-filter:blur(30px) saturate(180%);
+  border-radius:20px 20px 0 0;width:100%;max-width:600px;
   max-height:90vh;overflow-y:auto;
   animation:slideUp 0.35s cubic-bezier(0.32,0.72,0,1);
   padding-bottom:calc(env(safe-area-inset-bottom,16px) + 16px);
   touch-action:pan-y;
+  border:1px solid rgba(255,255,255,0.6);border-bottom:none;
+  box-shadow:0 -8px 40px rgba(13,47,92,0.16),inset 0 1px 0 rgba(255,255,255,0.7);
 }
 @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
 .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:10px auto 0;}
@@ -513,16 +522,22 @@ input,select,textarea,button{font-family:inherit;outline:none;}
     display:flex !important; flex-direction:column;
     overflow-y:auto; overflow-x:hidden; scrollbar-width:none;
     z-index:50;
-    background: linear-gradient(180deg,#091f3e 0%,#0b2649 45%,#0d2f5c 100%);
-    border-right: none;
-    box-shadow: 1px 0 0 rgba(255,255,255,0.05), 8px 0 48px rgba(9,31,62,0.32);
+    background: linear-gradient(180deg,rgba(9,31,62,0.82) 0%,rgba(11,38,73,0.78) 45%,rgba(13,47,92,0.82) 100%);
+    backdrop-filter: blur(30px) saturate(160%);
+    -webkit-backdrop-filter: blur(30px) saturate(160%);
+    border-right: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 1px 0 0 rgba(255,255,255,0.06), 8px 0 48px rgba(9,31,62,0.32), inset -1px 0 0 rgba(255,255,255,0.03);
   }
   .app-topbar::-webkit-scrollbar { display:none; }
 
-  /* Thin accent line at top of sidebar */
+  /* Thin accent line + specular sheen at top of sidebar (efecto vidrio) */
   .app-topbar::before {
     content:''; position:absolute; top:0; left:0; right:0; height:2px; z-index:2;
     background: linear-gradient(90deg,#2d7dd2 0%,rgba(45,125,210,0.35) 65%,transparent 100%);
+  }
+  .app-topbar::after {
+    content:''; position:absolute; inset:0; z-index:1; pointer-events:none;
+    background: linear-gradient(160deg,rgba(255,255,255,0.10) 0%,rgba(255,255,255,0) 22%);
   }
 
   /* ── Brand area ── */
@@ -550,7 +565,8 @@ input,select,textarea,button{font-family:inherit;outline:none;}
   /* User card */
   .nav-user-badge {
     display:flex !important; align-items:center !important; gap:10px !important;
-    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.10);
+    background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14);
+    backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
     border-radius:12px; padding:10px 12px; width:100%; box-sizing:border-box;
     margin-top:0; transition:background 0.15s;
   }
