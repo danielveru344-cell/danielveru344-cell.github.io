@@ -191,17 +191,23 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 
 /* iOS Navigation Bar */
 .brand-bar{
+  position:relative;
   background:rgba(13,47,92,0.78);
   backdrop-filter:blur(24px) saturate(160%);
   -webkit-backdrop-filter:blur(24px) saturate(160%);
   padding:16px 18px;
-  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+  display:flex;align-items:center;justify-content:space-between;
   border-bottom:1px solid rgba(255,255,255,0.10);
 }
-.brand-bar>:first-child{justify-self:start;}
-.brand-bar>:nth-child(2){justify-self:center;grid-column:2;}
-.brand-bar>:last-child{justify-self:end;grid-column:3;}
-.brand-bar-logo{height:56px;width:auto;display:block;}
+.brand-bar-logo{
+  height:56px;width:auto;display:block;
+}
+@media (max-width:767px){
+  .brand-bar-logo{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    pointer-events:none;
+  }
+}
 .brand-bar-label{font-family:"Montserrat",sans-serif;font-size:10px;font-weight:700;
   color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:1.5px;}
 .nav-bar{
