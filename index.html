@@ -10173,29 +10173,58 @@ function Panel(_ref83) {
   }(), /*#__PURE__*/React.createElement("div", {
     className: "stat-scroll"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-value",
-    style: {
-      color: "#0D2F5C"
-    }
-  }, items.length), /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Art\xEDculos")), /*#__PURE__*/React.createElement("div", {
-    className: "stat-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-value",
-    style: {
-      color: "#34C759"
-    }
-  }, total), /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Unidades en stock")), /*#__PURE__*/React.createElement("div", {
     className: "stat-card",
     style: {
-      cursor: totalAlertas > 0 ? "pointer" : "default",
-      background: totalAlertas > 0 ? "linear-gradient(135deg,#fff8f0,#fff)" : "",
-      borderColor: totalAlertas > 0 ? "rgba(255,149,0,0.3)" : "var(--border)"
+      padding: "10px 10px",
+      display: "flex",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 30, height: 30, borderRadius: 9,
+      background: ("#0D2F5C")+"1A",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexShrink: 0, fontSize: 15
+    }
+  }, "📦"), /*#__PURE__*/React.createElement("div", {
+    style: { minWidth: 0 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 19, fontWeight: 800, letterSpacing: -0.3, lineHeight: 1.1, color: "#0D2F5C" }
+  }, items.length), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9.5, color: "var(--gray)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontFamily: "Montserrat,sans-serif", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+  }, "Art\xEDculos"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card",
+    style: {
+      padding: "10px 10px",
+      display: "flex",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 30, height: 30, borderRadius: 9,
+      background: ("#34C759")+"1A",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexShrink: 0, fontSize: 15
+    }
+  }, "📊"), /*#__PURE__*/React.createElement("div", {
+    style: { minWidth: 0 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 19, fontWeight: 800, letterSpacing: -0.3, lineHeight: 1.1, color: "#34C759" }
+  }, total), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9.5, color: "var(--gray)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontFamily: "Montserrat,sans-serif", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+  }, "Unidades en stock"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card",
+    style: {
+      padding: "10px 10px",
+      display: "flex",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      cursor: totalAlertas > 0 ? "pointer" : "default"
     },
     onClick: function onClick() {
       if (totalAlertas > 0) {
@@ -10206,58 +10235,97 @@ function Panel(_ref83) {
       }
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-value",
     style: {
-      color: totalAlertas > 0 ? "#FF3B30" : "#34C759"
+      width: 30, height: 30, borderRadius: 9,
+      background: ((totalAlertas > 0 ? "#FF3B30" : "#34C759"))+"1A",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexShrink: 0, fontSize: 15
     }
+  }, "⚠️"), /*#__PURE__*/React.createElement("div", {
+    style: { minWidth: 0 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 19, fontWeight: 800, letterSpacing: -0.3, lineHeight: 1.1, color: (totalAlertas > 0 ? "#FF3B30" : "#34C759") }
   }, totalAlertas), /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Alertas totales", totalAlertas > 0 ? " ↓" : "")), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9.5, color: "var(--gray)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontFamily: "Montserrat,sans-serif", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+  }, (totalAlertas > 0 ? "Alertas totales \u2193" : "Alertas totales")))), /*#__PURE__*/React.createElement("div", {
     className: "stat-card",
     style: {
+      padding: "10px 10px",
+      display: "flex",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
       cursor: "pointer"
     },
     onClick: function onClick() {
       return setTab("solicitudes");
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-value",
     style: {
-      color: solisPend.length > 0 ? "#C45200" : "#34C759"
+      width: 30, height: 30, borderRadius: 9,
+      background: ((solisPend.length > 0 ? "#C45200" : "#34C759"))+"1A",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexShrink: 0, fontSize: 15
     }
-  }, loading ? "…" : solisPend.length), /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Pendientes", solisPend.length > 0 ? " →" : "")), /*#__PURE__*/React.createElement("div", {
+  }, "📨"), /*#__PURE__*/React.createElement("div", {
+    style: { minWidth: 0 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 19, fontWeight: 800, letterSpacing: -0.3, lineHeight: 1.1, color: (solisPend.length > 0 ? "#C45200" : "#34C759") }
+  }, (loading ? "\u2026" : solisPend.length)), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9.5, color: "var(--gray)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontFamily: "Montserrat,sans-serif", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+  }, (solisPend.length > 0 ? "Pendientes \u2192" : "Pendientes")))), /*#__PURE__*/React.createElement("div", {
     className: "stat-card",
     style: {
+      padding: "10px 10px",
+      display: "flex",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
       cursor: "pointer"
     },
     onClick: function onClick() {
       return setTab("solicitudes");
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-value",
     style: {
-      color: solisCompra.length > 0 ? "#004A9E" : "#34C759"
+      width: 30, height: 30, borderRadius: 9,
+      background: ((solisCompra.length > 0 ? "#004A9E" : "#34C759"))+"1A",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexShrink: 0, fontSize: 15
     }
-  }, loading ? "…" : solisCompra.length), /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "\uD83D\uDED2 Para compra", solisCompra.length > 0 ? " →" : "")), /*#__PURE__*/React.createElement("div", {
+  }, "🛒"), /*#__PURE__*/React.createElement("div", {
+    style: { minWidth: 0 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 19, fontWeight: 800, letterSpacing: -0.3, lineHeight: 1.1, color: (solisCompra.length > 0 ? "#004A9E" : "#34C759") }
+  }, (loading ? "\u2026" : solisCompra.length)), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9.5, color: "var(--gray)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontFamily: "Montserrat,sans-serif", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+  }, (solisCompra.length > 0 ? "Para compra \u2192" : "Para compra")))), /*#__PURE__*/React.createElement("div", {
     className: "stat-card",
     style: {
+      padding: "10px 10px",
+      display: "flex",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
       cursor: "pointer"
     },
     onClick: function onClick() {
       return setTab("equipos");
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "stat-value",
     style: {
-      color: "#2d7dd2"
+      width: 30, height: 30, borderRadius: 9,
+      background: ("#2d7dd2")+"1A",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexShrink: 0, fontSize: 15
     }
+  }, "🔧"), /*#__PURE__*/React.createElement("div", {
+    style: { minWidth: 0 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 19, fontWeight: 800, letterSpacing: -0.3, lineHeight: 1.1, color: "#2d7dd2" }
   }, equipos.length), /*#__PURE__*/React.createElement("div", {
-    className: "stat-label"
-  }, "Equipos \u2192"))), totalAlertas > 0 && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9.5, color: "var(--gray)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontFamily: "Montserrat,sans-serif", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+  }, "Equipos \u2192")))), totalAlertas > 0 && /*#__PURE__*/React.createElement("div", {
     id: "panel-alertas-section"
   }, /*#__PURE__*/React.createElement("div", {
     className: "section-hdr",
