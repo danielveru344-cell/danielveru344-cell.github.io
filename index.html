@@ -13551,7 +13551,7 @@ function IndicadoresPreventivosScreen(){
   function kpiCard(valor,label,color,icon){
     return React.createElement("div",{
         className:"stat-card",
-        style:{transition:"transform .12s,box-shadow .12s",padding:"11px 12px",display:"flex",alignItems:"center",gap:10},
+        style:{transition:"transform .12s,box-shadow .12s",padding:"10px 8px",display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"flex-start",gap:8},
         onMouseEnter:function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(13,47,92,0.13)";},
         onMouseLeave:function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}
       },
@@ -13828,7 +13828,7 @@ function IndicadoresSolicitudesMttoScreen(){
   function kpiCard(valor,label,color,icon){
     return React.createElement("div",{
         className:"stat-card",
-        style:{transition:"transform .12s,box-shadow .12s",padding:"11px 12px",display:"flex",alignItems:"center",gap:10},
+        style:{transition:"transform .12s,box-shadow .12s",padding:"10px 8px",display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"flex-start",gap:8},
         onMouseEnter:function(e){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(13,47,92,0.13)";},
         onMouseLeave:function(e){e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}
       },
