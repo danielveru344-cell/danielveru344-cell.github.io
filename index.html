@@ -5967,6 +5967,20 @@ function SolicitudModal(_ref50) {
       return _objectSpread(_objectSpread({}, p), {}, _defineProperty({}, k, v));
     });
   };
+  var _useStateMisSol = useState([]),
+    _useStateMisSol2 = _slicedToArray(_useStateMisSol, 2),
+    misSolicitudes = _useStateMisSol2[0],
+    setMisSolicitudes = _useStateMisSol2[1];
+  useEffect(function () {
+    var cancelado = false;
+    var nombreUsuario = currentUser && (currentUser.nombre || currentUser.username);
+    if (!nombreUsuario) return;
+    sb.from("solicitudes_mantenimiento").select("*").eq("asignado_a", nombreUsuario).eq("estado", "asignada").order("asignado_en", { ascending: false }).then(function (res) {
+      if (cancelado) return;
+      setMisSolicitudes(res.data || []);
+    })["catch"](function () {});
+    return function () { cancelado = true; };
+  }, []);
   var _useState91 = useState(false),
     _useState92 = _slicedToArray(_useState91, 2),
     saving = _useState92[0],
@@ -6916,14 +6930,20 @@ function SolicitudModal(_ref50) {
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "ios-input-label"
-  }, "N\xB0 Solicitud de Trabajo"), /*#__PURE__*/React.createElement("input", {
+  }, "N\xB0 Solicitud de Trabajo"), /*#__PURE__*/React.createElement("select", {
     className: "ios-input",
     value: f.nst,
     onChange: function onChange(e) {
       s("nst", e.target.value);
-    },
-    placeholder: "Ej: NST-2026-0042"
-  }))), validErr && /*#__PURE__*/React.createElement("div", {
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, misSolicitudes.length ? "Selecciona una solicitud\u2026" : "No tienes solicitudes asignadas"), misSolicitudes.map(function (sol) {
+    return /*#__PURE__*/React.createElement("option", {
+      key: sol.id,
+      value: sol.consecutivo
+    }, sol.consecutivo, " \u2014 ", (sol.descripcion || "").slice(0, 40));
+  })))), validErr && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#FFF0F0",
       border: "1.5px solid #FFDEDE",
