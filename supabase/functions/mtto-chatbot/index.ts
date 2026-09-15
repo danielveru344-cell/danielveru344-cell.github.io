@@ -15,9 +15,10 @@ const SUPA_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15c3FraHR0ZHF1d2ljcnNqY21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTAxMzMsImV4cCI6MjA5MzA2NjEzM30.RBw3DwjQZvoJUhqBIkR6p3LdYhpc3PVMcyZiIe0uGUE";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-// Verifica en https://ai.google.dev/gemini-api/docs/models si este sigue vigente
-// (la capa gratis y los nombres de modelo cambian con el tiempo).
-const MODEL = "gemini-2.0-flash";
+// Actualizado según el error de la API: gemini-2.0-flash fue descontinuado.
+// Si esto vuelve a fallar en el futuro, revisa qué modelo recomienda el error
+// o consulta https://ai.google.dev/gemini-api/docs/models
+const MODEL = "gemini-3.6-flash";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 const CORS_HEADERS = {
