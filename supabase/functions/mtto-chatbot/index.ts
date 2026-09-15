@@ -1,11 +1,12 @@
 // ══════════════════════════════════════════════════════════════
 //  mtto-chatbot · Supabase Edge Function
-//  Intermediario seguro entre el chatbot flotante y la API de Anthropic.
+//  Intermediario seguro entre el chatbot flotante y la API de Google Gemini
+//  (capa gratis — https://ai.google.dev).
 //  1. Busca en los registros internos (bitácora/historial, órdenes de
 //     mantenimiento, solicitudes, notas de seguimiento).
-//  2. Si encuentra algo relevante, se lo pasa a Claude como contexto.
-//  3. Si no hay nada relevante, deja que Claude use búsqueda web.
-//  4. Claude siempre debe citar de dónde salió cada dato.
+//  2. Si encuentra algo relevante, se lo pasa a Gemini como contexto.
+//  3. Si no hay nada relevante, deja que Gemini use búsqueda web (grounding).
+//  4. Gemini siempre debe citar de dónde salió cada dato.
 // ══════════════════════════════════════════════════════════════
 
 const SUPA_URL = "https://mysqkhttdquwicrsjcmg.supabase.co";
@@ -13,8 +14,11 @@ const SUPA_URL = "https://mysqkhttdquwicrsjcmg.supabase.co";
 const SUPA_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15c3FraHR0ZHF1d2ljcnNqY21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTAxMzMsImV4cCI6MjA5MzA2NjEzM30.RBw3DwjQZvoJUhqBIkR6p3LdYhpc3PVMcyZiIe0uGUE";
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const MODEL = "claude-sonnet-5";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+// Verifica en https://ai.google.dev/gemini-api/docs/models si este sigue vigente
+// (la capa gratis y los nombres de modelo cambian con el tiempo).
+const MODEL = "gemini-2.0-flash";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -154,8 +158,8 @@ Deno.serve(async (req: Request) => {
       status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
   }
-  if (!ANTHROPIC_API_KEY) {
-    return new Response(JSON.stringify({ error: "Falta configurar ANTHROPIC_API_KEY en los secretos de la función." }), {
+  if (!GEMINI_API_KEY) {
+    return new Response(JSON.stringify({ error: "Falta configurar GEMINI_API_KEY en los secretos de la función." }), {
       status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
   }
@@ -174,8 +178,8 @@ Deno.serve(async (req: Request) => {
 
 REGLAS IMPORTANTES:
 1. Primero revisa el <contexto_interno> de abajo (viene de la bitácora, órdenes de mantenimiento preventivo, solicitudes y notas de seguimiento de la planta).
-2. Si el contexto interno tiene información relevante para responder, básate en ella PRIMERO y cita exactamente el registro (ej: "Según la Orden Mtto Preventivo #123 del [equipo]..." o "Según la Bitácora #45...").
-3. Si el contexto interno NO tiene nada relevante o es insuficiente, usa la herramienta de búsqueda web para investigar posibles causas y soluciones (piensa en manuales técnicos, foros de mantenimiento industrial, fabricantes). Cita SIEMPRE la fuente web con su URL.
+2. Si el contexto interno tiene información relevante para responder, básate en ella PRIMERO y cita exactamente el registro (ej: "Según la Orden Mtto Preventivo #123 del [equipo]..." o "Según la Bitácora de turno del [fecha]...").
+3. Si el contexto interno NO tiene nada relevante o es insuficiente, usa la búsqueda de Google para investigar posibles causas y soluciones (piensa en manuales técnicos, foros de mantenimiento industrial, fabricantes). Cita SIEMPRE la fuente web con su URL.
 4. Nunca mezcles ambas fuentes sin aclarar cuál es cuál. Al final de tu respuesta agrega una línea "📎 Fuente(s): ..." listando de dónde salió la información (interno y/o web).
 5. Si de verdad no encuentras nada ni interno ni en la web, dilo con honestidad y sugiere pasos generales de diagnóstico.
 6. Sé breve, concreto y práctico — estás hablando con un técnico en planta, no escribas ensayos.
@@ -184,35 +188,34 @@ REGLAS IMPORTANTES:
 ${encontrado ? contexto : "(No se encontraron registros internos relacionados con esta pregunta.)"}
 </contexto_interno>`;
 
-    const messages = Array.isArray(history) ? history.slice(-10) : [];
-    messages.push({ role: "user", content: message });
+    // Gemini usa roles "user"/"model" y el formato contents:[{role, parts:[{text}]}]
+    const contents = (Array.isArray(history) ? history.slice(-10) : []).map((h: any) => ({
+      role: h.role === "assistant" ? "model" : "user",
+      parts: [{ text: String(h.content ?? "") }],
+    }));
+    contents.push({ role: "user", parts: [{ text: message }] });
 
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+    const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1200,
-        system: systemPrompt,
-        messages,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        contents,
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        tools: [{ google_search: {} }],
+        generationConfig: { maxOutputTokens: 1200 },
       }),
     });
 
-    if (!anthropicRes.ok) {
-      const errText = await anthropicRes.text();
-      return new Response(JSON.stringify({ error: "Error de Anthropic: " + errText }), {
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text();
+      return new Response(JSON.stringify({ error: "Error de Gemini: " + errText }), {
         status: 502, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
       });
     }
 
-    const data = await anthropicRes.json();
-    const textBlocks = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text);
-    const answer = textBlocks.join("\n\n") || "No obtuve una respuesta.";
+    const data = await geminiRes.json();
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const answer = parts.map((p: any) => p.text || "").join("\n\n").trim() || "No obtuve una respuesta.";
 
     return new Response(JSON.stringify({ answer, usedInternalContext: encontrado }), {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
