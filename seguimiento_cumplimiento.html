@@ -543,10 +543,22 @@ const RPT = {
   GREY_TEXT: '64748B', GREEN: '16A34A', AMBER: 'CA8A04', LIGHT_BG: 'F5F5F5'
 };
 
+function normTechKey(s) {
+  return String(s || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function computeReportData() {
-  const techSet = new Set();
-  months.forEach(m => m.tasks.forEach(t => techSet.add(t.resp)));
-  const techs = [...techSet].sort();
+  // Mapa clave-normalizada -> nombre a mostrar (prefiere la variante con mayúsculas/minúsculas mixtas)
+  const displayName = {};
+  months.forEach(m => m.tasks.forEach(t => {
+    const key = normTechKey(t.resp);
+    if (!key) return;
+    const raw = String(t.resp).trim();
+    const current = displayName[key];
+    if (!current) { displayName[key] = raw; }
+    else if (current === current.toUpperCase() && raw !== raw.toUpperCase()) { displayName[key] = raw; }
+  }));
+  const techs = Object.keys(displayName).sort((a,b) => displayName[a].localeCompare(displayName[b]));
 
   const perMes = months.map(m => {
     const total = m.tasks.length;
@@ -554,10 +566,13 @@ function computeReportData() {
     const abiertos = total - cerrados;
     const pct = total ? Math.round(cerrados / total * 100) : 0;
     const porTecnico = {};
-    techs.forEach(te => {
-      const mine = m.tasks.filter(t => t.resp === te);
-      const c = mine.filter(t => m.done[t.id]).length;
-      porTecnico[te] = { total: mine.length, cerrados: c, abiertos: mine.length - c };
+    techs.forEach(te => porTecnico[te] = { total: 0, cerrados: 0, abiertos: 0 });
+    m.tasks.forEach(t => {
+      const key = normTechKey(t.resp);
+      if (!key || !porTecnico[key]) return;
+      porTecnico[key].total++;
+      if (m.done[t.id]) porTecnico[key].cerrados++;
+      else porTecnico[key].abiertos++;
     });
     return { mes: m.mes, total, cerrados, abiertos, pct, porTecnico };
   });
@@ -574,7 +589,7 @@ function computeReportData() {
     total: a.total+p.total, cerrados: a.cerrados+p.cerrados, abiertos: a.abiertos+p.abiertos
   }), {total:0, cerrados:0, abiertos:0});
 
-  return { techs, perMes, totTecnico, granTotal };
+  return { techs, displayName, perMes, totTecnico, granTotal };
 }
 
 function addFooterRpt(slide, pres, label) {
@@ -595,7 +610,7 @@ async function generarInformePPTX() {
   const original = btn.textContent;
   btn.disabled = true; btn.textContent = '⏳ Generando…';
   try {
-    const { techs, perMes, totTecnico, granTotal } = computeReportData();
+    const { techs, displayName, perMes, totTecnico, granTotal } = computeReportData();
     const pres = new PptxGenJS();
     pres.layout = 'LAYOUT_WIDE';
     const pctTot = granTotal.total ? Math.round(granTotal.cerrados/granTotal.total*100) : 0;
@@ -651,7 +666,7 @@ async function generarInformePPTX() {
       const pct = d.total ? Math.round(d.cerrados/d.total*100) : 0;
       const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
       return [
-        { text: te, options:{ fontFace:'Arial', fontSize:11.5, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
+        { text: displayName[te], options:{ fontFace:'Arial', fontSize:11.5, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
         { text: String(d.total), options:{ fontFace:'Arial', fontSize:11.5, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
         { text: String(d.cerrados), options:{ fontFace:'Arial', fontSize:11.5, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
         { text: String(d.abiertos), options:{ fontFace:'Arial', fontSize:11.5, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
@@ -671,9 +686,10 @@ async function generarInformePPTX() {
       addTitleRpt(s, `${pm.mes} — Mantenimientos por técnico`, `Cerrados vs. abiertos · ${pm.total} mantenimientos totales · ${pm.pct}% cumplimiento`);
       const cerradosVals = techsSorted.map(te => pm.porTecnico[te].cerrados);
       const abiertosVals = techsSorted.map(te => pm.porTecnico[te].abiertos);
+      const labelsDisplay = techsSorted.map(te => displayName[te]);
       s.addChart(pres.ChartType.bar, [
-        { name: 'Cerrados', labels: techsSorted, values: cerradosVals },
-        { name: 'Abiertos', labels: techsSorted, values: abiertosVals }
+        { name: 'Cerrados', labels: labelsDisplay, values: cerradosVals },
+        { name: 'Abiertos', labels: labelsDisplay, values: abiertosVals }
       ], {
         x:0.6, y:1.5, w:12.1, h:5.5, barDir:'bar', barGrouping:'clustered',
         showTitle:false, showLegend:true, legendPos:'b', legendFontSize:11, legendFontFace:'Arial',
