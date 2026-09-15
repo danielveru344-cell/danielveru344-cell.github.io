@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seguimiento Mantenimiento · Bussié</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f1f5f9; color: #0D2F5C; }
+
+/* HEADER */
+.header { background: #0D2F5C; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 14px; }
+.logo-wrap { display: flex; align-items: center; gap: 10px; }
+.logo-img { height: 38px; display: block; filter: brightness(0) invert(1); }
+.logo-text { display: flex; flex-direction: column; }
+.logo-name { font-size: 16px; font-weight: 800; letter-spacing: 1px; color: white; line-height: 1; }
+.logo-sub  { font-size: 10px; color: #93c5fd; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+.header-title { border-left: 1px solid rgba(255,255,255,.2); padding-left: 14px; }
+.header-title h1 { font-size: 13px; font-weight: 700; }
+.header-title small { font-size: 10px; opacity: .5; display: block; margin-top: 1px; }
+.header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
+.sync-dot.syncing { background: #fbbf24; animation: pulse .8s infinite; }
+.sync-dot.error { background: #f87171; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+button { font-family: Arial; font-size: 12px; font-weight: 700; padding: 7px 14px; border: none; border-radius: 6px; cursor: pointer; }
+.btn-white { background: white; color: #0D2F5C; }
+.btn-green { background: #16a34a; color: white; }
+.btn-blue  { background: #2d7dd2; color: white; }
+
+/* MONTH TABS */
+.month-bar { background: #091f3e; padding: 0 14px; display: flex; align-items: stretch; overflow-x: auto; border-top: 1px solid rgba(255,255,255,.08); }
+.month-tab { padding: 9px 14px; font-size: 12px; font-weight: 700; color: rgba(255,255,255,.4); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; display: flex; align-items: center; gap: 6px; transition: color .15s; }
+.month-tab:hover { color: rgba(255,255,255,.8); }
+.month-tab.active { color: white; border-color: #2d7dd2; }
+.month-close { font-size: 16px; line-height: 1; opacity: .4; }
+.month-close:hover { opacity: 1; color: #f87171; }
+.month-pct { font-size: 10px; opacity: .6; }
+.month-add { padding: 0 14px; font-size: 20px; color: rgba(255,255,255,.3); cursor: pointer; display: flex; align-items: center; }
+.month-add:hover { color: white; }
+
+/* UPLOAD */
+.upload-wrap { max-width: 420px; margin: 70px auto; text-align: center; }
+.upload-box { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 48px 24px; background: white; cursor: pointer; }
+.upload-box:hover { border-color: #2d7dd2; background: #eff6ff; }
+.upload-box h2 { font-size: 17px; margin: 12px 0 6px; }
+.upload-box p { font-size: 13px; color: #64748b; line-height: 1.6; }
+
+/* LOADING */
+.loading { text-align: center; padding: 80px 20px; color: #64748b; }
+.loading-spin { font-size: 32px; animation: spin 1s linear infinite; display: inline-block; margin-bottom: 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* STATS */
+.global-bar { background: white; padding: 12px 20px; border-bottom: 1px solid #e2e8f0; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.gs { text-align: center; }
+.gs-n { font-size: 20px; font-weight: 800; }
+.gs-l { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; }
+.prog-wrap { flex: 1; max-width: 260px; }
+.prog-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.prog-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+
+/* TECH TABS */
+.tech-nav { background: white; border-bottom: 1px solid #e2e8f0; padding: 0 16px; display: flex; overflow-x: auto; }
+.tech-tab { padding: 10px 13px; font-size: 12px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; color: #64748b; white-space: nowrap; }
+.tech-tab.active { color: #0D2F5C; border-color: #2d7dd2; }
+.badge { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 8px; margin-left: 3px; }
+.badge-ok   { background: #dcfce7; color: #16a34a; }
+.badge-pend { background: #fef9c3; color: #ca8a04; }
+
+/* TECH PANEL */
+.tech-panel { padding: 14px 16px 80px; }
+.tech-header { background: white; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; border: 1px solid #e2e8f0; }
+.th-name { font-size: 16px; font-weight: 800; flex: 1; min-width: 120px; }
+.th-stat { text-align: center; }
+.th-n { font-size: 18px; font-weight: 800; }
+.th-l { font-size: 10px; color: #64748b; }
+.th-bar { width: 110px; height: 7px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.th-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+
+/* TASKS */
+.section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; padding: 10px 0 4px; }
+.task-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; transition: background .1s; }
+.task-row:hover { background: #f8fafc; }
+.check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #cbd5e1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+.check.on { background: #16a34a; border-color: #16a34a; color: white; }
+.task-info { flex: 1; min-width: 0; }
+.task-name { font-size: 13px; font-weight: 600; }
+.task-sub  { font-size: 11px; color: #64748b; margin-top: 2px; }
+.task-code { font-family: monospace; font-size: 10px; background: #eff6ff; color: #1d4ed8; padding: 1px 5px; border-radius: 3px; }
+.task-date { font-family: monospace; font-size: 10px; color: #94a3b8; white-space: nowrap; }
+.note-btn { background: none; border: none; padding: 4px 6px; cursor: pointer; font-size: 15px; opacity: .35; border-radius: 5px; flex-shrink: 0; line-height: 1; }
+.note-btn:hover { opacity: 1; background: #eff6ff; }
+.note-btn.has-note { opacity: .85; }
+.note-panel { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 8px 10px; display: flex; gap: 7px; align-items: flex-start; }
+.note-panel textarea { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: Arial; resize: none; min-height: 58px; color: #0D2F5C; background: white; line-height: 1.4; }
+.note-panel textarea:focus { outline: none; border-color: #2d7dd2; box-shadow: 0 0 0 2px #bfdbfe; }
+.note-save-btn { background: #2d7dd2; color: white; border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.note-save-btn:hover { background: #1d6ab8; }
+.task-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 5px; overflow: hidden; }
+.task-card.done { background: #f0fdf4; border-color: #bbf7d0; }
+.task-card.done .task-name { text-decoration: line-through; color: #86efac; }
+.task-card.done .task-sub  { color: #86efac; }
+.task-note-preview { font-size: 11px; color: #64748b; margin-top: 3px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* FOOTER */
+.footer { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e2e8f0; padding: 8px 16px; display: flex; align-items: center; gap: 10px; z-index: 50; }
+.footer-info { font-size: 11px; color: #64748b; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this.files[0])">
+
+<script>
+// ══════════════════════════════════════════════════
+//  SUPABASE CONFIG
+// ══════════════════════════════════════════════════
+const SB_URL = 'https://mysqkhttdquwicrsjcmg.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15c3FraHR0ZHF1d2ljcnNqY21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTAxMzMsImV4cCI6MjA5MzA2NjEzM30.RBw3DwjQZvoJUhqBIkR6p3LdYhpc3PVMcyZiIe0uGUE';
+const HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' };
+
+async function sbLoad() {
+  const r = await fetch(`${SB_URL}/rest/v1/mtto_meses?select=*&order=id`, { headers: HEADERS });
+  if (!r.ok) throw new Error('Error cargando datos');
+  return r.json();
+}
+async function sbUpsert(row) {
+  // Primero intenta actualizar (PATCH); si no existe, inserta (POST)
+  const payload = {
+    mes:   row.mes,
+    tasks: row.tasks,
+    done:  row.done,
+    notes: row.notes || {}
+  };
+
+  // Intento PATCH (actualizar fila existente)
+  const patch = await fetch(`${SB_URL}/rest/v1/mtto_meses?id=eq.${row.id}`, {
+    method: 'PATCH',
+    headers: { ...HEADERS, 'Prefer': 'return=representation' },
+    body: JSON.stringify(payload)
+  });
+  if (!patch.ok) throw new Error('Error guardando (PATCH): ' + await patch.text());
+  const patched = await patch.json();
+
+  // Si no actualizó nada (fila nueva), hace INSERT
+  if (!patched || patched.length === 0) {
+    const post = await fetch(`${SB_URL}/rest/v1/mtto_meses`, {
+      method: 'POST',
+      headers: { ...HEADERS, 'Prefer': 'return=representation' },
+      body: JSON.stringify({ id: row.id, ...payload })
+    });
+    if (!post.ok) throw new Error('Error guardando (POST): ' + await post.text());
+  }
+}
+async function sbDelete(id) {
+  const r = await fetch(`${SB_URL}/rest/v1/mtto_meses?id=eq.${id}`, {
+    method: 'DELETE', headers: HEADERS
+  });
+  if (!r.ok) throw new Error('Error eliminando');
+}
+
+// ══════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════
+let months      = [];
+let activeMonth = null;
+let activeTech  = null;
+let syncing     = false;
+let syncError   = false;
+let loading     = true;
+
+function pctColor(p) { return p >= 90 ? '#16a34a' : p >= 60 ? '#2d7dd2' : p >= 30 ? '#ca8a04' : '#dc2626'; }
+
+// ══════════════════════════════════════════════════
+//  LOGO SVG
+// ══════════════════════════════════════════════════
+const LOGO_SVG = `<img src="data:image/png;base64,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" style="height:38px;display:block;filter:invert(1);mix-blend-mode:screen" alt="Bussié">`;
+
+// ══════════════════════════════════════════════════
+//  PARSE EXCEL
+// ══════════════════════════════════════════════════
+function excelDate(v) {
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') {
+    const d = new Date((v - 25569) * 86400 * 1000);
+    return `${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${String(d.getUTCFullYear()).slice(2)}`;
+  }
+  return String(v);
+}
+const SKIP_SECTIONS = ['RUTINA','LIMPIEZA','ORDENES DE TRABAJO','ÓRDENES DE TRABAJO'];
+function detectCat(v) {
+  const s = String(v||'').toUpperCase();
+  if (SKIP_SECTIONS.some(x => s.includes(x))) return 'SKIP';
+  if (s.includes('APOYO CR')) return 'Apoyo Crítico';
+  if (s.includes('PREVENTIVO DE EQUIPOS') || s.includes('PREVENTIVO EQUIPOS (F')) return 'Equipos';
+  if (s.includes('INSPECCIÓN') && s.includes('REA')) return 'Insp. Áreas';
+  if (s.includes('CALIBRACIONES INTERNAS')) return 'Cal. Interna';
+  if (s.includes('CALIBRACIONES EXTERNAS')) return 'Cal. Externa';
+  return null;
+}
+function isHeaderRow(r) {
+  return r.map(v => String(v||'').toUpperCase()).some(v => ['EQUIPO','NOMBRE DEL ÁREA','INTRUMENTO','INSTRUMENTO'].includes(v));
+}
+function parseFile(data) {
+  const wb = XLSX.read(data, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const tasks = []; let cat = 'Equipos'; let id = 0; let mes = '';
+  for (const row of rows) {
+    const first = String(row[0]||'').trim();
+    if (first.toUpperCase().includes('MES DE PROGRAMA')) mes = String(row[1]||row[2]||'').trim();
+    const nc = detectCat(first);
+    if (nc) { cat = nc; continue; }
+    if (cat === 'SKIP') continue;
+    if (isHeaderRow(row) || !first || first.length < 3) continue;
+    if (['PROGRAMACIÓN','ELABORADO','APROBADO','TOTAL','NOMBRE','BUSSIE'].some(x => first.toUpperCase().includes(x))) continue;
+    const resp = String(row[5]||'').trim();
+    const activ = String(row[3]||'').trim();
+    if (!resp || !activ || resp.length < 3) continue;
+    tasks.push({ id: id++, cat, equipo: first, codigo: String(row[1]||'').trim(), activ, freq: String(row[4]||'').trim(), resp, fecha: excelDate(row[6]) });
+  }
+  return { tasks, mes };
+}
+
+// ══════════════════════════════════════════════════
+//  ACTIONS
+// ══════════════════════════════════════════════════
+async function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const { tasks, mes } = parseFile(new Uint8Array(e.target.result));
+      if (!tasks.length) { alert('No se encontraron actividades.'); return; }
+      const id = Date.now();
+      const row = { id, mes: mes || `Mes ${months.length + 1}`, tasks, done: {}, notes: {} };
+      months.push(row);
+      activeMonth = id;
+      activeTech = [...new Set(tasks.map(t => t.resp))].sort()[0];
+      setSyncing(true);
+      await sbUpsert(row);
+      setSyncing(false);
+      render();
+    } catch(err) { setSyncing(false, true); alert('Error: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+  document.getElementById('fileInput').value = '';
+}
+
+async function toggle(taskId) {
+  const m = months.find(m => m.id === activeMonth);
+  if (!m) return;
+  if (m.done[taskId]) delete m.done[taskId];
+  else m.done[taskId] = true;
+  render(); // optimistic
+  setSyncing(true);
+  try {
+    await sbUpsert({ id: m.id, mes: m.mes, tasks: m.tasks, done: m.done, notes: m.notes || {} });
+    setSyncing(false);
+  } catch(e) { setSyncing(false, true); alert('Error al guardar check: ' + e.message); }
+}
+
+let activeNote = null; // taskId of currently open note panel
+
+function toggleNote(taskId, e) {
+  e.stopPropagation();
+  activeNote = (activeNote === taskId) ? null : taskId;
+  render();
+  if (activeNote !== null) {
+    setTimeout(() => {
+      const ta = document.getElementById('note-ta-' + taskId);
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }, 30);
+  }
+}
+
+async function saveNote(taskId) {
+  const m = months.find(m => m.id === activeMonth);
+  if (!m) return;
+  const ta = document.getElementById('note-ta-' + taskId);
+  if (!ta) return;
+  const val = ta.value.trim();
+  if (!m.notes) m.notes = {};
+  if (val) m.notes[taskId] = val;
+  else delete m.notes[taskId];
+  activeNote = null;
+  render();
+  setSyncing(true);
+  try {
+    await sbUpsert({ id: m.id, mes: m.mes, tasks: m.tasks, done: m.done, notes: m.notes });
+    setSyncing(false);
+  } catch(e) { setSyncing(false, true); alert('Error al guardar nota: ' + e.message); }
+}
+
+async function deleteMonth() {
+  const m = months.find(m => m.id === activeMonth);
+  if (!m || !confirm(`¿Borrar el mes "${m.mes}"?`)) return;
+  months = months.filter(mo => mo.id !== activeMonth);
+  activeMonth = months.length ? months[months.length-1].id : null;
+  activeTech = null;
+  setSyncing(true);
+  try { await sbDelete(m.id); setSyncing(false); } catch(e) { setSyncing(false, true); }
+  render();
+}
+
+async function removeMonth(id, e) {
+  e.stopPropagation();
+  const m = months.find(m => m.id === id);
+  if (!m || !confirm(`¿Eliminar el mes "${m.mes}"?`)) return;
+  months = months.filter(m => m.id !== id);
+  if (activeMonth === id) activeMonth = months.length ? months[months.length-1].id : null;
+  activeTech = null;
+  setSyncing(true);
+  try { await sbDelete(id); setSyncing(false); } catch(e) { setSyncing(false, true); }
+  render();
+}
+
+function setSyncing(on, error=false) {
+  syncing = on; syncError = error;
+  const dot = document.getElementById('syncDot');
+  if (!dot) return;
+  dot.className = 'sync-dot' + (on ? ' syncing' : '') + (error ? ' error' : '');
+  dot.title = on ? 'Guardando…' : error ? 'Error al guardar' : 'Sincronizado ✓';
+}
+
+// ══════════════════════════════════════════════════
+//  EXPORT
+// ══════════════════════════════════════════════════
+function exportReport() {
+  const m = months.find(m => m.id === activeMonth);
+  if (!m) return;
+  const wb = XLSX.utils.book_new();
+  const techs = [...new Set(m.tasks.map(t => t.resp))].sort();
+  const sumRows = [['TÉCNICO','TOTAL','REALIZADOS','PENDIENTES','% CUMPLIMIENTO']];
+  techs.forEach(resp => {
+    const mine = m.tasks.filter(t => t.resp === resp);
+    const h = mine.filter(t => m.done[t.id]).length;
+    sumRows.push([resp, mine.length, h, mine.length-h, mine.length ? Math.round(h/mine.length*100)+'%' : '0%']);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sumRows), 'Resumen');
+  const detRows = [['TÉCNICO','CATEGORÍA','EQUIPO','CÓDIGO','ACTIVIDAD','FRECUENCIA','FECHA LÍMITE','ESTADO','NOTAS']];
+  m.tasks.forEach(t => detRows.push([t.resp, t.cat, t.equipo, t.codigo, t.activ, t.freq, t.fecha, m.done[t.id]?'REALIZADO':'PENDIENTE', (m.notes||{})[t.id]||'']));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detRows), 'Detalle');
+  const pendRows = [['TÉCNICO','CATEGORÍA','EQUIPO','CÓDIGO','ACTIVIDAD','FRECUENCIA','FECHA LÍMITE','NOTAS']];
+  m.tasks.filter(t => !m.done[t.id]).forEach(t => pendRows.push([t.resp, t.cat, t.equipo, t.codigo, t.activ, t.freq, t.fecha, (m.notes||{})[t.id]||'']));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pendRows), 'Pendientes');
+  XLSX.writeFile(wb, `Informe_Mtto_${m.mes.replace(/\s/g,'_')}.xlsx`);
+}
+
+// ══════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════
+function headerHtml(subtitle) {
+  return `<div class="header">
+    <div class="logo-wrap">
+      ${LOGO_SVG}
+
+    </div>
+    <div class="header-title">
+      <h1>Seguimiento de Mantenimiento</h1>
+      <small>${subtitle}</small>
+    </div>
+    <div class="header-right">
+      <div id="syncDot" class="sync-dot" title="Sincronizado ✓"></div>
+      <button class="btn-white" onclick="deleteMonth()">🗑 Borrar mes</button>
+      <button class="btn-green" onclick="exportReport()">⬇ Exportar informe</button>
+    </div>
+  </div>`;
+}
+
+function render() {
+  const root = document.getElementById('app');
+
+  if (loading) {
+    root.innerHTML = `
+    <div class="header">
+      <div class="logo-wrap">${LOGO_SVG}</div>
+      <div class="header-title"><h1>Seguimiento de Mantenimiento</h1></div>
+    </div>
+    <div class="loading"><div class="loading-spin">⚙️</div><br>Cargando datos…</div>`;
+    return;
+  }
+
+  if (!months.length) {
+    root.innerHTML = `
+    <div class="header">
+      <div class="logo-wrap">${LOGO_SVG}</div>
+      <div class="header-title"><h1>Seguimiento de Mantenimiento</h1><small>Carga la programación de cada mes</small></div>
+    </div>
+    <div class="upload-wrap">
+      <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+        <div style="font-size:48px">📊</div>
+        <h2>Cargar primer mes</h2>
+        <p>Sube el Excel de programación mensual.<br>Los datos quedan guardados en la nube para todos.</p>
+        <br><button class="btn-blue">Seleccionar archivo</button>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const m = months.find(m => m.id === activeMonth) || months[0];
+  activeMonth = m.id;
+  const techs = [...new Set(m.tasks.map(t => t.resp))].sort();
+  if (!activeTech || !techs.includes(activeTech)) activeTech = techs[0];
+
+  const totalAll = m.tasks.length;
+  const doneAll  = m.tasks.filter(t => m.done[t.id]).length;
+  const pctAll   = totalAll ? Math.round(doneAll/totalAll*100) : 0;
+  const mine     = m.tasks.filter(t => t.resp === activeTech);
+  const doneMine = mine.filter(t => m.done[t.id]).length;
+  const pendMine = mine.length - doneMine;
+  const pctMine  = mine.length ? Math.round(doneMine/mine.length*100) : 0;
+
+  let html = headerHtml(`${months.length} mes${months.length>1?'es':''} cargado${months.length>1?'s':''}`);
+
+  html += `<div class="month-bar">
+    ${months.map(mo => {
+      const tot = mo.tasks.length;
+      const don = mo.tasks.filter(t => mo.done[t.id]).length;
+      const pct = tot ? Math.round(don/tot*100) : 0;
+      return `<div class="month-tab ${mo.id===activeMonth?'active':''}" onclick="activeMonth=${mo.id};activeTech=null;render()">
+        ${mo.mes.toUpperCase()}
+        <span class="month-pct">${pct}%</span>
+        <span class="month-close" onclick="removeMonth(${mo.id},event)">×</span>
+      </div>`;
+    }).join('')}
+    <div class="month-add" title="Agregar mes" onclick="document.getElementById('fileInput').click()">＋</div>
+  </div>
+
+  <div class="global-bar">
+    <div class="gs"><div class="gs-n" style="color:#0D2F5C">${totalAll}</div><div class="gs-l">Total</div></div>
+    <div class="gs"><div class="gs-n" style="color:#16a34a">${doneAll}</div><div class="gs-l">Realizados</div></div>
+    <div class="gs"><div class="gs-n" style="color:#ca8a04">${totalAll-doneAll}</div><div class="gs-l">Pendientes</div></div>
+    <div class="prog-wrap">
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-size:11px;color:#64748b">Avance del mes</span>
+        <span style="font-size:13px;font-weight:700;color:${pctColor(pctAll)}">${pctAll}%</span>
+      </div>
+      <div class="prog-bar"><div class="prog-fill" style="width:${pctAll}%;background:${pctColor(pctAll)}"></div></div>
+    </div>
+  </div>
+
+  <div class="tech-nav">
+    ${techs.map(resp => {
+      const mi = m.tasks.filter(t => t.resp === resp);
+      const di = mi.filter(t => m.done[t.id]).length;
+      const pi = mi.length - di;
+      return `<div class="tech-tab ${resp===activeTech?'active':''}" onclick="activeTech='${resp}';render()">
+        ${resp}
+        ${di ? `<span class="badge badge-ok">${di}</span>` : ''}
+        ${pi ? `<span class="badge badge-pend">${pi}</span>` : ''}
+      </div>`;
+    }).join('')}
+  </div>
+
+  <div class="tech-panel">
+    <div class="tech-header">
+      <div class="th-name">${activeTech}</div>
+      <div class="th-stat"><div class="th-n" style="color:${pctColor(pctMine)}">${pctMine}%</div><div class="th-l">cumplimiento</div></div>
+      <div class="th-stat"><div class="th-n" style="color:#16a34a">${doneMine}</div><div class="th-l">realizados</div></div>
+      <div class="th-stat"><div class="th-n" style="color:#ca8a04">${pendMine}</div><div class="th-l">pendientes</div></div>
+      <div>
+        <div class="th-bar"><div class="th-fill" style="width:${pctMine}%;background:${pctColor(pctMine)}"></div></div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:3px">${mine.length} actividades</div>
+      </div>
+    </div>`;
+
+  const pendList = mine.filter(t => !m.done[t.id]);
+  const hechos   = mine.filter(t =>  m.done[t.id]);
+
+  if (pendList.length) {
+    html += '<div class="section-label">⏳ Pendientes (' + pendList.length + ')</div>';
+    pendList.forEach(t => {
+      const note = (m.notes||{})[t.id] || '';
+      const open = activeNote === t.id;
+      const notePreview = (note && !open) ? '<div class="task-note-preview">📝 ' + note + '</div>' : '';
+      const noteClass   = note ? 'note-btn has-note' : 'note-btn';
+      const noteTitle   = note ? 'Ver/editar nota' : 'Agregar nota';
+      const notePanel   = open
+        ? '<div class="note-panel"><textarea id="note-ta-' + t.id + '" placeholder="Escribe una nota…">' + note + '</textarea><button class="note-save-btn" onclick="saveNote(' + t.id + ')">Guardar</button></div>'
+        : '';
+      html += '<div class="task-card">'
+        + '<div class="task-row" onclick="toggle(' + t.id + ')">'
+        + '<div class="check"></div>'
+        + '<div class="task-info">'
+        + '<div class="task-name">' + t.equipo + '</div>'
+        + '<div class="task-sub"><span class="task-code">' + t.codigo + '</span>&nbsp;' + t.activ + '&nbsp;·&nbsp;' + t.freq + '</div>'
+        + notePreview
+        + '</div>'
+        + '<div class="task-date">📅 ' + t.fecha + '</div>'
+        + '<button class="' + noteClass + '" onclick="toggleNote(' + t.id + ', event)" title="' + noteTitle + '">📝</button>'
+        + '</div>'
+        + notePanel
+        + '</div>';
+    });
+  }
+  if (hechos.length) {
+    html += '<div class="section-label">✅ Realizados (' + hechos.length + ')</div>';
+    hechos.forEach(t => {
+      const note = (m.notes||{})[t.id] || '';
+      const open = activeNote === t.id;
+      const notePreview = (note && !open) ? '<div class="task-note-preview">📝 ' + note + '</div>' : '';
+      const noteClass   = note ? 'note-btn has-note' : 'note-btn';
+      const noteTitle   = note ? 'Ver/editar nota' : 'Agregar nota';
+      const notePanel   = open
+        ? '<div class="note-panel"><textarea id="note-ta-' + t.id + '" placeholder="Escribe una nota…">' + note + '</textarea><button class="note-save-btn" onclick="saveNote(' + t.id + ')">Guardar</button></div>'
+        : '';
+      html += '<div class="task-card done">'
+        + '<div class="task-row" onclick="toggle(' + t.id + ')">'
+        + '<div class="check on">✓</div>'
+        + '<div class="task-info">'
+        + '<div class="task-name">' + t.equipo + '</div>'
+        + '<div class="task-sub"><span class="task-code">' + t.codigo + '</span>&nbsp;' + t.activ + '&nbsp;·&nbsp;' + t.freq + '</div>'
+        + notePreview
+        + '</div>'
+        + '<div class="task-date">📅 ' + t.fecha + '</div>'
+        + '<button class="' + noteClass + '" onclick="toggleNote(' + t.id + ', event)" title="' + noteTitle + '">📝</button>'
+        + '</div>'
+        + notePanel
+        + '</div>';
+    });
+  }
+
+  html += `</div>
+  <div class="footer">
+    <span class="footer-info">${m.mes.toUpperCase()} · ${activeTech} · ${doneMine} realizados · ${pendMine} pendientes</span>
+    <button class="btn-green" style="margin-left:auto" onclick="exportReport()">⬇ Exportar informe</button>
+  </div>`;
+
+  root.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════
+//  INIT — carga datos desde Supabase
+// ══════════════════════════════════════════════════
+(async () => {
+  render(); // muestra loading
+  try {
+    const rows = await sbLoad();
+    months = rows.map(r => ({ ...r, notes: r.notes || {} }));
+    activeMonth = rows.length ? rows[rows.length-1].id : null;
+    activeTech  = null;
+  } catch(e) {
+    alert('No se pudo conectar a Supabase. Verifica tu conexión.');
+  }
+  loading = false;
+  render();
+})();
+</script>
+</body>
+</html>
