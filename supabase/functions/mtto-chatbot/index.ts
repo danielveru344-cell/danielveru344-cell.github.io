@@ -196,16 +196,29 @@ ${encontrado ? contexto : "(No se encontraron registros internos relacionados co
     }));
     contents.push({ role: "user", parts: [{ text: message }] });
 
-    const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents,
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        tools: [{ google_search: {} }],
-        generationConfig: { maxOutputTokens: 1200 },
-      }),
-    });
+    async function llamarGemini(conTools: boolean) {
+      return await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents,
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          ...(conTools ? { tools: [{ google_search: {} }] } : {}),
+          generationConfig: { maxOutputTokens: 1200 },
+        }),
+      });
+    }
+
+    let geminiRes = await llamarGemini(true);
+    let sinBusquedaWeb = false;
+
+    // Si falla por cupo (429) probablemente sea la búsqueda web la que está
+    // limitada/requiere facturación. Reintentamos sin ella para no dejar al
+    // usuario sin respuesta — al menos contestará con el contexto interno.
+    if (geminiRes.status === 429) {
+      geminiRes = await llamarGemini(false);
+      sinBusquedaWeb = true;
+    }
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text();
@@ -216,9 +229,12 @@ ${encontrado ? contexto : "(No se encontraron registros internos relacionados co
 
     const data = await geminiRes.json();
     const parts = data?.candidates?.[0]?.content?.parts || [];
-    const answer = parts.map((p: any) => p.text || "").join("\n\n").trim() || "No obtuve una respuesta.";
+    let answer = parts.map((p: any) => p.text || "").join("\n\n").trim() || "No obtuve una respuesta.";
+    if (sinBusquedaWeb) {
+      answer += "\n\n(⚠️ La búsqueda web no está disponible en este momento — cupo gratis agotado o requiere facturación. Esta respuesta se basó solo en registros internos.)";
+    }
 
-    return new Response(JSON.stringify({ answer, usedInternalContext: encontrado }), {
+    return new Response(JSON.stringify({ answer, usedInternalContext: encontrado, sinBusquedaWeb }), {
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
   } catch (e) {
