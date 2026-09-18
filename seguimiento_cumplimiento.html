@@ -11,13 +11,8 @@
 body { font-family: Arial, sans-serif; background: #f1f5f9; color: #0D2F5C; }
 
 /* HEADER */
-.header { background: #0D2F5C; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 14px; }
-.logo-wrap { display: flex; align-items: center; gap: 10px; }
-.logo-img { height: 38px; display: block; filter: brightness(0) invert(1); }
-.logo-text { display: flex; flex-direction: column; }
-.logo-name { font-size: 16px; font-weight: 800; letter-spacing: 1px; color: white; line-height: 1; }
-.logo-sub  { font-size: 10px; color: #93c5fd; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
-.header-title { border-left: 1px solid rgba(255,255,255,.2); padding-left: 14px; }
+.header { background: #0D2F5C; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; row-gap: 10px; }
+.header-title { padding-left: 0; }
 .header-title h1 { font-size: 13px; font-weight: 700; }
 .header-title small { font-size: 10px; opacity: .5; display: block; margin-top: 1px; }
 .header-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
@@ -30,8 +25,8 @@ button { font-family: Arial; font-size: 12px; font-weight: 700; padding: 7px 14p
 .btn-green { background: #16a34a; color: white; }
 .btn-blue  { background: #2d7dd2; color: white; }
 
-/* MONTH TABS */
-.month-bar { background: #091f3e; padding: 0 14px; display: flex; align-items: stretch; overflow-x: auto; border-top: 1px solid rgba(255,255,255,.08); }
+/* MONTH TABS (ahora integradas en el mismo header) */
+.month-bar { background: transparent; padding: 0; display: flex; align-items: stretch; overflow-x: auto; border-left: 1px solid rgba(255,255,255,.15); margin-left: 4px; padding-left: 14px; flex: 1; min-width: 0; }
 .month-tab { padding: 9px 14px; font-size: 12px; font-weight: 700; color: rgba(255,255,255,.4); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; display: flex; align-items: center; gap: 6px; transition: color .15s; }
 .month-tab:hover { color: rgba(255,255,255,.8); }
 .month-tab.active { color: white; border-color: #2d7dd2; }
@@ -354,16 +349,13 @@ function exportReport() {
 // ══════════════════════════════════════════════════
 //  RENDER
 // ══════════════════════════════════════════════════
-function headerHtml(subtitle) {
+function headerHtml(subtitle, monthTabsHtml) {
   return `<div class="header">
-    <div class="logo-wrap">
-      ${LOGO_SVG}
-
-    </div>
     <div class="header-title">
       <h1>Seguimiento de Mantenimiento</h1>
       <small>${subtitle}</small>
     </div>
+    ${monthTabsHtml ? `<div class="month-bar">${monthTabsHtml}</div>` : ''}
     <div class="header-right">
       <div id="syncDot" class="sync-dot" title="Sincronizado ✓"></div>
       <button class="btn-white" onclick="deleteMonth()">🗑 Borrar mes</button>
@@ -379,7 +371,6 @@ function render() {
   if (loading) {
     root.innerHTML = `
     <div class="header">
-      <div class="logo-wrap">${LOGO_SVG}</div>
       <div class="header-title"><h1>Seguimiento de Mantenimiento</h1></div>
     </div>
     <div class="loading"><div class="loading-spin">⚙️</div><br>Cargando datos…</div>`;
@@ -389,7 +380,6 @@ function render() {
   if (!months.length) {
     root.innerHTML = `
     <div class="header">
-      <div class="logo-wrap">${LOGO_SVG}</div>
       <div class="header-title"><h1>Seguimiento de Mantenimiento</h1><small>Carga la programación de cada mes</small></div>
     </div>
     <div class="upload-wrap">
@@ -416,9 +406,7 @@ function render() {
   const pendMine = mine.length - doneMine;
   const pctMine  = mine.length ? Math.round(doneMine/mine.length*100) : 0;
 
-  let html = headerHtml(`${months.length} mes${months.length>1?'es':''} cargado${months.length>1?'s':''}`);
-
-  html += `<div class="month-bar">
+  let html = headerHtml(`${months.length} mes${months.length>1?'es':''} cargado${months.length>1?'s':''}`, `
     ${months.map(mo => {
       const tot = mo.tasks.length;
       const don = mo.tasks.filter(t => mo.done[t.id]).length;
@@ -430,9 +418,9 @@ function render() {
       </div>`;
     }).join('')}
     <div class="month-add" title="Agregar mes" onclick="document.getElementById('fileInput').click()">＋</div>
-  </div>
+  `);
 
-  <div class="global-bar">
+  html += `<div class="global-bar">
     <div class="gs"><div class="gs-n" style="color:#0D2F5C">${totalAll}</div><div class="gs-l">Total</div></div>
     <div class="gs"><div class="gs-n" style="color:#16a34a">${doneAll}</div><div class="gs-l">Realizados</div></div>
     <div class="gs"><div class="gs-n" style="color:#ca8a04">${totalAll-doneAll}</div><div class="gs-l">Pendientes</div></div>
