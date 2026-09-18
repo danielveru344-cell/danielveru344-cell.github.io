@@ -351,16 +351,9 @@ function exportReport() {
 // ══════════════════════════════════════════════════
 function headerHtml(subtitle, monthTabsHtml) {
   return `<div class="header">
-    <div class="header-title">
-      <h1>Seguimiento de Mantenimiento</h1>
-      <small>${subtitle}</small>
-    </div>
-    ${monthTabsHtml ? `<div class="month-bar">${monthTabsHtml}</div>` : ''}
+    ${monthTabsHtml ? `<div class="month-bar">${monthTabsHtml}</div>` : '<div class="month-bar"></div>'}
     <div class="header-right">
       <div id="syncDot" class="sync-dot" title="Sincronizado ✓"></div>
-      <button class="btn-white" onclick="deleteMonth()">🗑 Borrar mes</button>
-      <button class="btn-green" onclick="exportReport()">⬇ Exportar informe</button>
-      <button class="btn-blue" id="pptxBtn" onclick="generarInformePPTX()">📊 Informe PPTX</button>
     </div>
   </div>`;
 }
@@ -370,18 +363,14 @@ function render() {
 
   if (loading) {
     root.innerHTML = `
-    <div class="header">
-      <div class="header-title"><h1>Seguimiento de Mantenimiento</h1></div>
-    </div>
+    <div class="header"></div>
     <div class="loading"><div class="loading-spin">⚙️</div><br>Cargando datos…</div>`;
     return;
   }
 
   if (!months.length) {
     root.innerHTML = `
-    <div class="header">
-      <div class="header-title"><h1>Seguimiento de Mantenimiento</h1><small>Carga la programación de cada mes</small></div>
-    </div>
+    <div class="header"></div>
     <div class="upload-wrap">
       <div class="upload-box" onclick="document.getElementById('fileInput').click()">
         <div style="font-size:48px">📊</div>
@@ -595,8 +584,8 @@ function addTitleRpt(slide, title, subtitle) {
 
 async function generarInformePPTX() {
   const btn = document.getElementById('pptxBtn');
-  const original = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Generando…';
+  const original = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generando…'; }
   try {
     const { techs, displayName, perMes, totTecnico, granTotal } = computeReportData();
     const pres = new PptxGenJS();
@@ -698,7 +687,7 @@ async function generarInformePPTX() {
     alert('No se pudo generar el informe: ' + e.message);
     console.error(e);
   } finally {
-    btn.disabled = false; btn.textContent = original;
+    if (btn) { btn.disabled = false; btn.textContent = original; }
   }
 }
 
