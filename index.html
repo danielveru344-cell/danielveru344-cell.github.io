@@ -13476,128 +13476,136 @@ function imprimirOrdenesMesFMAN008(ordenes){
   var T=FMAN008_TXT;
   var esc=function(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");};
 
-  function construirBloques(ord){
+  function construirBloque1(ord){
     var esCorrectivo=ord.frecuencia==="Correctivo";
     var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
     var area=areaDesdeCodigoEquipo(ord.equipo_codigo)||ord.seccion||"";
 
     var headerHtml=
       '<table class="fman-hdr">'+
-        '<tr><td colspan="4" class="fman-title">'+esc(T.titulo)+'</td></tr>'+
+        '<tr><td colspan="6" class="fman-title">'+esc(T.titulo)+' &nbsp;·&nbsp; <span class="sub">'+esc(ord.equipo_desc||"")+' ('+esc(ord.equipo_codigo||"")+')</span></td></tr>'+
         '<tr>'+
-          '<td class="lbl">'+esc(T.empresa_label)+'</td>'+
-          '<td class="lbl">'+esc(T.tipo_mtto_label)+'</td>'+
-          '<td class="lbl">'+esc(T.frecuencia_label)+'</td>'+
-          '<td class="logo-cell" rowspan="3"><img src="'+LOGO_SRC+'"/></td>'+
+          '<td class="lbl">Empresa</td><td class="val">'+esc(T.empresa)+'</td>'+
+          '<td class="lbl">Tipo</td><td class="val">'+(esCorrectivo?'<span class="chk"></span> Prev.':'<span class="chk on">X</span> Prev.')+' &nbsp; '+(esCorrectivo?'<span class="chk on">X</span> Corr.':'<span class="chk"></span> Corr.')+'</td>'+
+          '<td class="lbl">Frecuencia</td><td class="val">'+esc(freqTexto)+'</td>'+
         '</tr>'+
         '<tr>'+
-          '<td rowspan="2" class="val strong center">'+esc(T.empresa)+'</td>'+
-          '<td class="chkline">'+(esCorrectivo?'<span class="chk"></span>':'<span class="chk on">X</span>')+' '+esc(T.preventivo_label)+'</td>'+
-          '<td rowspan="2" class="val center strong">'+esc(freqTexto)+'</td>'+
-        '</tr>'+
-        '<tr>'+
-          '<td class="chkline">'+(esCorrectivo?'<span class="chk on">X</span>':'<span class="chk"></span>')+' '+esc(T.correctivo_label)+'</td>'+
-        '</tr>'+
-        '<tr>'+
-          '<td class="lbl-inline"><b>'+esc(T.equipo_label)+':</b> '+esc(ord.equipo_desc||"")+'</td>'+
-          '<td class="lbl-inline"><b>'+esc(T.codigo_label)+':</b> '+esc(ord.equipo_codigo||"")+'</td>'+
-          '<td class="lbl-inline"><b>'+esc(T.fecha_label)+'</b> '+esc(ord.fecha_ejecucion||"")+'</td>'+
-          '<td class="lbl-inline"><b>'+esc(T.area_label)+'</b> '+esc(area)+'</td>'+
+          '<td class="lbl">Código</td><td class="val">'+esc(ord.equipo_codigo||"")+'</td>'+
+          '<td class="lbl">Área</td><td class="val">'+esc(area)+'</td>'+
+          '<td class="lbl">Fecha</td><td class="val">'+esc(ord.fecha_ejecucion||"")+'</td>'+
         '</tr>'+
       '</table>';
 
-    var gruposHtml=T.grupos.map(function(g){
-      var headerRow='<tr class="grp-row"><td class="grp-txt">'+esc(g.header)+'</td><td class="chk-head">Bueno</td><td class="chk-head">Malo</td></tr>';
-      var itemsRows=g.items.map(function(it){
-        return '<tr class="item-row"><td class="item-txt">'+esc(it)+'</td><td class="chk-box"></td><td class="chk-box"></td></tr>';
+    var todos=[];
+    T.grupos.forEach(function(g){
+      todos.push({tipo:"h",texto:g.header});
+      g.items.forEach(function(it){todos.push({tipo:"i",texto:it});});
+    });
+    var mitad=Math.ceil(todos.length/2);
+    var colA=todos.slice(0,mitad);
+    var colB=todos.slice(mitad);
+
+    function renderCol(items){
+      return items.map(function(it){
+        if(it.tipo==="h"){
+          return '<tr class="grp-row"><td class="grp-txt">'+esc(it.texto)+'</td><td class="chk-head">B</td><td class="chk-head">M</td></tr>';
+        }
+        return '<tr class="item-row"><td class="item-txt">'+esc(it.texto)+'</td><td class="chk-box"></td><td class="chk-box"></td></tr>';
       }).join('');
-      return headerRow+itemsRows;
-    }).join('');
-
-    var bloque1=
-      '<div class="fman-block">'+
-        headerHtml+
-        '<div class="fman-instr">'+esc(T.instrucciones1)+'</div>'+
-        '<div class="fman-instr">'+esc(T.instrucciones2)+'</div>'+
-        '<table class="fman-check">'+
-          '<tr><td class="chk-toph">'+esc(T.tabla_actividad)+'</td><td class="chk-toph" colspan="2">'+esc(T.tabla_estado)+'</td></tr>'+
-          gruposHtml+
-        '</table>'+
-        '<div class="fman-foot">'+esc(T.footer_code)+'</div>'+
-      '</div>';
-
-    var repuestosFilas='';
-    for(var i=0;i<5;i++){
-      repuestosFilas+='<tr><td class="rep-num">'+(i+1)+'</td><td class="rep-item"></td><td class="rep-num">'+(i+6)+'</td><td class="rep-item"></td></tr>';
     }
 
+    return headerHtml+
+      '<div class="fman-check2col">'+
+        '<table class="fman-check"><tr><td class="chk-toph">Actividad</td><td class="chk-toph" colspan="2">Estado</td></tr>'+renderCol(colA)+'</table>'+
+        '<table class="fman-check"><tr><td class="chk-toph">Actividad</td><td class="chk-toph" colspan="2">Estado</td></tr>'+renderCol(colB)+'</table>'+
+      '</div>';
+  }
+
+  function construirBloque2(ord){
+    var repuestosFilas="";
+    for(var i=0;i<3;i++){
+      repuestosFilas+='<tr><td class="rep-num">'+(i+1)+'</td><td class="rep-item"></td><td class="rep-num">'+(i+4)+'</td><td class="rep-item"></td></tr>';
+    }
     var obsFilas='<tr><td class="obs-fecha">'+esc(ord.fecha_ejecucion||"")+'</td><td class="obs-detalle">'+esc(ord.observaciones||"")+'</td></tr>';
-    for(var j=0;j<5;j++){
+    for(var j=0;j<2;j++){
       obsFilas+='<tr><td class="obs-fecha">&nbsp;</td><td class="obs-detalle">&nbsp;</td></tr>';
     }
-
-    var bloque2=
-      '<div class="fman-block">'+
+    return '<div class="fman-half-title">'+esc(ord.equipo_desc||"")+' ('+esc(ord.equipo_codigo||"")+') &nbsp;·&nbsp; Repuestos, observaciones y firmas</div>'+
+      '<div class="fman-row2">'+
         '<table class="fman-rep">'+
-          '<tr><td class="rep-h" colspan="2">'+esc(T.repuestos_label)+'</td><td class="rep-h" colspan="2">'+esc(T.repuestos_label)+'</td></tr>'+
-          '<tr><td class="rep-hh">#</td><td class="rep-hh">Item</td><td class="rep-hh">#</td><td class="rep-hh">Item</td></tr>'+
+          '<tr><td class="rep-h" colspan="2">'+esc(T.repuestos_label)+'</td></tr>'+
+          '<tr><td class="rep-hh">#</td><td class="rep-hh">Item</td></tr>'+
           repuestosFilas+
         '</table>'+
         '<table class="fman-obs">'+
           '<tr><td class="obs-h" colspan="2">'+esc(T.observaciones_label)+'</td></tr>'+
-          '<tr><td class="obs-hh">'+esc(T.obs_fecha_label)+'</td><td class="obs-hh">'+esc(T.obs_detalle_label)+'</td></tr>'+
+          '<tr><td class="obs-hh">Fecha</td><td class="obs-hh">Detalle</td></tr>'+
           obsFilas+
         '</table>'+
-        '<table class="fman-firmas">'+
-          '<tr><td class="firma-line"></td><td class="firma-line"></td><td class="firma-line"></td></tr>'+
-          '<tr><td class="firma-lbl">'+esc(T.firma1)+'<br><span class="firma-sub">'+esc(T.firma1_sub)+'</span></td><td class="firma-lbl">'+esc(T.firma2)+'</td><td class="firma-lbl">'+esc(T.firma3)+'</td></tr>'+
-        '</table>'+
-        '<div class="fman-foot">'+esc(T.footer_code)+'</div>'+
-      '</div>';
-
-    return bloque1+bloque2;
+      '</div>'+
+      '<table class="fman-firmas">'+
+        '<tr><td class="firma-line"></td><td class="firma-line"></td><td class="firma-line"></td></tr>'+
+        '<tr><td class="firma-lbl">'+esc(T.firma1)+'</td><td class="firma-lbl">'+esc(T.firma2)+'</td><td class="firma-lbl">'+esc(T.firma3)+'</td></tr>'+
+      '</table>';
   }
+
+  // Empareja las órdenes de a 2 para que cada hoja física (frente y reverso)
+  // contenga dos órdenes completas: el frente lleva el checklist de ambas,
+  // el reverso lleva repuestos/observaciones/firmas de ambas.
+  var piezas=[];
+  for(var i=0;i<ordenes.length;i+=2){
+    var a=ordenes[i],b=ordenes[i+1];
+    piezas.push({html:construirBloque1(a),nuevaPagina:true,corte:!!b});
+    if(b)piezas.push({html:construirBloque1(b),nuevaPagina:false,corte:false});
+    piezas.push({html:construirBloque2(a),nuevaPagina:true,corte:!!b});
+    if(b)piezas.push({html:construirBloque2(b),nuevaPagina:false,corte:false});
+  }
+
+  var bodyHtml=piezas.map(function(p){
+    var cls="fman-block"+(p.nuevaPagina?" fman-newpage":"")+(p.corte?" fman-cut":"");
+    return '<div class="'+cls+'">'+p.html+'</div>';
+  }).join('');
 
   var css=
     '*{box-sizing:border-box;}'+
-    'body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#000;margin:0;}'+
-    '.fman-block{padding:6mm;page-break-inside:avoid;}'+
-    '.fman-block + .fman-block{page-break-before:always;}'+
+    'body{font-family:Arial,Helvetica,sans-serif;font-size:8px;color:#000;margin:0;}'+
+    '.fman-block{padding:3mm 6mm;page-break-inside:avoid;}'+
+    '.fman-block.fman-newpage{page-break-before:always;}'+
+    '.fman-block.fman-cut{border-bottom:1.2px dashed #999;}'+
     'table{width:100%;border-collapse:collapse;table-layout:fixed;}'+
-    'td{border:1px solid #000;padding:3px 5px;vertical-align:middle;word-wrap:break-word;}'+
-    '.fman-hdr{margin-bottom:4px;}'+
-    '.fman-title{text-align:center;font-weight:800;font-size:13px;padding:5px;}'+
-    '.lbl{font-weight:700;font-size:9px;text-align:center;background:#f0f0f0;}'+
-    '.val{font-size:9.5px;} .val.center{text-align:center;} .val.strong{font-weight:700;}'+
-    '.logo-cell{text-align:center;width:70px;} .logo-cell img{max-width:60px;max-height:40px;}'+
-    '.chkline{font-size:9px;}'+
-    '.chk{display:inline-block;width:11px;height:11px;border:1.4px solid #000;text-align:center;line-height:10px;font-size:9px;font-weight:800;margin-right:4px;}'+
+    'td{border:0.6px solid #000;padding:0.6px 4px;vertical-align:middle;word-wrap:break-word;overflow:hidden;}'+
+    '.fman-hdr{margin-bottom:1.5px;}'+
+    '.fman-title{text-align:center;font-weight:800;font-size:9px;padding:1px;}'+
+    '.fman-title .sub{font-weight:600;font-size:8px;}'+
+    '.lbl{font-weight:700;font-size:7px;text-align:center;background:#f0f0f0;width:8%;}'+
+    '.val{font-size:7.5px;width:25%;}'+
+    '.chk{display:inline-block;width:9px;height:9px;border:1.3px solid #000;text-align:center;line-height:8px;font-size:7.5px;font-weight:800;margin-right:2px;}'+
     '.chk.on::after{content:"X";}'+
-    '.lbl-inline{font-size:9px;}'+
-    '.fman-instr{font-size:7.6px;border:1px solid #000;border-top:none;padding:3px 6px;line-height:1.25;}'+
-    '.fman-check{margin-top:6px;}'+
-    '.chk-toph{text-align:center;font-weight:800;font-size:9px;background:#e7e7e7;}'+
-    '.grp-row td{font-weight:700;background:#f5f5f5;font-size:8.5px;}'+
-    '.chk-head{text-align:center;width:34px;font-size:8px;}'+
-    '.item-row td.item-txt{font-size:8px;line-height:1.2;}'+
-    '.item-row td.chk-box{width:34px;}'+
-    '.fman-rep,.fman-obs,.fman-firmas{margin-top:6px;}'+
-    '.rep-h,.obs-h{text-align:center;font-weight:800;font-size:9px;background:#e7e7e7;}'+
-    '.rep-hh,.obs-hh{text-align:center;font-weight:700;font-size:8px;background:#f5f5f5;}'+
-    '.rep-num{text-align:center;width:18px;font-size:8px;}'+
-    '.rep-item{font-size:8px;height:14px;}'+
-    '.obs-fecha{width:70px;text-align:center;font-size:8px;}'+
-    '.obs-detalle{font-size:8px;height:14px;}'+
+    '.fman-check2col{display:flex;gap:6px;}'+
+    '.fman-check2col table{width:50%;}'+
+    '.chk-toph{text-align:center;font-weight:800;font-size:7.5px;background:#e7e7e7;padding:0.6px 4px;}'+
+    '.grp-row td{font-weight:700;background:#f5f5f5;font-size:7px;padding:0.6px 4px;}'+
+    '.chk-head{text-align:center;width:20px;font-size:6.8px;}'+
+    '.item-row td.item-txt{font-size:6.8px;line-height:1.0;padding:0.6px 4px;}'+
+    '.item-row td.chk-box{width:20px;}'+
+    '.fman-half-title{font-weight:800;font-size:10.5px;margin-bottom:3px;}'+
+    '.fman-row2{display:flex;gap:6px;}'+
+    '.fman-row2 table{width:50%;}'+
+    '.rep-h,.obs-h{text-align:center;font-weight:800;font-size:8.5px;background:#e7e7e7;}'+
+    '.rep-hh,.obs-hh{text-align:center;font-weight:700;font-size:7.8px;background:#f5f5f5;}'+
+    '.rep-num{text-align:center;width:18px;font-size:7.8px;}'+
+    '.rep-item{font-size:7.8px;height:13px;}'+
+    '.obs-fecha{width:22%;text-align:center;font-size:7.8px;}'+
+    '.obs-detalle{font-size:7.8px;height:13px;}'+
+    '.fman-firmas{margin-top:5px;}'+
     '.fman-firmas td{border:none;}'+
-    '.firma-line{border-bottom:1.4px solid #000;height:26px;}'+
-    '.firma-lbl{text-align:center;font-size:7.6px;font-weight:700;padding-top:2px;}'+
-    '.firma-sub{font-weight:400;font-size:7px;}'+
-    '.fman-foot{font-size:7.5px;margin-top:5px;}'+
-    '@page{size:A4 landscape;margin:8mm;}';
+    '.firma-line{border-bottom:1.3px solid #000;height:16px;}'+
+    '.firma-lbl{text-align:center;font-size:7.4px;font-weight:700;padding-top:2px;}'+
+    '@page{size:A4 landscape;margin:6mm;}';
 
   var html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Órdenes F-MAN-008</title>'+
     '<style>'+css+'</style></head><body>'+
-    ordenes.map(construirBloques).join('')+
+    bodyHtml+
     '<script>window.onload=function(){window.print();};<\/script>'+
     '</body></html>';
 
