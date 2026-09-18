@@ -13431,14 +13431,15 @@ async function generarBufferFMAN008(ord,templateBuf){
   var wb=new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuf.slice(0));
   var ws=wb.worksheets[0];
-  // Corrige el salto de página de la plantilla: sin esto, la fila 38 (que
-  // repite el pie "CÓDIGO: F-MAN-008…", ya duplicado al final del todo en
-  // la fila 83) queda huérfana sola arriba de la página 2. Forzamos 1
-  // página de ancho x 2 de alto y borramos esa copia redundante.
-  ws.pageSetup.fitToPage=true;
-  ws.pageSetup.fitToWidth=1;
-  ws.pageSetup.fitToHeight=2;
-  ws.getCell("A38").value="";
+  // Corrige el salto de página de la plantilla: con el ajuste automático de
+  // Excel, la fila 38 (pie "CÓDIGO: F-MAN-008…", que debe imprimirse al
+  // final de esta primera página) quedaba huérfana sola arriba de la
+  // página 2. Se fuerza una escala fija más chica y un salto de página
+  // manual justo después de la fila 38, así queda pegada a la página 1
+  // y la página 2 (repuestos/observaciones/firmas) arranca limpia.
+  ws.pageSetup.fitToPage=false;
+  ws.pageSetup.scale=80;
+  ws.getRow(38).addPageBreak();
   var esCorrectivo=ord.frecuencia==="Correctivo";
   var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
   ws.getCell(esCorrectivo?"H4":"H3").value="X";
@@ -13489,10 +13490,9 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
       var wbSrc=new ExcelJS.Workbook();
       await wbSrc.xlsx.load(templateBuf.slice(0));
       var wsSrc=wbSrc.worksheets[0];
-      wsSrc.pageSetup.fitToPage=true;
-      wsSrc.pageSetup.fitToWidth=1;
-      wsSrc.pageSetup.fitToHeight=2;
-      wsSrc.getCell("A38").value="";
+      wsSrc.pageSetup.fitToPage=false;
+      wsSrc.pageSetup.scale=80;
+      wsSrc.getRow(38).addPageBreak();
       var esCorrectivo=ord.frecuencia==="Correctivo";
       var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
       wsSrc.getCell(esCorrectivo?"H4":"H3").value="X";
