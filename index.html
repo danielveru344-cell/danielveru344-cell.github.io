@@ -13467,48 +13467,140 @@ async function printFMAN008(ord){
     alert("No se pudo generar el formato F-MAN-008. Intentá de nuevo.");
   }
 }
+var FMAN008_TXT={"titulo": "ORDEN  DE MANTENIMIENTO", "empresa_label": "NOMBRE DE LA EMPRESA:", "empresa": "Laboratorios Bussié S.A", "tipo_mtto_label": "TIPO DE MANTENIMIENTO", "preventivo_label": "MANTENIMIENTO PREVENTIVO", "correctivo_label": "MANTENIMIENTO CORRECTIVO", "frecuencia_label": "Frecuencia Mantenimiento:", "area_label": "Área:", "equipo_label": "EQUIPO", "codigo_label": "CÓDIGO EQUIPO", "fecha_label": "Fecha realización:", "instrucciones1": "Confirme con el Supervisor de Producción la disponibilidad del equipo. Antes de iniciar la labor, verifique que cuenta con los elementos de protección personal que se necesiten: mono gafas, guantes, botas de seguridad con suela antiestática. Asegúrese que el equipo se encuentra desconectado de la toma trifásica, de lo contrario desconéctelo. Realice el mantenimiento según el P-MAN-002 \"Mantenimiento preventivo de equipos \"  Realizando las actividades  y siguiendo el cronograma de equipos significativos encontradas en el anexo según el equipo que corresponda.", "instrucciones2": "A continuación se debe realizar la inspección de cada uno de los elementos listados, si el elemento a verificar se encuentra en mal estado se debe cambiar inmediatamente o programar el cambio del mismo en la misma rutina no debe quedar pendiente, describir en el detalle las acciones realizadas durante el trabajo y si el ítem mencionado no aplica colocar N/A. No dejar espacios sin cerrar.", "tabla_col_izq": "SISTEMA MECÁNICO Y ELÉCTRICO", "tabla_actividad": "ACTIVIDAD QUE SE DEBE REALIZAR", "tabla_estado": "ESTADO", "grupos": [{"header": "Con el equipo encendido, sin producto, y sin material verifique:", "items": ["Sonidos extraños en el motor, rodamientos, reductor, ejes, bujes, poleas, piñones, hélice ,etc., de escucharse detenga el equipo revise, desmonte y corrija.", "Sistema neumático en general, fugas de aire, válvulas, cilindros, acoples, unidad de mantenimiento, manómetros, mangueras, si encuentra anomalía detenga el equipo alivie la presión y corrija. Verifique la lubricación de los elementos neumáticos si estos se encuentran sin lubricación lubrique.", "Sistema hidráulico en general, fugas de agua, de aceite, de refrigerante, sellos, empaques, tubería, mangueras, si encuentra anomalía detenga el equipo y corrija", "Sistema de bombeo, succión y descarga, empaques y sello de la bomba, verifique el impeler y si encuentra anomalía detenga el equipo y corrija.", "Sistema de vacío en general, ventury, ventosas, acoples, mangueras. Verifique la hermeticidad del sistema.", "Sistemas en general: serpentín, empaquetaduras, orings, arandelas de presión, cintas, sin-fin, volante, embrague, válvula o sistema de carga/descarga de producto, reductor, rodillos, tensores, bandas, mordazas, cadenas, rotulas, ruedas, etc. y según el caso de encontrar anomalía detenga el equipo y corrija.", "Verifique que los sistemas de seguridad del equipo se encuentran funcionando, de no ser así detenga el equipo y corrija.", "Revise que el sistema de sellado lateral esta cumpliendo y que no hay escape de producto, de ser así detenga el equipo y corrija."]}, {"header": "Con el equipo apagado realice las siguientes revisiones si aplica:", "items": ["Verifique la limpieza interna del cajón de control eléctrico. En caso de encontrarse exceso de producto proceda a desconectar los cables de potencia y control y realice la limpieza completa del sistema eléctrico soplete el tablero y elementos en general que encuentre con producto, cambie los filtros de los ventiladores.", "Limpie todas las conexiones eléctricas de los contactores de arranque, paro, parada de emergencia, con limpiador de contactos. ", "Verifique el ajuste de las conexiones eléctricas en general de ser necesario reapreté. Si encuentra cables, terminales sulfatados o recalentados reemplace.", "Verifique las partes móviles que se encuentran en contacto con producto, límpielas y aplique grasa Grado alimenticio. Retire grasa y aceite contaminados de los elementos del armario mecánico. Realice limpieza y lubricación general al sistema mecánico del equipo.", "Revise el ajuste de los acloples triclamp y sus sellos, en caso de encontrarse en mal estado, cámbielos inmediatamente", "Revise la limpieza del hausing, del radiador, y de la unidad en general, verifique el estado de los filtros, y de los cartuchos. Cambie de ser necesario.", "Verifique la alineación, tensión, y estado de las correas, si presenta anomalía desmonte y corrija.", "Verifique el chasis general, pintura, soldaduras, que no presente fisuras ni anomalías, de ser así corrija.", "Verifique la ventaviola del motor, observe su estado y el ajuste, si encuentra anomalía desmonte y corrija.", "Verifique las conexiones de los sensores de temperatura, verifique las conexiones de las resistencias y mida su consumo si presentan anomalía corrija.", "Verifique la tornillería en general, tuercas, arandelas, y de mas elementos de sujeción si encuentra faltante o deterioro en ellas cambie de ser necesario.", "Verifique el torque de los tornillos de sujeción del motor, poleas, piñones, etc., de ser necesario reapreté."]}, {"header": "Encienda el equipo, y verifique con el equipo sin carga: ", "items": ["Mida el amperaje en cada una de las líneas con la pinza amperimétrica y comparar con las especificaciones de la placa del motor, anote la medición. Haga Prueba de funcionamiento en vacío. Mida el consumo de las resistencias y registre la medición.", "Diferencial de presión, manómetro, vacuometro, panel de control, variador de velocidad y según el caso registre la lectura.", "Si el equipo posee variador de velocidad verifique que en la pantalla queda visualizando las rpm o los hz del equipo.", "Haga entrega del equipo en funcionamiento al supervisor de producción"]}], "footer_code": "CÓDIGO: F-MAN-008                VERSIÓN: 02              FECHA DE APLICACIÓN:  01-08-2024", "repuestos_label": "REPUESTOS UTILIZADOS", "cantidad_label": "CANTIDAD", "observaciones_label": "OBSERVACIONES", "obs_fecha_label": "FECHA", "obs_detalle_label": "DETALLE DEL MANTENIMIENTO REALIZADO", "firma1": "ENCARGADO DEL MANTENIMIENTO", "firma1_sub": "(Técnico de Mantenimiento, Técnico de Metrología, Técnico de Aguas, Auxiliar de Mantenimiento, otro)", "firma2": "FIRMA DE ENTERADO DE PRODUCCIÓN (Gerente o Supervisor)", "firma3": "GERENTE Y/O JEFE DE MANTENIMIENTO"};
 function imprimirOrdenesMesFMAN008(ordenes){
   if(!ordenes||ordenes.length===0){
     alert("No hay órdenes para imprimir en este mes.");
     return;
   }
-  var esc=function(s){return String(s==null?"":s).replace(/</g,"&lt;");};
-  var CW=1200,CH=927;
-  function pct(v,total){return(v/total*100).toFixed(3)+"%";}
-  function ov(left,top,width,height,text,fontSize,align,bold,wrap){
-    if(text==null)text="";
-    var ta=align||"left";
-    var fsVw=(fontSize/CW*100).toFixed(3)+"vw";
-    return '<div style="position:absolute;left:'+pct(left,CW)+';top:'+pct(top,CH)+';width:'+pct(width,CW)+';height:'+pct(height,CH)+';overflow:hidden;">'+
-      '<table style="width:100%;height:100%;border-collapse:collapse;"><tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:'+fsVw+';'+(bold?"font-weight:bold;":"")+'text-align:'+ta+';vertical-align:middle;line-height:1.15;padding:0 2px;border:none;'+(wrap?"white-space:normal;word-break:break-word;":"white-space:nowrap;text-overflow:ellipsis;")+'overflow:hidden;">'+esc(text)+"</td></tr></table></div>";
-  }
-  var pagesHtml="";
-  ordenes.forEach(function(ord){
-    var freq=ord.frecuencia==="Correctivo"?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
-    var progMes=(MTTO_MESES[ord.mes-1]||"")+" "+(ord.anio||"");
+  var T=FMAN008_TXT;
+  var esc=function(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");};
+
+  function construirBloques(ord){
+    var esCorrectivo=ord.frecuencia==="Correctivo";
+    var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
     var area=areaDesdeCodigoEquipo(ord.equipo_codigo)||ord.seccion||"";
-    var page1Overlays=ov(92,116,114,33,ord.equipo_desc,9.5,"left",false,true)+
-      ov(249,116,49,33,ord.equipo_codigo,9,"center")+
-      ov(341,116,68,33,ord.fecha_ejecucion,9,"center")+
-      ov(430,76,113,20,freq,9,"center")+
-      ov(464,96,79,20,area,9,"center")+
-      ov(409,76,21,20,"X",13,"center",true)+
-      ov(464,129,38,20,progMes,7.5,"center");
-    var page3Overlays=ov(50,322,41,19,ord.fecha_ejecucion||"",8.5,"center")+
-      ov(92,322,497,19,ord.observaciones||"",8.5,"left",false,true)+
-      ov(50,779,180,18,ord.ejecutor||"",8.5,"center");
-    pagesHtml+=
-      '<div class="pageOuter"><div class="pageWrap"><img src="/assets/fman008_page1.png"/>'+page1Overlays+'</div></div>'+
-      '<div class="pageOuter"><div class="pageWrap"><img src="/assets/fman008_page2.png"/></div></div>'+
-      '<div class="pageOuter"><div class="pageWrap"><img src="/assets/fman008_page3.png"/>'+page3Overlays+'</div></div>';
-  });
+
+    var headerHtml=
+      '<table class="fman-hdr">'+
+        '<tr><td colspan="4" class="fman-title">'+esc(T.titulo)+'</td></tr>'+
+        '<tr>'+
+          '<td class="lbl">'+esc(T.empresa_label)+'</td>'+
+          '<td class="lbl">'+esc(T.tipo_mtto_label)+'</td>'+
+          '<td class="lbl">'+esc(T.frecuencia_label)+'</td>'+
+          '<td class="logo-cell" rowspan="3"><img src="'+LOGO_SRC+'"/></td>'+
+        '</tr>'+
+        '<tr>'+
+          '<td rowspan="2" class="val strong center">'+esc(T.empresa)+'</td>'+
+          '<td class="chkline">'+(esCorrectivo?'<span class="chk"></span>':'<span class="chk on">X</span>')+' '+esc(T.preventivo_label)+'</td>'+
+          '<td rowspan="2" class="val center strong">'+esc(freqTexto)+'</td>'+
+        '</tr>'+
+        '<tr>'+
+          '<td class="chkline">'+(esCorrectivo?'<span class="chk on">X</span>':'<span class="chk"></span>')+' '+esc(T.correctivo_label)+'</td>'+
+        '</tr>'+
+        '<tr>'+
+          '<td class="lbl-inline"><b>'+esc(T.equipo_label)+':</b> '+esc(ord.equipo_desc||"")+'</td>'+
+          '<td class="lbl-inline"><b>'+esc(T.codigo_label)+':</b> '+esc(ord.equipo_codigo||"")+'</td>'+
+          '<td class="lbl-inline"><b>'+esc(T.fecha_label)+'</b> '+esc(ord.fecha_ejecucion||"")+'</td>'+
+          '<td class="lbl-inline"><b>'+esc(T.area_label)+'</b> '+esc(area)+'</td>'+
+        '</tr>'+
+      '</table>';
+
+    var gruposHtml=T.grupos.map(function(g){
+      var headerRow='<tr class="grp-row"><td class="grp-txt">'+esc(g.header)+'</td><td class="chk-head">Bueno</td><td class="chk-head">Malo</td></tr>';
+      var itemsRows=g.items.map(function(it){
+        return '<tr class="item-row"><td class="item-txt">'+esc(it)+'</td><td class="chk-box"></td><td class="chk-box"></td></tr>';
+      }).join('');
+      return headerRow+itemsRows;
+    }).join('');
+
+    var bloque1=
+      '<div class="fman-block">'+
+        headerHtml+
+        '<div class="fman-instr">'+esc(T.instrucciones1)+'</div>'+
+        '<div class="fman-instr">'+esc(T.instrucciones2)+'</div>'+
+        '<table class="fman-check">'+
+          '<tr><td class="chk-toph">'+esc(T.tabla_actividad)+'</td><td class="chk-toph" colspan="2">'+esc(T.tabla_estado)+'</td></tr>'+
+          gruposHtml+
+        '</table>'+
+        '<div class="fman-foot">'+esc(T.footer_code)+'</div>'+
+      '</div>';
+
+    var repuestosFilas='';
+    for(var i=0;i<5;i++){
+      repuestosFilas+='<tr><td class="rep-num">'+(i+1)+'</td><td class="rep-item"></td><td class="rep-num">'+(i+6)+'</td><td class="rep-item"></td></tr>';
+    }
+
+    var obsFilas='<tr><td class="obs-fecha">'+esc(ord.fecha_ejecucion||"")+'</td><td class="obs-detalle">'+esc(ord.observaciones||"")+'</td></tr>';
+    for(var j=0;j<5;j++){
+      obsFilas+='<tr><td class="obs-fecha">&nbsp;</td><td class="obs-detalle">&nbsp;</td></tr>';
+    }
+
+    var bloque2=
+      '<div class="fman-block">'+
+        '<table class="fman-rep">'+
+          '<tr><td class="rep-h" colspan="2">'+esc(T.repuestos_label)+'</td><td class="rep-h" colspan="2">'+esc(T.repuestos_label)+'</td></tr>'+
+          '<tr><td class="rep-hh">#</td><td class="rep-hh">Item</td><td class="rep-hh">#</td><td class="rep-hh">Item</td></tr>'+
+          repuestosFilas+
+        '</table>'+
+        '<table class="fman-obs">'+
+          '<tr><td class="obs-h" colspan="2">'+esc(T.observaciones_label)+'</td></tr>'+
+          '<tr><td class="obs-hh">'+esc(T.obs_fecha_label)+'</td><td class="obs-hh">'+esc(T.obs_detalle_label)+'</td></tr>'+
+          obsFilas+
+        '</table>'+
+        '<table class="fman-firmas">'+
+          '<tr><td class="firma-line"></td><td class="firma-line"></td><td class="firma-line"></td></tr>'+
+          '<tr><td class="firma-lbl">'+esc(T.firma1)+'<br><span class="firma-sub">'+esc(T.firma1_sub)+'</span></td><td class="firma-lbl">'+esc(T.firma2)+'</td><td class="firma-lbl">'+esc(T.firma3)+'</td></tr>'+
+        '</table>'+
+        '<div class="fman-foot">'+esc(T.footer_code)+'</div>'+
+      '</div>';
+
+    return bloque1+bloque2;
+  }
+
+  var css=
+    '*{box-sizing:border-box;}'+
+    'body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#000;margin:0;}'+
+    '.fman-block{padding:6mm;page-break-inside:avoid;}'+
+    '.fman-block + .fman-block{page-break-before:always;}'+
+    'table{width:100%;border-collapse:collapse;table-layout:fixed;}'+
+    'td{border:1px solid #000;padding:3px 5px;vertical-align:middle;word-wrap:break-word;}'+
+    '.fman-hdr{margin-bottom:4px;}'+
+    '.fman-title{text-align:center;font-weight:800;font-size:13px;padding:5px;}'+
+    '.lbl{font-weight:700;font-size:9px;text-align:center;background:#f0f0f0;}'+
+    '.val{font-size:9.5px;} .val.center{text-align:center;} .val.strong{font-weight:700;}'+
+    '.logo-cell{text-align:center;width:70px;} .logo-cell img{max-width:60px;max-height:40px;}'+
+    '.chkline{font-size:9px;}'+
+    '.chk{display:inline-block;width:11px;height:11px;border:1.4px solid #000;text-align:center;line-height:10px;font-size:9px;font-weight:800;margin-right:4px;}'+
+    '.chk.on::after{content:"X";}'+
+    '.lbl-inline{font-size:9px;}'+
+    '.fman-instr{font-size:7.6px;border:1px solid #000;border-top:none;padding:3px 6px;line-height:1.25;}'+
+    '.fman-check{margin-top:6px;}'+
+    '.chk-toph{text-align:center;font-weight:800;font-size:9px;background:#e7e7e7;}'+
+    '.grp-row td{font-weight:700;background:#f5f5f5;font-size:8.5px;}'+
+    '.chk-head{text-align:center;width:34px;font-size:8px;}'+
+    '.item-row td.item-txt{font-size:8px;line-height:1.2;}'+
+    '.item-row td.chk-box{width:34px;}'+
+    '.fman-rep,.fman-obs,.fman-firmas{margin-top:6px;}'+
+    '.rep-h,.obs-h{text-align:center;font-weight:800;font-size:9px;background:#e7e7e7;}'+
+    '.rep-hh,.obs-hh{text-align:center;font-weight:700;font-size:8px;background:#f5f5f5;}'+
+    '.rep-num{text-align:center;width:18px;font-size:8px;}'+
+    '.rep-item{font-size:8px;height:14px;}'+
+    '.obs-fecha{width:70px;text-align:center;font-size:8px;}'+
+    '.obs-detalle{font-size:8px;height:14px;}'+
+    '.fman-firmas td{border:none;}'+
+    '.firma-line{border-bottom:1.4px solid #000;height:26px;}'+
+    '.firma-lbl{text-align:center;font-size:7.6px;font-weight:700;padding-top:2px;}'+
+    '.firma-sub{font-weight:400;font-size:7px;}'+
+    '.fman-foot{font-size:7.5px;margin-top:5px;}'+
+    '@page{size:A4 landscape;margin:8mm;}';
+
   var html='<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Órdenes F-MAN-008</title>'+
-    '<style>html,body{margin:0;padding:0;background:#fff;}.pageOuter{width:100%;}.pageOuter + .pageOuter{page-break-before:always;}'+
-    '.pageWrap{position:relative;width:96%;margin:0 auto;height:0;padding-top:'+(CH/CW*96).toFixed(3)+'%;overflow:hidden;}'+
-    '.pageWrap img{position:absolute;left:0;top:0;width:100%;height:100%;}'+
-    '@media print{@page{size:landscape;margin:6mm;}}</style></head><body>'+
-    pagesHtml+
-    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+    '<style>'+css+'</style></head><body>'+
+    ordenes.map(construirBloques).join('')+
+    '<script>window.onload=function(){window.print();};<\/script>'+
+    '</body></html>';
+
   var w=window.open("","_blank");
   if(!w){alert("Permite ventanas emergentes para imprimir las órdenes.");return;}
   w.document.write(html);
