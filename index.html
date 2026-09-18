@@ -13421,6 +13421,12 @@ var anio=new Date().getFullYear();for(var i=0;i<8;i++){var joined=(rows[i]||[]).
 if(!desc&&marks.length===0){seccion=cod;continue;}if(!cod)continue;marks.forEach(function(mk){acts.push({anio:anio,seccion:seccion,equipo_codigo:cod,equipo_desc:desc,mes:mk.mes,frecuencia:mk.frecuencia,estado:"programado"});});}return{anio:anio,actividades:acts};}// ── Impresión F-MAN-008 (formato oficial V02, vigente 01-08-2024) ──────────────
 // ── Impresión F-MAN-008: usa el PDF oficial escaneado como fondo exacto,      ─
 // ── y superpone únicamente los datos de la orden en las casillas en blanco.  ─
+function areaDesdeCodigoEquipo(codigo){
+  if(!codigo) return "";
+  var partes=String(codigo).trim().split("-");
+  if(partes.length<3) return "";
+  return partes.slice(1,-1).join("-");
+}
 async function printFMAN008(ord){
   try{
     var buf=await fetch("/assets/fman008_template.xlsx").then(function(r){return r.arrayBuffer();});
@@ -13431,7 +13437,7 @@ async function printFMAN008(ord){
     var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
     ws.getCell(esCorrectivo?"H4":"H3").value="X";
     ws.getCell("I3").value=freqTexto;
-    ws.getCell("J4").value=ord.seccion||"";
+    ws.getCell("J4").value=areaDesdeCodigoEquipo(ord.equipo_codigo)||ord.seccion||"";
     ws.getCell("B5").value=ord.equipo_desc||"";
     ws.getCell("E5").value=ord.equipo_codigo||"";
     ws.getCell("G5").value=ord.fecha_ejecucion||"";
