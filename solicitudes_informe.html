@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generar Informe · Solicitudes de Mantenimiento</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; background: #f1f5f9; color: #0D2F5C; margin: 0; padding: 0; }
+  .header { background: #0D2F5C; color: white; padding: 16px 20px; }
+  .header h1 { font-size: 15px; font-weight: 800; margin: 0; }
+  .header small { font-size: 11px; opacity: .6; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 18px 60px; }
+  .card { background: #fff; border-radius: 14px; padding: 22px; box-shadow: 0 1px 8px rgba(13,47,92,0.08); margin-bottom: 18px; }
+  .upload-box { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 34px 16px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+  .upload-box:hover, .upload-box.drag { border-color: #2d7dd2; background: #f0f7ff; }
+  .upload-box h2 { font-size: 15px; margin: 10px 0 4px; }
+  .upload-box p { font-size: 12px; color: #64748b; margin: 0; }
+  button { font-family: Arial; font-size: 13px; font-weight: 700; padding: 10px 18px; border: none; border-radius: 9px; cursor: pointer; }
+  .btn-blue { background: #2d7dd2; color: #fff; }
+  .btn-blue:disabled { opacity: .5; cursor: default; }
+  .btn-white { background: #fff; color: #0D2F5C; border: 1px solid #cbd5e1 !important; }
+  .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 16px 0; }
+  .stat { background: #f8fafc; border-radius: 10px; padding: 12px; text-align: center; }
+  .stat .n { font-size: 22px; font-weight: 800; }
+  .stat .l { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+  .section-title { font-size: 13px; font-weight: 800; color: #0D2F5C; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 7px 8px; text-align: center; border-bottom: 1px solid #e2e8f0; }
+  th { background: #0D2F5C; color: #fff; font-size: 10px; text-transform: uppercase; }
+  td:first-child, th:first-child { text-align: left; }
+  .status-msg { font-size: 12px; padding: 10px 12px; border-radius: 8px; margin-top: 10px; }
+  .status-ok { background: #ecfdf5; color: #047857; }
+  .status-err { background: #fef2f2; color: #b91c1c; }
+  .status-warn { background: #fffbeb; color: #92400e; }
+  .row-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📊 Generar Informe · Solicitudes de Mantenimiento</h1>
+  <small>Sube el Excel exportado de la app y genera un informe PPTX con el mismo diseño del de Preventivos</small>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="upload-box" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div style="font-size:40px">📁</div>
+      <h2 id="uploadTitle">Sube el Excel de Solicitudes</h2>
+      <p id="uploadSub">Arrastra el archivo aquí o haz clic para seleccionarlo (.xlsx)</p>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <div id="statusMsg"></div>
+  </div>
+
+  <div class="card" id="previewCard" style="display:none">
+    <div class="section-title">Vista previa de los datos detectados</div>
+    <div class="stat-grid" id="statGrid"></div>
+    <div id="tableWrap" style="overflow-x:auto"></div>
+    <div class="row-actions">
+      <button class="btn-blue" id="genBtn" onclick="generarInformePPTX()">📊 Generar Informe PPTX</button>
+      <button class="btn-white" onclick="resetAll()">🔄 Subir otro archivo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const RPT = {
+  RED_DARK: 'A41E20', RED_MAIN: 'DB0000', NAVY_TEXT: '2B2B2B',
+  GREY_TEXT: '64748B', GREEN: '16A34A', AMBER: 'CA8A04', RED_SOFT: 'DC2626', LIGHT_BG: 'F5F5F5'
+};
+
+let parsedRows = null; // filas crudas de la hoja
+let reportData = null; // { techs, displayName, porMes, totTecnico, granTotal }
+
+function normTechKey(s) {
+  return String(s || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+// Limpia fechas con caracteres invisibles / espacios raros: "03‎ /02/2025" -> "03/02/2025"
+function parseFechaSolicitud(raw) {
+  if (!raw) return null;
+  const clean = String(raw).replace(/[^\d/]/g, '');
+  const m = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return null;
+  const d = parseInt(m[1], 10), mo = parseInt(m[2], 10), y = parseInt(m[3], 10);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return { year: y, month: mo };
+}
+
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function clasificarEstado(estadoRaw) {
+  const e = String(estadoRaw || '').trim().toUpperCase();
+  if (e === 'CERRADA') return 'cerrada';
+  if (e === 'RECHAZADA') return 'rechazada';
+  if (e === 'ASIGNADA' || e === 'ABIERTA') return 'pendiente';
+  return 'sin_estado';
+}
+
+function procesarFilas(rows) {
+  const displayName = {};
+  const mesesMap = {}; // "2025-01" -> {label, cerrada, pendiente, rechazada, total}
+  const porTecnico = {}; // key -> {cerrada,pendiente,rechazada,total}
+
+  rows.forEach((r) => {
+    const tecnicoRaw = (r['Técnico Asignado'] || '').toString().trim() || 'Sin asignar';
+    const key = normTechKey(tecnicoRaw);
+    if (!displayName[key]) displayName[key] = tecnicoRaw;
+    else if (displayName[key] === displayName[key].toUpperCase() && tecnicoRaw !== tecnicoRaw.toUpperCase()) {
+      displayName[key] = tecnicoRaw;
+    }
+    if (!porTecnico[key]) porTecnico[key] = { cerrada: 0, pendiente: 0, rechazada: 0, sin_estado: 0, total: 0 };
+
+    const clase = clasificarEstado(r['Estado']);
+    porTecnico[key][clase]++;
+    porTecnico[key].total++;
+
+    const f = parseFechaSolicitud(r['F. Solicitud']);
+    const mesKey = f ? `${f.year}-${String(f.month).padStart(2,'0')}` : 'sin-fecha';
+    const mesLabel = f ? `${MESES[f.month-1]} ${f.year}` : 'Sin fecha';
+    if (!mesesMap[mesKey]) mesesMap[mesKey] = { label: mesLabel, cerrada: 0, pendiente: 0, rechazada: 0, sin_estado: 0, total: 0 };
+    mesesMap[mesKey][clase]++;
+    mesesMap[mesKey].total++;
+  });
+
+  const techs = Object.keys(displayName).sort((a,b) => porTecnico[b].total - porTecnico[a].total);
+  const porMes = Object.keys(mesesMap).sort().filter(k => k !== 'sin-fecha')
+    .concat(Object.keys(mesesMap).includes('sin-fecha') ? ['sin-fecha'] : [])
+    .map(k => ({ key: k, ...mesesMap[k] }));
+
+  const granTotal = techs.reduce((a, k) => ({
+    cerrada: a.cerrada + porTecnico[k].cerrada,
+    pendiente: a.pendiente + porTecnico[k].pendiente,
+    rechazada: a.rechazada + porTecnico[k].rechazada,
+    total: a.total + porTecnico[k].total,
+  }), { cerrada: 0, pendiente: 0, rechazada: 0, total: 0 });
+
+  return { techs, displayName, porTecnico, porMes, granTotal };
+}
+
+function renderPreview() {
+  const { techs, displayName, porTecnico, granTotal } = reportData;
+  const pct = granTotal.total ? Math.round(granTotal.cerrada / granTotal.total * 100) : 0;
+
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat"><div class="n" style="color:#A41E20">${granTotal.total}</div><div class="l">Total</div></div>
+    <div class="stat"><div class="n" style="color:#16A34A">${granTotal.cerrada}</div><div class="l">Cerradas</div></div>
+    <div class="stat"><div class="n" style="color:#CA8A04">${granTotal.pendiente}</div><div class="l">Pendientes</div></div>
+    <div class="stat"><div class="n" style="color:#DC2626">${granTotal.rechazada}</div><div class="l">Rechazadas</div></div>
+  `;
+
+  let rows = techs.map(k => {
+    const d = porTecnico[k];
+    const p = d.total ? Math.round(d.cerrada/d.total*100) : 0;
+    return `<tr><td>${displayName[k]}</td><td>${d.total}</td><td style="color:#16A34A;font-weight:700">${d.cerrada}</td><td style="color:#CA8A04;font-weight:700">${d.pendiente}</td><td style="color:#DC2626">${d.rechazada}</td><td>${p}%</td></tr>`;
+  }).join('');
+
+  document.getElementById('tableWrap').innerHTML = `
+    <table>
+      <thead><tr><th>Técnico</th><th>Total</th><th>Cerradas</th><th>Pendientes</th><th>Rechazadas</th><th>% Cumpl.</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.getElementById('previewCard').style.display = 'block';
+}
+
+function showStatus(msg, type) {
+  document.getElementById('statusMsg').innerHTML = `<div class="status-msg status-${type}">${msg}</div>`;
+}
+
+function resetAll() {
+  parsedRows = null; reportData = null;
+  document.getElementById('previewCard').style.display = 'none';
+  document.getElementById('statusMsg').innerHTML = '';
+  document.getElementById('fileInput').value = '';
+}
+
+function handleFile(file) {
+  if (!file) return;
+  showStatus('⏳ Leyendo archivo…', 'warn');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const sheetName = wb.SheetNames.includes('Solicitudes') ? 'Solicitudes' : wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+      if (!rows.length) { showStatus('⚠️ El archivo no tiene filas de datos.', 'err'); return; }
+      if (!('Estado' in rows[0]) || !('Técnico Asignado' in rows[0])) {
+        showStatus('⚠️ No encontré las columnas esperadas ("Estado", "Técnico Asignado") en la hoja "' + sheetName + '". Verifica que sea el Excel correcto.', 'err');
+        return;
+      }
+      parsedRows = rows;
+      reportData = procesarFilas(rows);
+      showStatus(`✅ ${rows.length} solicitudes cargadas desde la hoja "${sheetName}".`, 'ok');
+      renderPreview();
+    } catch (err) {
+      showStatus('⚠️ No se pudo leer el archivo: ' + err.message, 'err');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+document.getElementById('fileInput').addEventListener('change', (e) => handleFile(e.target.files[0]));
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', (e) => {
+  e.preventDefault(); dz.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+// ══════════════════════════════════════════════════
+//  GENERACIÓN DEL PPTX (mismo estilo que Preventivos/Cumplimiento)
+// ══════════════════════════════════════════════════
+function addFooterRpt(slide, label) {
+  slide.addText('Solicitudes de Mantenimiento · Bussié', {
+    x: 0.5, y: 7.08, w: 6, h: 0.3, fontSize: 9, color: RPT.GREY_TEXT, fontFace: 'Arial', margin: 0
+  });
+  slide.addText(label, {
+    x: 9.83, y: 7.08, w: 3, h: 0.3, fontSize: 9, color: RPT.GREY_TEXT, fontFace: 'Arial', align: 'right', margin: 0
+  });
+}
+function addTitleRpt(slide, title, subtitle) {
+  slide.addText(title, { x: 0.6, y: 0.45, w: 12.1, h: 0.65, fontSize: 28, bold: true, color: RPT.RED_DARK, fontFace: 'Cambria', margin: 0 });
+  if (subtitle) slide.addText(subtitle, { x: 0.6, y: 1.05, w: 12.1, h: 0.35, fontSize: 13, color: RPT.GREY_TEXT, fontFace: 'Arial', margin: 0 });
+}
+
+async function generarInformePPTX() {
+  const btn = document.getElementById('genBtn');
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Generando…';
+  try {
+    const { techs, displayName, porTecnico, porMes, granTotal } = reportData;
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+    const pctTot = granTotal.total ? Math.round(granTotal.cerrada/granTotal.total*100) : 0;
+    const mesesConFecha = porMes.filter(m => m.key !== 'sin-fecha');
+    const rango = mesesConFecha.length ? `${mesesConFecha[0].label} — ${mesesConFecha[mesesConFecha.length-1].label}` : 'Histórico';
+
+    // Slide 1 — Portada
+    let s1 = pres.addSlide();
+    s1.background = { path: 'assets/sanfer_cover.png' };
+    s1.addText('SOLICITUDES DE\nMANTENIMIENTO', { x:7.3, y:2.35, w:5.4, h:1.9, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:38, margin:0 });
+    s1.addText(`Informe de gestión · ${rango}`, { x:7.35, y:4.15, w:5.4, h:0.5, fontSize:15, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+
+    // Slide 2 — Resumen general
+    let s2 = pres.addSlide();
+    s2.background = { color: 'FFFFFF' };
+    addTitleRpt(s2, 'Resumen general', `Total de solicitudes, cerradas, pendientes y rechazadas — ${rango}`);
+    const stats = [
+      { n: granTotal.total, l: 'TOTAL', c: RPT.RED_DARK },
+      { n: granTotal.cerrada, l: 'CERRADAS', c: RPT.GREEN },
+      { n: granTotal.pendiente, l: 'PENDIENTES', c: RPT.AMBER },
+      { n: granTotal.rechazada, l: 'RECHAZADAS', c: RPT.RED_SOFT },
+    ];
+    const statW = 2.85, gap = 0.25, startX = 0.6, statY = 1.65;
+    stats.forEach((s,i) => {
+      const x = startX + i*(statW+gap);
+      s2.addShape(pres.ShapeType.roundRect, { x, y:statY, w:statW, h:1.15, rectRadius:0.08, fill:{color:RPT.LIGHT_BG}, line:{type:'none'} });
+      s2.addText(String(s.n), { x, y:statY+0.12, w:statW, h:0.6, fontSize:28, bold:true, color:s.c, align:'center', fontFace:'Cambria', margin:0 });
+      s2.addText(s.l, { x, y:statY+0.75, w:statW, h:0.3, fontSize:10, color:RPT.GREY_TEXT, align:'center', fontFace:'Arial', margin:0 });
+    });
+    const headerRow2 = ['MES','TOTAL','CERRADAS','PENDIENTES','RECHAZADAS'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize:11, align:'center', valign:'middle' } }));
+    const bodyRows2 = porMes.map((r,idx) => {
+      const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
+      return [
+        { text: r.label, options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
+        { text: String(r.total), options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+        { text: String(r.cerrada), options:{ fontFace:'Arial', fontSize:11, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+        { text: String(r.pendiente), options:{ fontFace:'Arial', fontSize:11, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+        { text: String(r.rechazada), options:{ fontFace:'Arial', fontSize:11, color:RPT.RED_SOFT, fill:{color:fill}, align:'center', valign:'middle' } },
+      ];
+    });
+    const totalRow2 = ['TOTAL', granTotal.total, granTotal.cerrada, granTotal.pendiente, granTotal.rechazada].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize:11, color:'FFFFFF', fill:{color:'2B2B2B'}, align:'center', valign:'middle' } }));
+    totalRow2[0].options.align = 'left';
+    s2.addTable([headerRow2, ...bodyRows2, totalRow2], { x:0.6, y:3.15, w:12.1, colW:[3.5,2.15,2.15,2.15,2.15], rowH:0.42, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:true, autoPageCharWeight: -3 });
+    addFooterRpt(s2, '2');
+
+    // Slide 3 — Total por técnico
+    let s3 = pres.addSlide();
+    s3.background = { color: 'FFFFFF' };
+    addTitleRpt(s3, 'Total por técnico', `Acumulado ${rango}, ordenado por carga total`);
+    const headerRow3 = ['TÉCNICO','TOTAL','CERRADAS','PENDIENTES','RECHAZADAS','% CUMPLIMIENTO'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize:11, align:'center', valign:'middle' } }));
+    const bodyRows3 = techs.map((k,idx) => {
+      const d = porTecnico[k];
+      const p = d.total ? Math.round(d.cerrada/d.total*100) : 0;
+      const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
+      return [
+        { text: displayName[k], options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
+        { text: String(d.total), options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+        { text: String(d.cerrada), options:{ fontFace:'Arial', fontSize:11, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+        { text: String(d.pendiente), options:{ fontFace:'Arial', fontSize:11, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+        { text: String(d.rechazada), options:{ fontFace:'Arial', fontSize:11, color:RPT.RED_SOFT, fill:{color:fill}, align:'center', valign:'middle' } },
+        { text: p+'%', options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+      ];
+    });
+    const totalRow3 = ['TOTAL', granTotal.total, granTotal.cerrada, granTotal.pendiente, granTotal.rechazada, pctTot+'%'].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize:11, color:'FFFFFF', fill:{color:'2B2B2B'}, align:'center', valign:'middle' } }));
+    totalRow3[0].options.align = 'left';
+    s3.addTable([headerRow3, ...bodyRows3, totalRow3], { x:0.6, y:1.55, w:12.1, colW:[3.0,1.82,1.82,1.82,1.82,1.82], rowH:0.4, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:true, autoPageCharWeight: -3 });
+    addFooterRpt(s3, '3');
+
+    // Slides 4+ — Gráfico horizontal por mes
+    let page = 4;
+    for (const m of porMes) {
+      let s = pres.addSlide();
+      s.background = { color: 'FFFFFF' };
+      const pctMes = m.total ? Math.round(m.cerrada/m.total*100) : 0;
+      addTitleRpt(s, `${m.label} — Solicitudes por técnico`, `Cerradas vs. pendientes · ${m.total} solicitudes totales · ${pctMes}% cumplimiento`);
+
+      // Recalcular por técnico SOLO para ese mes
+      const cerradasVals = [], pendientesVals = [];
+      techs.forEach(k => { cerradasVals.push(0); pendientesVals.push(0); });
+      // Necesitamos recorrer filas crudas para este mes específico
+      parsedRows.forEach(r => {
+        const f = parseFechaSolicitud(r['F. Solicitud']);
+        const mesKey = f ? `${f.year}-${String(f.month).padStart(2,'0')}` : 'sin-fecha';
+        if (mesKey !== m.key) return;
+        const key = normTechKey((r['Técnico Asignado'] || '').toString().trim() || 'Sin asignar');
+        const idx = techs.indexOf(key);
+        if (idx === -1) return;
+        const clase = clasificarEstado(r['Estado']);
+        if (clase === 'cerrada') cerradasVals[idx]++;
+        else if (clase === 'pendiente') pendientesVals[idx]++;
+      });
+      const labelsDisplay = techs.map(k => displayName[k]);
+
+      s.addChart(pres.ChartType.bar, [
+        { name: 'Cerradas', labels: labelsDisplay, values: cerradasVals },
+        { name: 'Pendientes', labels: labelsDisplay, values: pendientesVals }
+      ], {
+        x:0.6, y:1.5, w:12.1, h:5.5, barDir:'bar', barGrouping:'clustered',
+        showTitle:false, showLegend:true, legendPos:'b', legendFontSize:11, legendFontFace:'Arial',
+        chartColors:[RPT.GREEN, RPT.AMBER], showValue:true, dataLabelPosition:'outEnd',
+        dataLabelFontSize:9, dataLabelColor:RPT.NAVY_TEXT, dataLabelFontFace:'Arial',
+        catAxisLabelFontSize:11, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+        valAxisLabelFontSize:10, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+        valGridLine:{color:'E2E8F0', size:1}, catGridLine:{style:'none'},
+        valAxisTitle:'Cantidad de solicitudes', showValAxisTitle:true, valAxisTitleFontSize:10, valAxisTitleColor:RPT.GREY_TEXT
+      });
+      addFooterRpt(s, String(page));
+      page++;
+    }
+
+    const fecha = new Date().toISOString().slice(0,10);
+    await pres.writeFile({ fileName: `Informe_Solicitudes_Mantenimiento_${fecha}.pptx` });
+  } catch (e) {
+    alert('No se pudo generar el informe: ' + e.message);
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+</script>
+</body>
+</html>
