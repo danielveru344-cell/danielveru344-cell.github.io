@@ -6,6 +6,7 @@
 <title>Generar Informe · Solicitudes de Mantenimiento</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: Arial, sans-serif; background: #f1f5f9; color: #0D2F5C; margin: 0; padding: 0; }
@@ -220,13 +221,60 @@ function addFooterRpt(slide, label) {
   slide.addText('Solicitudes de Mantenimiento · Bussié', {
     x: 0.5, y: 7.08, w: 6, h: 0.3, fontSize: 9, color: RPT.GREY_TEXT, fontFace: 'Arial', margin: 0
   });
-  slide.addText(label, {
+  slide.addText(String(label), {
     x: 9.83, y: 7.08, w: 3, h: 0.3, fontSize: 9, color: RPT.GREY_TEXT, fontFace: 'Arial', align: 'right', margin: 0
   });
 }
 function addTitleRpt(slide, title, subtitle) {
   slide.addText(title, { x: 0.6, y: 0.45, w: 12.1, h: 0.65, fontSize: 28, bold: true, color: RPT.RED_DARK, fontFace: 'Cambria', margin: 0 });
   if (subtitle) slide.addText(subtitle, { x: 0.6, y: 1.05, w: 12.1, h: 0.35, fontSize: 13, color: RPT.GREY_TEXT, fontFace: 'Arial', margin: 0 });
+}
+
+// pptxgenjs (v3.12) a veces reutiliza el mismo ID de forma para una tabla que
+// para un texto ya existente en la misma diapositiva (bug de la librería),
+// lo que hace que PowerPoint tenga que "reparar y quitar" contenido al abrir.
+// Esta función renumera los IDs de cada diapositiva, en orden de aparición,
+// garantizando que sean únicos, sin tocar nada más del archivo.
+async function corregirIdsYDescargar(pres, fileName) {
+  const blob = await pres.write({ outputType: 'blob' });
+  const zip = await JSZip.loadAsync(blob);
+  const slideFiles = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
+  for (const f of slideFiles) {
+    const xml = await zip.file(f).async('string');
+    let counter = 0;
+    const fixed = xml.replace(/(<p:cNvPr\s+id=")(\d+)(")/g, (m, pre, oldId, post) => {
+      counter++;
+      return pre + counter + post;
+    });
+    zip.file(f, fixed);
+  }
+  const fixedBlob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(fixedBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fileName;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+// Crea tantas diapositivas como haga falta para que quepan todas las filas,
+// sin usar autoPage (evita el bug de IDs duplicados de pptxgenjs con tablas largas).
+function addPaginatedTable(pres, pageCounter, opts) {
+  const { title, subtitle, headerRow, bodyRows, totalRow, colW, tableY, rowsPerSlide, extraOnFirstSlide } = opts;
+  const chunks = [];
+  for (let i = 0; i < bodyRows.length; i += rowsPerSlide) chunks.push(bodyRows.slice(i, i + rowsPerSlide));
+  if (!chunks.length) chunks.push([]);
+
+  chunks.forEach((chunk, ci) => {
+    const slide = pres.addSlide();
+    slide.background = { color: 'FFFFFF' };
+    addTitleRpt(slide, ci === 0 ? title : `${title} (continuación)`, subtitle);
+    if (ci === 0 && extraOnFirstSlide) extraOnFirstSlide(slide);
+    const isLast = ci === chunks.length - 1;
+    const tableRows = [headerRow, ...chunk, ...(isLast ? [totalRow] : [])];
+    slide.addTable(tableRows, { x: 0.6, y: tableY, w: 12.1, colW, rowH: 0.4, border: { type: 'solid', color: 'E2E8F0', pt: 0.75 }, autoPage: false });
+    addFooterRpt(slide, pageCounter.n);
+    pageCounter.n++;
+  });
 }
 
 async function generarInformePPTX() {
@@ -247,7 +295,27 @@ async function generarInformePPTX() {
     s1.addText('SOLICITUDES DE\nMANTENIMIENTO', { x:7.3, y:2.35, w:5.4, h:1.9, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:38, margin:0 });
     s1.addText(`Informe de gestión · ${rango}`, { x:7.35, y:4.15, w:5.4, h:0.5, fontSize:15, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
 
-    // Slide 2 — Resumen general
+    // Slide 2 — Resumen general por mes (SIEMPRE en una sola diapositiva:
+    // usa 2 columnas lado a lado automáticamente si no caben todas las filas)
+    const pageCounter = { n: 2 };
+
+    function buildResumenRows(fontSize) {
+      const headerRow = ['MES','TOTAL','CERRADAS','PENDIENTES','RECHAZADAS'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize, align:'center', valign:'middle' } }));
+      const bodyRows = porMes.map((r,idx) => {
+        const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
+        return [
+          { text: r.label, options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
+          { text: String(r.total), options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+          { text: String(r.cerrada), options:{ fontFace:'Arial', fontSize, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+          { text: String(r.pendiente), options:{ fontFace:'Arial', fontSize, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+          { text: String(r.rechazada), options:{ fontFace:'Arial', fontSize, color:RPT.RED_SOFT, fill:{color:fill}, align:'center', valign:'middle' } },
+        ];
+      });
+      const totalRow = ['TOTAL', granTotal.total, granTotal.cerrada, granTotal.pendiente, granTotal.rechazada].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize, color:'FFFFFF', fill:{color:'2B2B2B'}, align:'center', valign:'middle' } }));
+      totalRow[0].options.align = 'left';
+      return { headerRow, bodyRows, totalRow };
+    }
+
     let s2 = pres.addSlide();
     s2.background = { color: 'FFFFFF' };
     addTitleRpt(s2, 'Resumen general', `Total de solicitudes, cerradas, pendientes y rechazadas — ${rango}`);
@@ -257,54 +325,82 @@ async function generarInformePPTX() {
       { n: granTotal.pendiente, l: 'PENDIENTES', c: RPT.AMBER },
       { n: granTotal.rechazada, l: 'RECHAZADAS', c: RPT.RED_SOFT },
     ];
-    const statW = 2.85, gap = 0.25, startX = 0.6, statY = 1.65;
+    const statW = 2.85, statGap = 0.25, statX = 0.6, statY = 1.65;
     stats.forEach((s,i) => {
-      const x = startX + i*(statW+gap);
+      const x = statX + i*(statW+statGap);
       s2.addShape(pres.ShapeType.roundRect, { x, y:statY, w:statW, h:1.15, rectRadius:0.08, fill:{color:RPT.LIGHT_BG}, line:{type:'none'} });
       s2.addText(String(s.n), { x, y:statY+0.12, w:statW, h:0.6, fontSize:28, bold:true, color:s.c, align:'center', fontFace:'Cambria', margin:0 });
       s2.addText(s.l, { x, y:statY+0.75, w:statW, h:0.3, fontSize:10, color:RPT.GREY_TEXT, align:'center', fontFace:'Arial', margin:0 });
     });
-    const headerRow2 = ['MES','TOTAL','CERRADAS','PENDIENTES','RECHAZADAS'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize:11, align:'center', valign:'middle' } }));
-    const bodyRows2 = porMes.map((r,idx) => {
-      const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
-      return [
-        { text: r.label, options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
-        { text: String(r.total), options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
-        { text: String(r.cerrada), options:{ fontFace:'Arial', fontSize:11, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
-        { text: String(r.pendiente), options:{ fontFace:'Arial', fontSize:11, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
-        { text: String(r.rechazada), options:{ fontFace:'Arial', fontSize:11, color:RPT.RED_SOFT, fill:{color:fill}, align:'center', valign:'middle' } },
-      ];
-    });
-    const totalRow2 = ['TOTAL', granTotal.total, granTotal.cerrada, granTotal.pendiente, granTotal.rechazada].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize:11, color:'FFFFFF', fill:{color:'2B2B2B'}, align:'center', valign:'middle' } }));
-    totalRow2[0].options.align = 'left';
-    s2.addTable([headerRow2, ...bodyRows2, totalRow2], { x:0.6, y:3.15, w:12.1, colW:[3.5,2.15,2.15,2.15,2.15], rowH:0.42, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:true, autoPageCharWeight: -3 });
-    addFooterRpt(s2, '2');
 
-    // Slide 3 — Total por técnico
+    const tableY2 = 3.05, bottomLimit = 7.0, availH2 = bottomLimit - tableY2;
+    const rowsNeeded2 = porMes.length + 2; // header + meses + total
+    const rowH2_1col = availH2 / rowsNeeded2;
+
+    if (rowH2_1col >= 0.30) {
+      // Cabe cómodo en una sola columna
+      const { headerRow, bodyRows, totalRow } = buildResumenRows(11);
+      s2.addTable([headerRow, ...bodyRows, totalRow], { x:0.6, y:tableY2, w:12.1, colW:[3.5,2.15,2.15,2.15,2.15], rowH:rowH2_1col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+    } else {
+      // Demasiadas filas: se divide en 2 columnas lado a lado, misma diapositiva
+      const { headerRow, bodyRows, totalRow } = buildResumenRows(8);
+      const half = Math.ceil(bodyRows.length / 2);
+      const left = bodyRows.slice(0, half), right = bodyRows.slice(half);
+      const rowsNeededCol = Math.max(left.length, right.length) + 2;
+      const rowH2col = Math.max(0.19, availH2 / rowsNeededCol);
+      const colWHalf = [1.6, 1.0, 1.05, 1.05, 1.05]; // suma 5.75
+      s2.addTable([headerRow, ...left], { x:0.6, y:tableY2, w:5.75, colW:colWHalf, rowH:rowH2col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+      s2.addTable([headerRow, ...right, totalRow], { x:6.65, y:tableY2, w:5.75, colW:colWHalf, rowH:rowH2col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+    }
+    addFooterRpt(s2, pageCounter.n);
+    pageCounter.n++;
+
+    // Slide 3 — Total por técnico (misma estrategia: 1 diapositiva garantizada)
+    function buildTecnicoRows(fontSize) {
+      const headerRow = ['TÉCNICO','TOTAL','CERRADAS','PENDIENTES','RECHAZADAS','% CUMPLIMIENTO'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize, align:'center', valign:'middle' } }));
+      const bodyRows = techs.map((k,idx) => {
+        const d = porTecnico[k];
+        const p = d.total ? Math.round(d.cerrada/d.total*100) : 0;
+        const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
+        return [
+          { text: displayName[k], options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
+          { text: String(d.total), options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+          { text: String(d.cerrada), options:{ fontFace:'Arial', fontSize, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+          { text: String(d.pendiente), options:{ fontFace:'Arial', fontSize, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+          { text: String(d.rechazada), options:{ fontFace:'Arial', fontSize, color:RPT.RED_SOFT, fill:{color:fill}, align:'center', valign:'middle' } },
+          { text: p+'%', options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+        ];
+      });
+      const totalRow = ['TOTAL', granTotal.total, granTotal.cerrada, granTotal.pendiente, granTotal.rechazada, pctTot+'%'].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize, color:'FFFFFF', fill:{color:'2B2B2B'}, align:'center', valign:'middle' } }));
+      totalRow[0].options.align = 'left';
+      return { headerRow, bodyRows, totalRow };
+    }
+
     let s3 = pres.addSlide();
     s3.background = { color: 'FFFFFF' };
     addTitleRpt(s3, 'Total por técnico', `Acumulado ${rango}, ordenado por carga total`);
-    const headerRow3 = ['TÉCNICO','TOTAL','CERRADAS','PENDIENTES','RECHAZADAS','% CUMPLIMIENTO'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize:11, align:'center', valign:'middle' } }));
-    const bodyRows3 = techs.map((k,idx) => {
-      const d = porTecnico[k];
-      const p = d.total ? Math.round(d.cerrada/d.total*100) : 0;
-      const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
-      return [
-        { text: displayName[k], options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
-        { text: String(d.total), options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
-        { text: String(d.cerrada), options:{ fontFace:'Arial', fontSize:11, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
-        { text: String(d.pendiente), options:{ fontFace:'Arial', fontSize:11, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
-        { text: String(d.rechazada), options:{ fontFace:'Arial', fontSize:11, color:RPT.RED_SOFT, fill:{color:fill}, align:'center', valign:'middle' } },
-        { text: p+'%', options:{ fontFace:'Arial', fontSize:11, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
-      ];
-    });
-    const totalRow3 = ['TOTAL', granTotal.total, granTotal.cerrada, granTotal.pendiente, granTotal.rechazada, pctTot+'%'].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize:11, color:'FFFFFF', fill:{color:'2B2B2B'}, align:'center', valign:'middle' } }));
-    totalRow3[0].options.align = 'left';
-    s3.addTable([headerRow3, ...bodyRows3, totalRow3], { x:0.6, y:1.55, w:12.1, colW:[3.0,1.82,1.82,1.82,1.82,1.82], rowH:0.4, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:true, autoPageCharWeight: -3 });
-    addFooterRpt(s3, '3');
+    const tableY3 = 1.55, availH3 = bottomLimit - tableY3;
+    const rowsNeeded3 = techs.length + 2;
+    const rowH3_1col = availH3 / rowsNeeded3;
 
-    // Slides 4+ — Gráfico horizontal por mes
-    let page = 4;
+    if (rowH3_1col >= 0.30) {
+      const { headerRow, bodyRows, totalRow } = buildTecnicoRows(11);
+      s3.addTable([headerRow, ...bodyRows, totalRow], { x:0.6, y:tableY3, w:12.1, colW:[3.0,1.82,1.82,1.82,1.82,1.82], rowH:rowH3_1col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+    } else {
+      const { headerRow, bodyRows, totalRow } = buildTecnicoRows(9);
+      const half = Math.ceil(bodyRows.length / 2);
+      const left = bodyRows.slice(0, half), right = bodyRows.slice(half);
+      const rowsNeededCol = Math.max(left.length, right.length) + 2;
+      const rowH3col = Math.max(0.20, availH3 / rowsNeededCol);
+      const colWHalf = [1.425, 0.865, 0.865, 0.865, 0.865, 0.865]; // suma 5.75
+      s3.addTable([headerRow, ...left], { x:0.6, y:tableY3, w:5.75, colW:colWHalf, rowH:rowH3col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+      s3.addTable([headerRow, ...right, totalRow], { x:6.65, y:tableY3, w:5.75, colW:colWHalf, rowH:rowH3col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+    }
+    addFooterRpt(s3, pageCounter.n);
+    pageCounter.n++;
+
+    // Slides — Gráfico horizontal por mes
+    let page = pageCounter.n;
     for (const m of porMes) {
       let s = pres.addSlide();
       s.background = { color: 'FFFFFF' };
@@ -346,7 +442,7 @@ async function generarInformePPTX() {
     }
 
     const fecha = new Date().toISOString().slice(0,10);
-    await pres.writeFile({ fileName: `Informe_Solicitudes_Mantenimiento_${fecha}.pptx` });
+    await corregirIdsYDescargar(pres, `Informe_Solicitudes_Mantenimiento_${fecha}.pptx`);
   } catch (e) {
     alert('No se pudo generar el informe: ' + e.message);
     console.error(e);
