@@ -6,6 +6,7 @@
 <title>Seguimiento Mantenimiento · Bussié</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: Arial, sans-serif; background: #f1f5f9; color: #0D2F5C; }
@@ -584,6 +585,32 @@ function addTitleRpt(slide, title, subtitle) {
   if (subtitle) slide.addText(subtitle, { x: 0.6, y: 1.05, w: 12.1, h: 0.35, fontSize: 13, color: RPT.GREY_TEXT, fontFace: 'Arial', margin: 0 });
 }
 
+// pptxgenjs (v3.12) a veces reutiliza el mismo ID de forma para una tabla que
+// para un texto ya existente en la misma diapositiva (bug de la librería),
+// lo que hace que PowerPoint tenga que "reparar y quitar" contenido al abrir.
+// Esta función renumera los IDs de cada diapositiva, en orden de aparición,
+// garantizando que sean únicos, sin tocar nada más del archivo.
+async function corregirIdsYDescargar(pres, fileName) {
+  const blob = await pres.write({ outputType: 'blob' });
+  const zip = await JSZip.loadAsync(blob);
+  const slideFiles = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
+  for (const f of slideFiles) {
+    const xml = await zip.file(f).async('string');
+    let counter = 0;
+    const fixed = xml.replace(/(<p:cNvPr\s+id=")(\d+)(")/g, (m, pre, oldId, post) => {
+      counter++;
+      return pre + counter + post;
+    });
+    zip.file(f, fixed);
+  }
+  const fixedBlob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(fixedBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fileName;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 async function generarInformePPTX() {
   const btn = document.getElementById('pptxBtn');
   const original = btn ? btn.textContent : '';
@@ -618,20 +645,39 @@ async function generarInformePPTX() {
       s2.addText(String(s.n), { x, y:statY+0.12, w:statW, h:0.6, fontSize:30, bold:true, color:s.c, align:'center', fontFace:'Cambria', margin:0 });
       s2.addText(s.l, { x, y:statY+0.75, w:statW, h:0.3, fontSize:10, color:RPT.GREY_TEXT, align:'center', fontFace:'Arial', margin:0 });
     });
-    const headerRow2 = ['MES','TOTAL','CERRADOS','ABIERTOS','% CUMPLIMIENTO'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize:12, align:'center', valign:'middle' } }));
-    const bodyRows2 = perMes.map((r,idx) => {
-      const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
-      return [
-        { text: r.mes, options:{ fontFace:'Arial', fontSize:12, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
-        { text: String(r.total), options:{ fontFace:'Arial', fontSize:12, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
-        { text: String(r.cerrados), options:{ fontFace:'Arial', fontSize:12, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
-        { text: String(r.abiertos), options:{ fontFace:'Arial', fontSize:12, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
-        { text: r.pct+'%', options:{ fontFace:'Arial', fontSize:12, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
-      ];
-    });
-    const totalRow2 = ['TOTAL', granTotal.total, granTotal.cerrados, granTotal.abiertos, pctTot+'%'].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize:12, color:'FFFFFF', fill:{color:RPT.NAVY_TEXT}, align:'center', valign:'middle' } }));
-    totalRow2[0].options.align = 'left';
-    s2.addTable([headerRow2, ...bodyRows2, totalRow2], { x:0.6, y:3.15, w:12.1, colW:[3.0,2.275,2.275,2.275,2.275], rowH:0.5, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+
+    function buildResumenMesRows(fontSize) {
+      const headerRow = ['MES','TOTAL','CERRADOS','ABIERTOS','% CUMPLIMIENTO'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize, align:'center', valign:'middle' } }));
+      const bodyRows = perMes.map((r,idx) => {
+        const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
+        return [
+          { text: r.mes, options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
+          { text: String(r.total), options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+          { text: String(r.cerrados), options:{ fontFace:'Arial', fontSize, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+          { text: String(r.abiertos), options:{ fontFace:'Arial', fontSize, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+          { text: r.pct+'%', options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+        ];
+      });
+      const totalRow = ['TOTAL', granTotal.total, granTotal.cerrados, granTotal.abiertos, pctTot+'%'].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize, color:'FFFFFF', fill:{color:RPT.NAVY_TEXT}, align:'center', valign:'middle' } }));
+      totalRow[0].options.align = 'left';
+      return { headerRow, bodyRows, totalRow };
+    }
+
+    const tableY2 = 3.15, bottomLimit = 7.0, availH2 = bottomLimit - tableY2;
+    const rowsNeeded2 = perMes.length + 2;
+    const rowH2_1col = availH2 / rowsNeeded2;
+    if (rowH2_1col >= 0.30) {
+      const { headerRow, bodyRows, totalRow } = buildResumenMesRows(12);
+      s2.addTable([headerRow, ...bodyRows, totalRow], { x:0.6, y:tableY2, w:12.1, colW:[3.0,2.275,2.275,2.275,2.275], rowH:rowH2_1col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+    } else {
+      const { headerRow, bodyRows, totalRow } = buildResumenMesRows(8);
+      const half = Math.ceil(bodyRows.length / 2);
+      const left = bodyRows.slice(0, half), right = bodyRows.slice(half);
+      const rowH2col = Math.max(0.19, availH2 / (Math.max(left.length, right.length) + 2));
+      const colWHalf = [1.6, 1.0, 1.05, 1.05, 1.05];
+      s2.addTable([headerRow, ...left], { x:0.6, y:tableY2, w:5.75, colW:colWHalf, rowH:rowH2col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+      s2.addTable([headerRow, ...right, totalRow], { x:6.65, y:tableY2, w:5.75, colW:colWHalf, rowH:rowH2col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+    }
     addFooterRpt(s2, pres, '2');
 
     // Slide 3 — Total por técnico
@@ -639,22 +685,41 @@ async function generarInformePPTX() {
     s3.background = { color: 'FFFFFF' };
     addTitleRpt(s3, 'Total por técnico', `Acumulado ${rango}, ordenado por carga total`);
     const techsSorted = techs.slice().sort((a,b) => totTecnico[b].total - totTecnico[a].total);
-    const headerRow3 = ['TÉCNICO','TOTAL','CERRADOS','ABIERTOS','% CUMPLIMIENTO'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize:11.5, align:'center', valign:'middle' } }));
-    const bodyRows3 = techsSorted.map((te,idx) => {
-      const d = totTecnico[te];
-      const pct = d.total ? Math.round(d.cerrados/d.total*100) : 0;
-      const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
-      return [
-        { text: displayName[te], options:{ fontFace:'Arial', fontSize:11.5, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
-        { text: String(d.total), options:{ fontFace:'Arial', fontSize:11.5, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
-        { text: String(d.cerrados), options:{ fontFace:'Arial', fontSize:11.5, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
-        { text: String(d.abiertos), options:{ fontFace:'Arial', fontSize:11.5, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
-        { text: pct+'%', options:{ fontFace:'Arial', fontSize:11.5, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
-      ];
-    });
-    const totalRow3 = ['TOTAL', granTotal.total, granTotal.cerrados, granTotal.abiertos, pctTot+'%'].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize:11.5, color:'FFFFFF', fill:{color:RPT.NAVY_TEXT}, align:'center', valign:'middle' } }));
-    totalRow3[0].options.align = 'left';
-    s3.addTable([headerRow3, ...bodyRows3, totalRow3], { x:0.6, y:1.55, w:12.1, colW:[3.4,2.175,2.175,2.175,2.175], rowH:0.485, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+
+    function buildTecnicoRows(fontSize) {
+      const headerRow = ['TÉCNICO','TOTAL','CERRADOS','ABIERTOS','% CUMPLIMIENTO'].map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize, align:'center', valign:'middle' } }));
+      const bodyRows = techsSorted.map((te,idx) => {
+        const d = totTecnico[te];
+        const pct = d.total ? Math.round(d.cerrados/d.total*100) : 0;
+        const fill = idx%2===0 ? 'FFFFFF' : RPT.LIGHT_BG;
+        return [
+          { text: displayName[te], options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'left', valign:'middle', bold:true } },
+          { text: String(d.total), options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+          { text: String(d.cerrados), options:{ fontFace:'Arial', fontSize, color:RPT.GREEN, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+          { text: String(d.abiertos), options:{ fontFace:'Arial', fontSize, color:RPT.AMBER, fill:{color:fill}, align:'center', valign:'middle', bold:true } },
+          { text: pct+'%', options:{ fontFace:'Arial', fontSize, color:RPT.NAVY_TEXT, fill:{color:fill}, align:'center', valign:'middle' } },
+        ];
+      });
+      const totalRow = ['TOTAL', granTotal.total, granTotal.cerrados, granTotal.abiertos, pctTot+'%'].map(v => ({ text:String(v), options:{ bold:true, fontFace:'Arial', fontSize, color:'FFFFFF', fill:{color:RPT.NAVY_TEXT}, align:'center', valign:'middle' } }));
+      totalRow[0].options.align = 'left';
+      return { headerRow, bodyRows, totalRow };
+    }
+
+    const tableY3 = 1.55, availH3 = bottomLimit - tableY3;
+    const rowsNeeded3 = techsSorted.length + 2;
+    const rowH3_1col = availH3 / rowsNeeded3;
+    if (rowH3_1col >= 0.30) {
+      const { headerRow, bodyRows, totalRow } = buildTecnicoRows(11.5);
+      s3.addTable([headerRow, ...bodyRows, totalRow], { x:0.6, y:tableY3, w:12.1, colW:[3.4,2.175,2.175,2.175,2.175], rowH:rowH3_1col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+    } else {
+      const { headerRow, bodyRows, totalRow } = buildTecnicoRows(9);
+      const half = Math.ceil(bodyRows.length / 2);
+      const left = bodyRows.slice(0, half), right = bodyRows.slice(half);
+      const rowH3col = Math.max(0.20, availH3 / (Math.max(left.length, right.length) + 2));
+      const colWHalf = [1.7, 1.0, 1.0, 1.0, 1.05];
+      s3.addTable([headerRow, ...left], { x:0.6, y:tableY3, w:5.75, colW:colWHalf, rowH:rowH3col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+      s3.addTable([headerRow, ...right, totalRow], { x:6.65, y:tableY3, w:5.75, colW:colWHalf, rowH:rowH3col, border:{type:'solid', color:'E2E8F0', pt:0.75}, autoPage:false });
+    }
     addFooterRpt(s3, pres, '3');
 
     // Slides 4+ — Gráfico horizontal por mes
@@ -663,9 +728,18 @@ async function generarInformePPTX() {
       let s = pres.addSlide();
       s.background = { color: 'FFFFFF' };
       addTitleRpt(s, `${pm.mes} — Mantenimientos por técnico`, `Cerrados vs. abiertos · ${pm.total} mantenimientos totales · ${pm.pct}% cumplimiento`);
-      const cerradosVals = techsSorted.map(te => pm.porTecnico[te].cerrados);
-      const abiertosVals = techsSorted.map(te => pm.porTecnico[te].abiertos);
-      const labelsDisplay = techsSorted.map(te => displayName[te]);
+      const idxConActividad = [];
+      techsSorted.forEach((te, i) => {
+        if (pm.porTecnico[te].cerrados > 0 || pm.porTecnico[te].abiertos > 0) idxConActividad.push(i);
+      });
+      const labelsDisplay = idxConActividad.map(i => displayName[techsSorted[i]]);
+      const cerradosVals = idxConActividad.map(i => pm.porTecnico[techsSorted[i]].cerrados);
+      const abiertosVals = idxConActividad.map(i => pm.porTecnico[techsSorted[i]].abiertos);
+      if (!labelsDisplay.length) {
+        s.addText('No hay mantenimientos cerrados ni abiertos registrados para este mes.', {
+          x: 0.6, y: 3.2, w: 12.1, h: 0.6, fontSize: 14, color: RPT.GREY_TEXT, align: 'center', fontFace: 'Arial', italic: true
+        });
+      } else {
       s.addChart(pres.ChartType.bar, [
         { name: 'Cerrados', labels: labelsDisplay, values: cerradosVals },
         { name: 'Abiertos', labels: labelsDisplay, values: abiertosVals }
@@ -679,12 +753,13 @@ async function generarInformePPTX() {
         valGridLine:{color:'E2E8F0', size:1}, catGridLine:{style:'none'},
         valAxisTitle:'Cantidad de mantenimientos', showValAxisTitle:true, valAxisTitleFontSize:10, valAxisTitleColor:RPT.GREY_TEXT
       });
+      }
       addFooterRpt(s, pres, String(page));
       page++;
     }
 
     const fecha = new Date().toISOString().slice(0,10);
-    await pres.writeFile({ fileName: `Mantenimientos_Preventivos_${fecha}.pptx` });
+    await corregirIdsYDescargar(pres, `Mantenimientos_Preventivos_${fecha}.pptx`);
   } catch (e) {
     alert('No se pudo generar el informe: ' + e.message);
     console.error(e);
