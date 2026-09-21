@@ -89,7 +89,12 @@ function parseFechaSolicitud(raw) {
   if (!m) return null;
   const d = parseInt(m[1], 10), mo = parseInt(m[2], 10), y = parseInt(m[3], 10);
   if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-  return { year: y, month: mo };
+  return { year: y, month: mo, day: d };
+}
+function fechaSolicitudToDate(raw) {
+  const f = parseFechaSolicitud(raw);
+  if (!f) return null;
+  return new Date(f.year, f.month - 1, f.day);
 }
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -398,6 +403,61 @@ async function generarInformePPTX() {
     }
     addFooterRpt(s3, pageCounter.n);
     pageCounter.n++;
+
+    // ─── Nuevas diapositivas: Solicitudes Abiertas ───
+    function addSingleSeriesBarSlide(title, subtitle, dataMap, seriesName, color) {
+      const entries = techs.map(k => ({ label: displayName[k], value: dataMap[k] || 0 })).filter(e => e.value > 0);
+      const slide = pres.addSlide();
+      slide.background = { color: 'FFFFFF' };
+      addTitleRpt(slide, title, subtitle);
+      if (!entries.length) {
+        slide.addText('No hay solicitudes en esta categoría.', { x:0.6, y:3.2, w:12.1, h:0.6, fontSize:14, color:RPT.GREY_TEXT, align:'center', fontFace:'Arial', italic:true });
+      } else {
+        slide.addChart(pres.ChartType.bar, [
+          { name: seriesName, labels: entries.map(e => e.label), values: entries.map(e => e.value) }
+        ], {
+          x:0.6, y:1.5, w:12.1, h:5.5, barDir:'bar', barGrouping:'clustered',
+          showTitle:false, showLegend:true, legendPos:'b', legendFontSize:11, legendFontFace:'Arial',
+          chartColors:[color], showValue:true, dataLabelPosition:'outEnd',
+          dataLabelFontSize:9, dataLabelColor:RPT.NAVY_TEXT, dataLabelFontFace:'Arial',
+          catAxisLabelFontSize:11, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+          valAxisLabelFontSize:10, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+          valGridLine:{color:'E2E8F0', size:1}, catGridLine:{style:'none'},
+          valAxisTitle:'Cantidad de solicitudes', showValAxisTitle:true, valAxisTitleFontSize:10, valAxisTitleColor:RPT.GREY_TEXT
+        });
+      }
+      addFooterRpt(slide, pageCounter.n);
+      pageCounter.n++;
+    }
+
+    // Diapositiva: Solicitudes Abiertas — General (todas las pendientes, histórico completo)
+    const abiertasPorTecnico = {};
+    techs.forEach(k => abiertasPorTecnico[k] = porTecnico[k].pendiente);
+    addSingleSeriesBarSlide(
+      'Solicitudes Abiertas — General',
+      'Total de solicitudes pendientes (asignadas + abiertas) por técnico, histórico completo',
+      abiertasPorTecnico, 'Abiertas', RPT.AMBER
+    );
+
+    // Diapositiva: Solicitudes Abiertas — Más de 1 mes (pendientes con >30 días desde F. Solicitud)
+    const HOY = new Date();
+    const abiertasAtrasadasPorTecnico = {};
+    techs.forEach(k => abiertasAtrasadasPorTecnico[k] = 0);
+    parsedRows.forEach(r => {
+      if (clasificarEstado(r['Estado']) !== 'pendiente') return;
+      const fecha = fechaSolicitudToDate(r['F. Solicitud']);
+      if (!fecha) return;
+      const diasAbierta = (HOY - fecha) / (1000*60*60*24);
+      if (diasAbierta > 30) {
+        const key = normTechKey((r['Técnico Asignado'] || '').toString().trim() || 'Sin asignar');
+        if (abiertasAtrasadasPorTecnico[key] !== undefined) abiertasAtrasadasPorTecnico[key]++;
+      }
+    });
+    addSingleSeriesBarSlide(
+      'Solicitudes Abiertas — Más de 1 mes',
+      `Pendientes con más de 30 días desde la fecha de solicitud (al ${HOY.toLocaleDateString('es-CO')})`,
+      abiertasAtrasadasPorTecnico, 'Abiertas +30 días', RPT.RED_SOFT
+    );
 
     // Slides — Gráfico horizontal por mes
     let page = pageCounter.n;
