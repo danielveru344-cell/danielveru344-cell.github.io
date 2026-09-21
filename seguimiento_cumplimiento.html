@@ -354,6 +354,7 @@ function headerHtml(subtitle, monthTabsHtml) {
     ${monthTabsHtml ? `<div class="month-bar">${monthTabsHtml}</div>` : '<div class="month-bar"></div>'}
     <div class="header-right">
       <div id="syncDot" class="sync-dot" title="Sincronizado ✓"></div>
+      <button class="btn-white" onclick="deleteMonth()">🗑 Borrar mes</button>
     </div>
   </div>`;
 }
@@ -507,6 +508,7 @@ function render() {
   <div class="footer">
     <span class="footer-info">${m.mes.toUpperCase()} · ${activeTech} · ${doneMine} realizados · ${pendMine} pendientes</span>
     <button class="btn-green" style="margin-left:auto" onclick="exportReport()">⬇ Exportar informe</button>
+    <button class="btn-blue" id="pptxBtn" onclick="generarInformePPTX()">📊 Informe PPTX</button>
   </div>`;
 
   root.innerHTML = html;
