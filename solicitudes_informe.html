@@ -424,9 +424,23 @@ async function generarInformePPTX() {
       });
       const labelsDisplay = techs.map(k => displayName[k]);
 
+      // Quitar técnicos sin actividad ese mes (0 cerradas y 0 pendientes) para no saturar el gráfico
+      const idxConActividad = [];
+      for (let i = 0; i < techs.length; i++) {
+        if (cerradasVals[i] > 0 || pendientesVals[i] > 0) idxConActividad.push(i);
+      }
+      const labelsFiltrados = idxConActividad.map(i => labelsDisplay[i]);
+      const cerradasFiltradas = idxConActividad.map(i => cerradasVals[i]);
+      const pendientesFiltradas = idxConActividad.map(i => pendientesVals[i]);
+
+      if (labelsFiltrados.length === 0) {
+        s.addText('No hay cerradas ni pendientes registradas para este mes (solo rechazadas o sin estado).', {
+          x: 0.6, y: 3.2, w: 12.1, h: 0.6, fontSize: 14, color: RPT.GREY_TEXT, align: 'center', fontFace: 'Arial', italic: true
+        });
+      } else {
       s.addChart(pres.ChartType.bar, [
-        { name: 'Cerradas', labels: labelsDisplay, values: cerradasVals },
-        { name: 'Pendientes', labels: labelsDisplay, values: pendientesVals }
+        { name: 'Cerradas', labels: labelsFiltrados, values: cerradasFiltradas },
+        { name: 'Pendientes', labels: labelsFiltrados, values: pendientesFiltradas }
       ], {
         x:0.6, y:1.5, w:12.1, h:5.5, barDir:'bar', barGrouping:'clustered',
         showTitle:false, showLegend:true, legendPos:'b', legendFontSize:11, legendFontFace:'Arial',
@@ -437,6 +451,7 @@ async function generarInformePPTX() {
         valGridLine:{color:'E2E8F0', size:1}, catGridLine:{style:'none'},
         valAxisTitle:'Cantidad de solicitudes', showValAxisTitle:true, valAxisTitleFontSize:10, valAxisTitleColor:RPT.GREY_TEXT
       });
+      }
       addFooterRpt(s, String(page));
       page++;
     }
