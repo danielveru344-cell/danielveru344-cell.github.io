@@ -13582,19 +13582,20 @@ function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator
     React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:12.5,whiteSpace:"nowrap"}},
       React.createElement("thead",null,
         React.createElement("tr",{style:{background:"var(--navy)"}},
-          ["N.º","Emisión","Cierre","Equipo","Código","Área","Tipo","Estado"].map(function(h){
+          ["N.º","Mes","Emisión","Cierre","Equipo","Código","Área","Tipo","Estado"].map(function(h){
             return React.createElement("th",{key:h,style:{padding:"9px 12px",textAlign:"left",color:"#fff",fontFamily:"Montserrat,sans-serif",fontSize:10.5,textTransform:"uppercase",letterSpacing:0.5}},h);
           })
         )
       ),
       React.createElement("tbody",null,
         registroFiltrado.length===0
-          ? React.createElement("tr",null,React.createElement("td",{colSpan:8,style:{padding:20,textAlign:"center",color:"var(--gray)"}},"Sin resultados."))
+          ? React.createElement("tr",null,React.createElement("td",{colSpan:9,style:{padding:20,textAlign:"center",color:"var(--gray)"}},"Sin resultados."))
           : registroFiltrado.map(function(o,idx){
               var venc=esVencida(o);
               var est=MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado;
               return React.createElement("tr",{key:o.id,onClick:function(){setSelOrd(o);},style:{cursor:"pointer",background:idx%2===0?"#fff":"var(--lighter)",borderTop:"1px solid var(--border)"}},
                 React.createElement("td",{style:{padding:"8px 12px",fontWeight:700,color:"var(--navy)"}},o.consecutivo||"—"),
+                React.createElement("td",{style:{padding:"8px 12px",color:"var(--navy)",fontWeight:600}},MTTO_MESES[o.mes-1]||"—"),
                 React.createElement("td",{style:{padding:"8px 12px",color:"var(--gray)"}},fmtFecha(o.fecha_emision)),
                 React.createElement("td",{style:{padding:"8px 12px",color:"var(--gray)"}},fmtFecha(o.fecha_ejecucion)),
                 React.createElement("td",{style:{padding:"8px 12px",maxWidth:220,overflow:"hidden",textOverflow:"ellipsis"}},o.equipo_desc||"—"),
