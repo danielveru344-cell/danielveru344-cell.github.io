@@ -13442,6 +13442,9 @@ async function generarBufferFMAN008(ord,templateBuf){
   ws.getRow(38).addPageBreak();
   var esCorrectivo=ord.frecuencia==="Correctivo";
   var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
+  var celdaCons=ws.getCell("K1");
+  celdaCons.value=ord.consecutivo||"";
+  celdaCons.alignment=Object.assign({},celdaCons.alignment,{horizontal:"center",vertical:"center",shrinkToFit:true});
   ws.getCell(esCorrectivo?"H4":"H3").value="X";
   ws.getCell("I3").value=freqTexto;
   ws.getCell("J4").value=areaDesdeCodigoEquipo(ord.equipo_codigo)||ord.seccion||"";
