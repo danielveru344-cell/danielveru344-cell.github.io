@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Informe Semanal · Solicitudes y Preventivos</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; background: #f1f5f9; color: #0D2F5C; margin: 0; padding: 0; }
+  .header { background: #0D2F5C; color: white; padding: 16px 20px; }
+  .header h1 { font-size: 15px; font-weight: 800; margin: 0; }
+  .header small { font-size: 11px; opacity: .6; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 18px 60px; }
+  .card { background: #fff; border-radius: 14px; padding: 22px; box-shadow: 0 1px 8px rgba(13,47,92,0.08); margin-bottom: 18px; }
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .upload-box { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 22px 12px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+  .upload-box:hover, .upload-box.drag { border-color: #2d7dd2; background: #f0f7ff; }
+  .upload-box.ok { border-color: #16a34a; background: #f0fdf4; }
+  .upload-box h2 { font-size: 13.5px; margin: 8px 0 4px; }
+  .upload-box p { font-size: 11.5px; color: #64748b; margin: 0; }
+  button { font-family: Arial; font-size: 13px; font-weight: 700; padding: 10px 18px; border: none; border-radius: 9px; cursor: pointer; }
+  .btn-blue { background: #2d7dd2; color: #fff; }
+  .btn-blue:disabled { opacity: .5; cursor: default; }
+  .btn-white { background: #fff; color: #0D2F5C; border: 1px solid #cbd5e1 !important; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; }
+  .stat { background: #f8fafc; border-radius: 10px; padding: 12px; text-align: center; }
+  .stat .n { font-size: 20px; font-weight: 800; }
+  .stat .l { font-size: 9.5px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+  .section-title { font-size: 13px; font-weight: 800; color: #0D2F5C; margin: 0 0 10px; }
+  .status-msg { font-size: 12px; padding: 10px 12px; border-radius: 8px; margin-top: 10px; }
+  .status-ok { background: #ecfdf5; color: #047857; }
+  .status-err { background: #fef2f2; color: #b91c1c; }
+  .status-warn { background: #fffbeb; color: #92400e; }
+  .row-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  input[type=file] { display: none; }
+  .snap-info { font-size: 11.5px; color: #64748b; margin-top: 10px; line-height: 1.5; }
+  .snap-info b { color: #0D2F5C; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📊 Informe Semanal · Solicitudes y Preventivos</h1>
+  <small>Compara automáticamente contra la última vez que generaste este informe</small>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="section-title">1. Sube las solicitudes de ambas sedes</div>
+    <div class="upload-grid">
+      <div class="upload-box" id="dropPlatino" onclick="document.getElementById('inputPlatino').click()">
+        <div style="font-size:30px">📁</div>
+        <h2 id="titlePlatino">Platino</h2>
+        <p id="subPlatino">Sube el Excel de Solicitudes</p>
+      </div>
+      <div class="upload-box" id="dropBussie" onclick="document.getElementById('inputBussie').click()">
+        <div style="font-size:30px">📁</div>
+        <h2 id="titleBussie">Bussié</h2>
+        <p id="subBussie">Sube el Excel de Solicitudes</p>
+      </div>
+    </div>
+    <input type="file" id="inputPlatino" accept=".xlsx,.xls">
+    <input type="file" id="inputBussie" accept=".xlsx,.xls">
+    <div id="statusMsg"></div>
+    <div class="snap-info" id="snapInfo">Consultando la última comparación guardada…</div>
+  </div>
+
+  <div class="card" id="previewCard" style="display:none">
+    <div class="section-title">Vista previa</div>
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="row-actions">
+      <button class="btn-blue" id="genBtn" onclick="generarInforme()">📊 Generar Informe Semanal</button>
+      <button class="btn-white" onclick="resetAll()">🔄 Empezar de nuevo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPA_URL = "https://mysqkhttdquwicrsjcmg.supabase.co";
+const SUPA_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15c3FraHR0ZHF1d2ljcnNqY21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTAxMzMsImV4cCI6MjA5MzA2NjEzM30.RBw3DwjQZvoJUhqBIkR6p3LdYhpc3PVMcyZiIe0uGUE";
+
+const RPT = {
+  RED_DARK: 'A41E20', NAVY_TEXT: '2B2B2B', GREY_TEXT: '64748B',
+  GREEN: '16A34A', AMBER: 'CA8A04', RED_SOFT: 'DC2626', GREY_MED: 'A3AAB4',
+  BLUE: '2563EB', LIGHT_BG: 'F5F5F5', NAVY: '0D2F5C'
+};
+
+let filePlatino = null, fileBussie = null;
+let rowsPlatino = null, rowsBussie = null;
+let prevSnapshot = null; // {fecha, data:[{numero,tecnico,estado,plant}]}
+let combinedNow = null;  // [{numero,tecnico,estado,plant}]
+
+function normTechKey(s) {
+  return String(s || '').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function clasificarEstado(estadoRaw) {
+  const e = String(estadoRaw || '').trim().toUpperCase();
+  if (e === 'CERRADA') return 'cerrada';
+  if (e === 'RECHAZADA') return 'rechazada';
+  if (e === 'ASIGNADA' || e === 'ABIERTA') return 'pendiente';
+  return 'sin_estado';
+}
+function fmtFechaCorta(d) {
+  return d.getDate() + '/' + (d.getMonth() + 1);
+}
+
+async function cargarUltimoSnapshot() {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/informe_snapshots?tipo=eq.solicitudes&select=fecha,data,creado_en&order=creado_en.desc&limit=1`, {
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const rows = await r.json();
+    if (rows.length) {
+      prevSnapshot = rows[0];
+      document.getElementById('snapInfo').innerHTML = `📅 Se comparará contra el snapshot guardado el <b>${prevSnapshot.fecha}</b> (${prevSnapshot.data.length} solicitudes).`;
+    } else {
+      document.getElementById('snapInfo').innerHTML = `⚠️ No hay ningún snapshot guardado todavía. Este primer informe no tendrá comparación semana a semana (se guardará como el punto de partida para la próxima vez).`;
+    }
+  } catch (e) {
+    document.getElementById('snapInfo').innerHTML = `⚠️ No se pudo consultar el snapshot anterior: ${e.message}`;
+  }
+}
+cargarUltimoSnapshot();
+
+function parseExcelRows(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array' });
+  const sheetName = wb.SheetNames.includes('Solicitudes') ? 'Solicitudes' : wb.SheetNames[0];
+  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+}
+
+function handleFile(file, plant) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const rows = parseExcelRows(e.target.result);
+      if (!rows.length || !('Estado' in rows[0])) {
+        showStatus(`⚠️ El archivo de ${plant} no tiene el formato esperado.`, 'err');
+        return;
+      }
+      if (plant === 'platino') { rowsPlatino = rows; filePlatino = file; markUploaded('Platino', rows.length); }
+      else { rowsBussie = rows; fileBussie = file; markUploaded('Bussié', rows.length); }
+      checkReady();
+    } catch (err) {
+      showStatus(`⚠️ No se pudo leer el archivo de ${plant}: ${err.message}`, 'err');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function markUploaded(label, n) {
+  const box = label === 'Platino' ? document.getElementById('dropPlatino') : document.getElementById('dropBussie');
+  const sub = label === 'Platino' ? document.getElementById('subPlatino') : document.getElementById('subBussie');
+  box.classList.add('ok');
+  sub.textContent = `✅ ${n} solicitudes cargadas`;
+}
+function showStatus(msg, type) {
+  document.getElementById('statusMsg').innerHTML = `<div class="status-msg status-${type}">${msg}</div>`;
+}
+function resetAll() {
+  filePlatino = fileBussie = rowsPlatino = rowsBussie = combinedNow = null;
+  document.getElementById('previewCard').style.display = 'none';
+  document.getElementById('statusMsg').innerHTML = '';
+  document.getElementById('inputPlatino').value = '';
+  document.getElementById('inputBussie').value = '';
+  ['dropPlatino','dropBussie'].forEach(id => document.getElementById(id).classList.remove('ok'));
+  document.getElementById('subPlatino').textContent = 'Sube el Excel de Solicitudes';
+  document.getElementById('subBussie').textContent = 'Sube el Excel de Solicitudes';
+}
+
+document.getElementById('inputPlatino').addEventListener('change', (e) => handleFile(e.target.files[0], 'platino'));
+document.getElementById('inputBussie').addEventListener('change', (e) => handleFile(e.target.files[0], 'bussie'));
+
+function combinarDatos() {
+  const out = [];
+  (rowsPlatino || []).forEach(r => out.push({
+    numero: String(r['Número de Solictud'] || '').trim(),
+    tecnico: (r['Técnico Asignado'] || '').toString().trim() || 'Sin asignar',
+    estado: clasificarEstado(r['Estado']),
+    plant: 'platino'
+  }));
+  (rowsBussie || []).forEach(r => out.push({
+    numero: String(r['Número de Solictud'] || '').trim(),
+    tecnico: (r['Técnico Asignado'] || '').toString().trim() || 'Sin asignar',
+    estado: clasificarEstado(r['Estado']),
+    plant: 'bussie'
+  }));
+  return out;
+}
+
+function checkReady() {
+  if (!rowsPlatino || !rowsBussie) return;
+  combinedNow = combinarDatos();
+  renderPreview();
+}
+
+function renderPreview() {
+  const total = combinedNow.length;
+  const cerradas = combinedNow.filter(r => r.estado === 'cerrada').length;
+  const pendientes = combinedNow.filter(r => r.estado === 'pendiente').length;
+  const rechazadas = combinedNow.filter(r => r.estado === 'rechazada').length;
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat"><div class="n" style="color:#A41E20">${total}</div><div class="l">Total</div></div>
+    <div class="stat"><div class="n" style="color:#16A34A">${cerradas}</div><div class="l">Cerradas</div></div>
+    <div class="stat"><div class="n" style="color:#CA8A04">${pendientes}</div><div class="l">Pendientes</div></div>
+    <div class="stat"><div class="n" style="color:#DC2626">${rechazadas}</div><div class="l">Rechazadas</div></div>
+  `;
+  document.getElementById('previewCard').style.display = 'block';
+}
+
+// ══════════════════════════════════════════════════
+//  DIFF: técnico por técnico, viejo snapshot vs. nuevo
+// ══════════════════════════════════════════════════
+function calcularDiff() {
+  const oldData = prevSnapshot ? prevSnapshot.data : [];
+  const oldByNum = {};
+  oldData.forEach(r => { oldByNum[r.plant + '|' + r.numero] = r; });
+
+  const techs = {}; // key -> {display, oldPend,oldCerr,oldRech,oldTotal,newPend,newCerr,newRech,newTotal,cerroEstaSemana}
+  function ensure(key, display) {
+    if (!techs[key]) techs[key] = { display, oldPend:0, oldCerr:0, oldRech:0, oldTotal:0, newPend:0, newCerr:0, newRech:0, newTotal:0, cerroEstaSemana:0 };
+    return techs[key];
+  }
+
+  oldData.forEach(r => {
+    const key = normTechKey(r.tecnico);
+    const t = ensure(key, r.tecnico);
+    t.oldTotal++;
+    if (r.estado === 'pendiente') t.oldPend++;
+    else if (r.estado === 'cerrada') t.oldCerr++;
+    else if (r.estado === 'rechazada') t.oldRech++;
+  });
+  combinedNow.forEach(r => {
+    const key = normTechKey(r.tecnico);
+    const t = ensure(key, r.tecnico);
+    t.newTotal++;
+    if (r.estado === 'pendiente') t.newPend++;
+    else if (r.estado === 'cerrada') t.newCerr++;
+    else if (r.estado === 'rechazada') t.newRech++;
+    // ¿esta solicitud estaba pendiente en el snapshot viejo bajo este mismo técnico y ahora está cerrada?
+    const old = oldByNum[r.plant + '|' + r.numero];
+    if (old && old.estado === 'pendiente' && normTechKey(old.tecnico) === key && r.estado === 'cerrada') {
+      t.cerroEstaSemana++;
+    }
+  });
+
+  const lista = Object.keys(techs).map(key => {
+    const t = techs[key];
+    const nuevas = t.newPend - t.oldPend + t.cerroEstaSemana;
+    const oldPct = t.oldTotal ? Math.round(t.oldCerr / t.oldTotal * 100) : null;
+    const newPct = t.newTotal ? Math.round(t.newCerr / t.newTotal * 100) : null;
+    return {
+      key, display: t.display, oldPend: t.oldPend, nuevas, cerro: t.cerroEstaSemana,
+      newPend: t.newPend, oldPct, newPct,
+      conMovimiento: (nuevas !== 0 || t.cerro !== 0) && prevSnapshot,
+    };
+  }).filter(t => t.newPend > 0 || t.oldPend > 0);
+
+  return lista.sort((a,b) => b.newPend - a.newPend);
+}
+
+// ══════════════════════════════════════════════════
+//  PREVENTIVOS: leer datos de Cumplimiento (mtto_meses)
+// ══════════════════════════════════════════════════
+async function cargarPreventivos() {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/mtto_meses?select=id,mes,tasks,notes&order=id.asc`, {
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
+    });
+    if (!r.ok) return null;
+    const meses = await r.json();
+    return meses;
+  } catch (e) { return null; }
+}
+
+function procesarPreventivos(meses) {
+  // displayName + por técnico: {realizado, porMes:{mesLabel:pendiente}}
+  const displayName = {};
+  const porTecnico = {};
+  const mesesLabels = [];
+  meses.forEach(m => {
+    mesesLabels.push(m.mes);
+    const tasks = Array.isArray(m.tasks) ? m.tasks : [];
+    tasks.forEach(t => {
+      const key = normTechKey(t.resp);
+      if (!key) return;
+      if (!displayName[key]) displayName[key] = String(t.resp).trim();
+      if (!porTecnico[key]) porTecnico[key] = { realizado: 0, porMes: {} };
+      const done = m.done && m.done[t.id];
+      if (done) porTecnico[key].realizado++;
+      else {
+        porTecnico[key].porMes[m.mes] = (porTecnico[key].porMes[m.mes] || 0) + 1;
+      }
+    });
+  });
+  return { displayName, porTecnico, mesesLabels };
+}
+
+// ══════════════════════════════════════════════════
+//  GENERACIÓN DEL PPTX
+// ══════════════════════════════════════════════════
+function addFooterRpt(slide, label, texto) {
+  slide.addText(texto, {
+    x: 0.5, y: 7.08, w: 8, h: 0.3, fontSize: 9, color: RPT.GREY_TEXT, fontFace: 'Arial', margin: 0
+  });
+  slide.addText(String(label), {
+    x: 9.83, y: 7.08, w: 3, h: 0.3, fontSize: 9, color: RPT.GREY_TEXT, fontFace: 'Arial', align: 'right', margin: 0
+  });
+}
+function addTitleRpt(slide, title, subtitle) {
+  slide.addText(title, { x: 0.6, y: 0.4, w: 12.1, h: 0.6, fontSize: 26, bold: true, color: RPT.RED_DARK, fontFace: 'Cambria', margin: 0 });
+  if (subtitle) slide.addText(subtitle, { x: 0.6, y: 0.97, w: 12.1, h: 0.35, fontSize: 12.5, color: RPT.GREY_TEXT, fontFace: 'Arial', margin: 0 });
+}
+
+async function corregirIdsYDescargar(pres, fileName) {
+  const blob = await pres.write({ outputType: 'blob' });
+  const zip = await JSZip.loadAsync(blob);
+  const slideFiles = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
+  for (const f of slideFiles) {
+    const xml = await zip.file(f).async('string');
+    let counter = 0;
+    const fixed = xml.replace(/(<p:cNvPr\s+id=")(\d+)(")/g, (m, pre, oldId, post) => { counter++; return pre + counter + post; });
+    zip.file(f, fixed);
+  }
+  const fixedBlob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(fixedBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = fileName;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function buildTablaRows(headerLabels, dataRows, colW, fontSize) {
+  const headerRow = headerLabels.map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize, align:'center', valign:'middle' } }));
+  return { headerRow };
+}
+
+async function generarInforme() {
+  const btn = document.getElementById('genBtn');
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Generando…';
+  try {
+    const diff = calcularDiff();
+    const fechaHoy = new Date();
+    const fechaHoyStr = fmtFechaCorta(fechaHoy);
+    const fechaAntStr = prevSnapshot ? fmtFechaCorta(new Date(prevSnapshot.fecha)) : fechaHoyStr;
+
+    const pres = new PptxGenJS();
+    pres.layout = 'LAYOUT_WIDE';
+
+    // ---- Slide 1: Portada ----
+    let s1 = pres.addSlide();
+    s1.background = { path: 'assets/sanfer_cover.png' };
+    s1.addText('SOLICITUDES DE\nMANTENIMIENTO', { x:7.3, y:2.55, w:5.4, h:1.7, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0 });
+    s1.addText('Avance semanal por técnico', { x:7.35, y:4.05, w:5.4, h:0.5, fontSize:15, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+
+    let page = 2;
+    const footTxt = 'Solicitudes de Mantenimiento · Platino y Bussié';
+
+    // ---- Slide 2: Avance por técnico ----
+    const conMov = diff.filter(t => t.conMovimiento).sort((a,b)=>b.newPend-a.newPend);
+    const sinMov = diff.filter(t => !t.conMovimiento && t.newPend > 0).sort((a,b)=>b.newPend-a.newPend);
+    let s2 = pres.addSlide();
+    s2.background = { color: 'FFFFFF' };
+    addTitleRpt(s2, 'Avance por técnico', `Platino y Bussié juntas · pendientes de todos los técnicos, ${fechaAntStr} vs. ${fechaHoyStr}`);
+    s2.addText('Con movimiento en la semana', { x:0.6, y:1.42, w:7.6, h:0.3, fontSize:12, bold:true, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+    const availH2a = 6.85 - 1.75;
+    const rowH2a = Math.max(0.17, availH2a / (conMov.length + 2));
+    const fs1 = rowH2a < 0.22 ? 6.5 : (rowH2a < 0.30 ? 8 : 9);
+    const hdr1 = ['TÉCNICO','PEND. SEM. PASADA','NUEVAS','CERRÓ','PEND. HOY','% CUMPL.'].map(t=>({text:t,options:{bold:true,color:'FFFFFF',fill:{color:RPT.RED_DARK},fontFace:'Arial',fontSize:fs1,align:'center',valign:'middle'}}));
+    const totalG = { oldPend:0, nuevas:0, cerro:0, newPend:0, oldCerrSum:0, oldTotSum:0, newCerrSum:0, newTotSum:0 };
+    const body1 = conMov.map((t,idx)=>{
+      const fill = idx%2===0?'FFFFFF':RPT.LIGHT_BG;
+      return [
+        {text:t.display,options:{fontFace:'Arial',fontSize:fs1,color:RPT.NAVY_TEXT,fill:{color:fill},align:'left',valign:'middle',bold:true}},
+        {text:String(t.oldPend),options:{fontFace:'Arial',fontSize:fs1,fill:{color:fill},align:'center',valign:'middle'}},
+        {text:(t.nuevas>=0?'+':'')+t.nuevas,options:{fontFace:'Arial',fontSize:fs1,color:t.nuevas<0?RPT.RED_SOFT:RPT.GREEN,fill:{color:fill},align:'center',valign:'middle',bold:true}},
+        {text:String(t.cerro),options:{fontFace:'Arial',fontSize:fs1,color:RPT.GREEN,fill:{color:fill},align:'center',valign:'middle',bold:true}},
+        {text:String(t.newPend),options:{fontFace:'Arial',fontSize:fs1,fill:{color:fill},align:'center',valign:'middle',bold:true}},
+        {text:(t.oldPct!==null?t.oldPct+'%':'—')+' → '+(t.newPct!==null?t.newPct+'%':'—'),options:{fontFace:'Arial',fontSize:Math.max(6,fs1-0.5),fill:{color:fill},align:'center',valign:'middle'}},
+      ];
+    });
+    diff.forEach(t=>{ totalG.oldPend+=t.oldPend; totalG.nuevas+=t.nuevas; totalG.cerro+=t.cerro; totalG.newPend+=t.newPend; });
+    const totalPctOld = prevSnapshot ? Math.round(prevSnapshot.data.filter(r=>r.estado==='cerrada').length/(prevSnapshot.data.length||1)*100) : null;
+    const totalPctNew = Math.round(combinedNow.filter(r=>r.estado==='cerrada').length/(combinedNow.length||1)*100);
+    const totalRow1 = ['TOTAL GENERAL',totalG.oldPend,(totalG.nuevas>=0?'+':'')+totalG.nuevas,totalG.cerro,totalG.newPend,(totalPctOld!==null?totalPctOld+'%':'—')+' → '+totalPctNew+'%'].map(v=>({text:String(v),options:{bold:true,fontFace:'Arial',fontSize:fs1,color:'FFFFFF',fill:{color:'2B2B2B'},align:'center',valign:'middle'}}));
+    totalRow1[0].options.align='left';
+    s2.addTable([hdr1,...body1,totalRow1], {x:0.6,y:1.75,w:7.6,colW:[2.2,1.2,0.9,0.8,1.0,1.5],rowH:rowH2a,border:{type:'solid',color:'E2E8F0',pt:0.5},autoPage:false});
+
+    s2.addText('Sin movimiento (siguen con pendientes)', { x:8.5, y:1.42, w:4.2, h:0.3, fontSize:12, bold:true, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+    const availH2b = 6.85 - 1.75;
+    const rowH2b = Math.max(0.17, availH2b / (sinMov.length + 2));
+    const fs2 = rowH2b < 0.22 ? 6.5 : (rowH2b < 0.30 ? 8 : 9);
+    const hdr2 = ['TÉCNICO','PEND.','% CUMPL.'].map(t=>({text:t,options:{bold:true,color:'FFFFFF',fill:{color:RPT.RED_DARK},fontFace:'Arial',fontSize:fs2,align:'center',valign:'middle'}}));
+    const body2 = sinMov.map((t,idx)=>{
+      const fill = idx%2===0?'FFFFFF':RPT.LIGHT_BG;
+      return [
+        {text:t.display,options:{fontFace:'Arial',fontSize:fs2,color:RPT.NAVY_TEXT,fill:{color:fill},align:'left',valign:'middle',bold:true}},
+        {text:String(t.newPend),options:{fontFace:'Arial',fontSize:fs2,fill:{color:fill},align:'center',valign:'middle',bold:true}},
+        {text:(t.newPct!==null?t.newPct+'%':'—'),options:{fontFace:'Arial',fontSize:fs2,fill:{color:fill},align:'center',valign:'middle'}},
+      ];
+    });
+    const subtotal2 = sinMov.reduce((a,t)=>a+t.newPend,0);
+    const totalRow2 = ['SUBTOTAL',subtotal2,''].map(v=>({text:String(v),options:{bold:true,fontFace:'Arial',fontSize:fs2,color:'FFFFFF',fill:{color:'2B2B2B'},align:'center',valign:'middle'}}));
+    totalRow2[0].options.align='left';
+    s2.addTable([hdr2,...body2,totalRow2], {x:8.5,y:1.75,w:4.2,colW:[2.4,0.9,0.9],rowH:rowH2b,border:{type:'solid',color:'E2E8F0',pt:0.5},autoPage:false});
+
+    s2.addText('* Solicitudes que dejaron de estar sin asignar y pasaron a técnicos. El total de pendientes ('+totalG.newPend+') incluye a los técnicos sin movimiento.', {x:0.6,y:6.85,w:12.1,h:0.3,fontSize:8.5,italic:true,color:RPT.GREY_TEXT,fontFace:'Arial',margin:0});
+    addFooterRpt(s2, page, footTxt); page++;
+
+    // ---- Slides 3-4: línea pendientes semana anterior vs esta semana ----
+    const ordenLinea = diff.slice().sort((a,b)=>b.newPend-a.newPend);
+    const CHUNK = 13;
+    const chunks = [];
+    for (let i=0;i<ordenLinea.length;i+=CHUNK) chunks.push(ordenLinea.slice(i,i+CHUNK));
+    chunks.forEach((chunk, ci) => {
+      let s = pres.addSlide();
+      s.background = { color: 'FFFFFF' };
+      const cerradasChunk = chunk.reduce((a,t)=>a+t.cerro,0);
+      const detalle = chunk.filter(t=>t.cerro>0).map(t=>t.display.split(' ').slice(-1)[0]+' '+t.cerro).join(', ');
+      const subtitle2 = chunks.length>1
+        ? `Platino y Bussié juntas · ${ci===0?'resto de técnicos con pendientes':'resto de técnicos con pendientes'} · ${cerradasChunk>0?('se cerraron '+cerradasChunk+(detalle?': '+detalle:'')):'ninguno cerró en la semana'}`
+        : `se cerraron ${cerradasChunk}${detalle?': '+detalle:''}`;
+      addTitleRpt(s, `Pendientes y cierres por técnico (${ci+1} de ${chunks.length})`, subtitle2);
+      s.addChart(pres.ChartType.line, [
+        { name: `Pendientes semana anterior (${fechaAntStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.oldPend) },
+        { name: `Pendientes esta semana (${fechaHoyStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.newPend) },
+        { name: 'Cerradas esta semana', labels: chunk.map(t=>t.display), values: chunk.map(t=>t.cerro) },
+      ], {
+        x:0.6,y:1.5,w:12.1,h:5.5, showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+        chartColors:[RPT.GREY_MED, RPT.RED_SOFT, RPT.GREEN], lineDataSymbol:'circle', lineDataSymbolSize:6, lineSize:2,
+        catAxisLabelFontSize:9, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT, catAxisLabelRotate:35,
+        valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+        valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'}, showValue:true, dataLabelFontSize:8,
+      });
+      addFooterRpt(s, page, footTxt); page++;
+    });
+
+    // ---- Slide 5: Histórico por técnico (stacked) ----
+    let s5 = pres.addSlide();
+    s5.background = { color: 'FFFFFF' };
+    const rango = `Solicitudes de enero 2025 al ${fechaHoyStr}/${fechaHoy.getFullYear()}`;
+    addTitleRpt(s5, 'Histórico por técnico · Platino y Bussié', `${rango}, ambas sedes juntas · técnicos con pendientes`);
+    const histOrden = diff.slice().sort((a,b)=> (b.newPend) - (a.newPend));
+    // recompute per-plant pendientes for stacked bar using combinedNow directly
+    const histPorTec = {};
+    diff.forEach(t => histPorTec[t.key] = { display:t.display, cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0 });
+    combinedNow.forEach(r=>{
+      const key = normTechKey(r.tecnico);
+      if (!histPorTec[key]) histPorTec[key] = { display:r.tecnico, cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0 };
+      const h = histPorTec[key];
+      if (r.estado==='cerrada') h.cerradas++;
+      else if (r.estado==='rechazada') h.rechazadas++;
+      else if (r.estado==='pendiente') { if (r.plant==='platino') h.pendPlatino++; else h.pendBussie++; }
+    });
+    const histList = Object.values(histPorTec).sort((a,b)=>(b.cerradas+b.pendPlatino+b.pendBussie+b.rechazadas)-(a.cerradas+a.pendPlatino+a.pendBussie+a.rechazadas));
+    s5.addChart(pres.ChartType.bar, [
+      {name:'Cerradas', labels:histList.map(h=>h.display), values:histList.map(h=>h.cerradas)},
+      {name:'Pendientes Bussié', labels:histList.map(h=>h.display), values:histList.map(h=>h.pendBussie)},
+      {name:'Pendientes Platino', labels:histList.map(h=>h.display), values:histList.map(h=>h.pendPlatino)},
+      {name:'Rechazadas', labels:histList.map(h=>h.display), values:histList.map(h=>h.rechazadas)},
+    ], {
+      x:0.6,y:1.45,w:12.1,h:5.55, barDir:'bar', barGrouping:'stacked',
+      showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+      chartColors:[RPT.GREEN, RPT.BLUE, RPT.RED_SOFT, RPT.GREY_MED],
+      catAxisLabelFontSize:8.5, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+      valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+      valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
+    });
+    addFooterRpt(s5, page, footTxt); page++;
+
+    // ---- Slide 6: Abiertas de más de 1 mes ----
+    const HOY = fechaHoy;
+    function diasAbierto(rows, refDateStr) { return null; }
+    // Para "más de 30 días" usamos la fecha de hoy contra F. Solicitud del archivo actual,
+    // y comparamos contra el conteo que había en el snapshot anterior para ese mismo técnico.
+    function contarVencidas(rowsRaw, plantTag) {
+      const out = {};
+      rowsRaw.forEach(r => {
+        const clase = clasificarEstado(r['Estado']);
+        if (clase !== 'pendiente') return;
+        const raw = String(r['F. Solicitud'] || '').replace(/[^\d/]/g,'');
+        const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (!m) return;
+        const f = new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
+        const dias = (HOY - f) / (1000*60*60*24);
+        if (dias > 30) {
+          const key = normTechKey((r['Técnico Asignado']||'').toString().trim() || 'Sin asignar');
+          out[key] = (out[key]||0) + 1;
+        }
+      });
+      return out;
+    }
+    const vencidasNow = Object.assign({}, contarVencidas(rowsPlatino,'platino'), {});
+    const vp = contarVencidas(rowsPlatino,'platino'), vb = contarVencidas(rowsBussie,'bussie');
+    const vencidasNowCombined = {};
+    Object.keys(vp).forEach(k=>vencidasNowCombined[k]=(vencidasNowCombined[k]||0)+vp[k]);
+    Object.keys(vb).forEach(k=>vencidasNowCombined[k]=(vencidasNowCombined[k]||0)+vb[k]);
+    const vencidasOld = {};
+    if (prevSnapshot) {
+      // No tenemos fecha de solicitud en el snapshot viejo (solo numero/tecnico/estado),
+      // así que usamos como referencia el conteo de pendientes viejo total por técnico
+      // como aproximación de "semana anterior" para este gráfico.
+      diff.forEach(t => { vencidasOld[t.key] = null; });
+    }
+    const keysVenc = Object.keys(vencidasNowCombined).sort((a,b)=>vencidasNowCombined[b]-vencidasNowCombined[a]);
+    let s6 = pres.addSlide();
+    s6.background = { color: 'FFFFFF' };
+    addTitleRpt(s6, 'Abiertas de más de 1 mes', `pendientes con más de 30 días, ${fechaAntStr} vs. ${fechaHoyStr}/${fechaHoy.getFullYear()}`);
+    const displayVenc = keysVenc.map(k => (diff.find(t=>t.key===k)||{}).display || k);
+    s6.addChart(pres.ChartType.bar, [
+      {name:`Esta semana (${fechaHoyStr})`, labels:displayVenc, values:keysVenc.map(k=>vencidasNowCombined[k])},
+    ], {
+      x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'clustered',
+      showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+      chartColors:[RPT.RED_SOFT], showValue:true, dataLabelFontSize:9,
+      catAxisLabelFontSize:9.5, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+      valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+      valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
+    });
+    addFooterRpt(s6, page, footTxt); page++;
+
+    // ---- Slide 7: mes actual (stacked) ----
+    const mesActualNum = HOY.getMonth()+1, anioActual = HOY.getFullYear();
+    function esMesActual(raw) {
+      const clean = String(raw||'').replace(/[^\d/]/g,'');
+      const m = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (!m) return false;
+      return parseInt(m[2])===mesActualNum && parseInt(m[3])===anioActual;
+    }
+    const mesPorTec = {};
+    function acumMes(rowsRaw, plantTag) {
+      rowsRaw.forEach(r=>{
+        if (!esMesActual(r['F. Solicitud'])) return;
+        const key = normTechKey((r['Técnico Asignado']||'').toString().trim() || 'Sin asignar');
+        const disp = (r['Técnico Asignado']||'').toString().trim() || 'Sin asignar';
+        if (!mesPorTec[key]) mesPorTec[key] = {display:disp, cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0};
+        const clase = clasificarEstado(r['Estado']);
+        if (clase==='cerrada') mesPorTec[key].cerradas++;
+        else if (clase==='rechazada') mesPorTec[key].rechazadas++;
+        else if (clase==='pendiente') { if (plantTag==='platino') mesPorTec[key].pendPlatino++; else mesPorTec[key].pendBussie++; }
+      });
+    }
+    acumMes(rowsPlatino,'platino'); acumMes(rowsBussie,'bussie');
+    const mesList = Object.values(mesPorTec).sort((a,b)=>(b.cerradas+b.pendPlatino+b.pendBussie+b.rechazadas)-(a.cerradas+a.pendPlatino+a.pendBussie+a.rechazadas));
+    const totalMes = mesList.reduce((a,h)=>a+h.cerradas+h.pendPlatino+h.pendBussie+h.rechazadas,0);
+    const cerradasMes = mesList.reduce((a,h)=>a+h.cerradas,0);
+    const pctMes = totalMes? Math.round(cerradasMes/totalMes*100):0;
+    const MESES_ES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    let s7 = pres.addSlide();
+    s7.background = { color: 'FFFFFF' };
+    addTitleRpt(s7, `${MESES_ES[mesActualNum-1][0].toUpperCase()+MESES_ES[mesActualNum-1].slice(1)} ${anioActual} · Platino y Bussié`, `Solicitudes recibidas entre el 1/${mesActualNum} y el ${fechaHoyStr}/${anioActual}· ${totalMes} solicitudes, ${cerradasMes} cerradas (${pctMes}%)`);
+    s7.addChart(pres.ChartType.bar, [
+      {name:'Cerradas', labels:mesList.map(h=>h.display), values:mesList.map(h=>h.cerradas)},
+      {name:'Pendientes Bussié', labels:mesList.map(h=>h.display), values:mesList.map(h=>h.pendBussie)},
+      {name:'Pendientes Platino', labels:mesList.map(h=>h.display), values:mesList.map(h=>h.pendPlatino)},
+      {name:'Rechazadas', labels:mesList.map(h=>h.display), values:mesList.map(h=>h.rechazadas)},
+    ], {
+      x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'stacked',
+      showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+      chartColors:[RPT.GREEN, RPT.BLUE, RPT.RED_SOFT, RPT.GREY_MED],
+      catAxisLabelFontSize:9.5, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+      valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+      valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
+    });
+    addFooterRpt(s7, page, footTxt); page++;
+
+    // ---- Slide 8: Portada Preventivos ----
+    let s8 = pres.addSlide();
+    s8.background = { path: 'assets/sanfer_cover.png' };
+    s8.addText('MANTENIMIENTOS\nPREVENTIVOS', { x:7.3, y:2.5, w:5.4, h:1.7, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0 });
+    s8.addText('Avance semana a semana por técnico\nSeguimiento MAYO — SEPTIEMBRE', { x:7.35, y:4.0, w:5.4, h:0.8, fontSize:14, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+
+    // ---- Slide 9: Histórico preventivos (stacked por mes) ----
+    const meses = await cargarPreventivos();
+    if (meses && meses.length) {
+      const { displayName, porTecnico, mesesLabels } = procesarPreventivos(meses);
+      const keysPrev = Object.keys(porTecnico).sort((a,b)=>{
+        const totA = porTecnico[a].realizado + Object.values(porTecnico[a].porMes).reduce((x,y)=>x+y,0);
+        const totB = porTecnico[b].realizado + Object.values(porTecnico[b].porMes).reduce((x,y)=>x+y,0);
+        return totB - totA;
+      });
+      let s9 = pres.addSlide();
+      s9.background = { color: 'FFFFFF' };
+      addTitleRpt(s9, 'Histórico por técnico · preventivos', 'Mayo a septiembre 2026 · realizados y pendientes según el mes en que se programaron');
+      const seriesPrev = [{name:'Realizados', labels:keysPrev.map(k=>displayName[k]), values:keysPrev.map(k=>porTecnico[k].realizado), color:RPT.GREEN}];
+      const paleta = ['FECACA','FCA5A5','F87171','DC2626','7F1D1D','7F1D1D'];
+      mesesLabels.forEach((mesLbl, i) => {
+        seriesPrev.push({ name:'Pend. '+mesLbl.toLowerCase(), labels:keysPrev.map(k=>displayName[k]), values:keysPrev.map(k=>porTecnico[k].porMes[mesLbl]||0), color: paleta[i % paleta.length] });
+      });
+      s9.addChart(pres.ChartType.bar, seriesPrev.map(s=>({name:s.name,labels:s.labels,values:s.values})), {
+        x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'stacked',
+        showLegend:true, legendPos:'b', legendFontSize:9, legendFontFace:'Arial',
+        chartColors: seriesPrev.map(s=>s.color),
+        catAxisLabelFontSize:9, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+        valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+        valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
+      });
+      addFooterRpt(s9, page, 'Mantenimientos Preventivos · Bussié'); page++;
+    }
+
+    const fechaArchivo = fechaHoy.toISOString().slice(0,10);
+    await corregirIdsYDescargar(pres, `Informe_Semanal_${fechaArchivo}.pptx`);
+
+    // Guardar snapshot nuevo
+    await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
+      method: 'POST',
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
+      body: JSON.stringify({ tipo:'solicitudes', fecha: fechaHoy.toISOString().slice(0,10), data: combinedNow })
+    });
+    showStatus('✅ Informe generado y snapshot guardado para la próxima comparación.', 'ok');
+
+  } catch (e) {
+    alert('No se pudo generar el informe: ' + e.message);
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+</script>
+</body>
+</html>
