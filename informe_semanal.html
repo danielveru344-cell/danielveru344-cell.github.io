@@ -95,6 +95,7 @@ let filePlatino = null, fileBussie = null;
 let rowsPlatino = null, rowsBussie = null;
 let prevSnapshot = null; // {fecha, data:[{numero,tecnico,estado,plant}]}
 let combinedNow = null;  // [{numero,tecnico,estado,plant}]
+let prevSnapshotPreventivos = null; // {fecha, data:[{key,tecnico,done,mes}]}
 
 function normTechKey(s) {
   return String(s || '').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -110,19 +111,28 @@ function fmtFechaCorta(d) {
   return d.getDate() + '/' + (d.getMonth() + 1);
 }
 
+async function cargarUltimoSnapshotTipo(tipo) {
+  const r = await fetch(`${SUPA_URL}/rest/v1/informe_snapshots?tipo=eq.${tipo}&select=fecha,data,creado_en&order=creado_en.desc&limit=1`, {
+    headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const rows = await r.json();
+  return rows.length ? rows[0] : null;
+}
+
 async function cargarUltimoSnapshot() {
   try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/informe_snapshots?tipo=eq.solicitudes&select=fecha,data,creado_en&order=creado_en.desc&limit=1`, {
-      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const rows = await r.json();
-    if (rows.length) {
-      prevSnapshot = rows[0];
-      document.getElementById('snapInfo').innerHTML = `📅 Se comparará contra el snapshot guardado el <b>${prevSnapshot.fecha}</b> (${prevSnapshot.data.length} solicitudes).`;
-    } else {
-      document.getElementById('snapInfo').innerHTML = `⚠️ No hay ningún snapshot guardado todavía. Este primer informe no tendrá comparación semana a semana (se guardará como el punto de partida para la próxima vez).`;
-    }
+    prevSnapshot = await cargarUltimoSnapshotTipo('solicitudes');
+    let msg = prevSnapshot
+      ? `📅 Solicitudes: se comparará contra el snapshot del <b>${prevSnapshot.fecha}</b> (${prevSnapshot.data.length} filas).`
+      : `⚠️ Solicitudes: no hay snapshot todavía (este informe no tendrá comparación).`;
+    try {
+      prevSnapshotPreventivos = await cargarUltimoSnapshotTipo('preventivos');
+      msg += '<br>' + (prevSnapshotPreventivos
+        ? `📅 Preventivos: se comparará contra el snapshot del <b>${prevSnapshotPreventivos.fecha}</b> (${prevSnapshotPreventivos.data.length} tareas).`
+        : `⚠️ Preventivos: no hay snapshot todavía (este informe no tendrá comparación).`);
+    } catch (e2) { msg += `<br>⚠️ Preventivos: no se pudo consultar (${e2.message}).`; }
+    document.getElementById('snapInfo').innerHTML = msg;
   } catch (e) {
     document.getElementById('snapInfo').innerHTML = `⚠️ No se pudo consultar el snapshot anterior: ${e.message}`;
   }
@@ -272,7 +282,7 @@ function calcularDiff() {
 // ══════════════════════════════════════════════════
 async function cargarPreventivos() {
   try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/mtto_meses?select=id,mes,tasks,notes&order=id.asc`, {
+    const r = await fetch(`${SUPA_URL}/rest/v1/mtto_meses?select=id,mes,tasks,done,notes&order=id.asc`, {
       headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
     });
     if (!r.ok) return null;
@@ -303,6 +313,58 @@ function procesarPreventivos(meses) {
   });
   return { displayName, porTecnico, mesesLabels };
 }
+
+// Snapshot a nivel de tarea individual: clave única mes_id-task_id, técnico, si está hecha o no.
+function snapshotPreventivos(meses) {
+  const out = [];
+  meses.forEach(m => {
+    const tasks = Array.isArray(m.tasks) ? m.tasks : [];
+    tasks.forEach(t => {
+      out.push({ key: m.id + '-' + t.id, tecnico: String(t.resp || '').trim() || 'Sin asignar', done: !!(m.done && m.done[t.id]), mes: m.mes });
+    });
+  });
+  return out;
+}
+
+// Compara el snapshot viejo de preventivos contra el estado actual, técnico por técnico.
+function calcularDiffPreventivos(nowSnap, oldSnap) {
+  const oldByKey = {};
+  (oldSnap || []).forEach(r => { oldByKey[r.key] = r; });
+
+  const techs = {};
+  function ensure(key, display) {
+    if (!techs[key]) techs[key] = { display, oldPend:0, oldDone:0, oldTotal:0, newPend:0, newDone:0, newTotal:0, cerro:0 };
+    return techs[key];
+  }
+  (oldSnap || []).forEach(r => {
+    const key = normTechKey(r.tecnico);
+    const t = ensure(key, r.tecnico);
+    t.oldTotal++;
+    if (r.done) t.oldDone++; else t.oldPend++;
+  });
+  nowSnap.forEach(r => {
+    const key = normTechKey(r.tecnico);
+    const t = ensure(key, r.tecnico);
+    t.newTotal++;
+    if (r.done) t.newDone++; else t.newPend++;
+    const old = oldByKey[r.key];
+    if (old && !old.done && normTechKey(old.tecnico) === key && r.done) t.cerro++;
+  });
+
+  const lista = Object.keys(techs).map(key => {
+    const t = techs[key];
+    const nuevas = t.newPend - t.oldPend + t.cerro;
+    const oldPct = t.oldTotal ? Math.round(t.oldDone / t.oldTotal * 100) : null;
+    const newPct = t.newTotal ? Math.round(t.newDone / t.newTotal * 100) : null;
+    return {
+      key, display: t.display, oldPend: t.oldPend, nuevas, cerro: t.cerro, newPend: t.newPend,
+      oldPct, newPct, conMovimiento: (nuevas !== 0 || t.cerro !== 0) && !!oldSnap,
+    };
+  }).filter(t => t.newPend > 0 || t.oldPend > 0);
+
+  return lista.sort((a,b) => b.newPend - a.newPend);
+}
+
 
 // ══════════════════════════════════════════════════
 //  GENERACIÓN DEL PPTX
@@ -607,8 +669,91 @@ async function generarInforme() {
     s8.addText('MANTENIMIENTOS\nPREVENTIVOS', { x:7.3, y:2.5, w:5.4, h:1.7, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0 });
     s8.addText('Avance semana a semana por técnico\nSeguimiento MAYO — SEPTIEMBRE', { x:7.35, y:4.0, w:5.4, h:0.8, fontSize:14, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
 
-    // ---- Slide 9: Histórico preventivos (stacked por mes) ----
+    const footTxtPrev = 'Mantenimientos Preventivos · Bussié';
     const meses = await cargarPreventivos();
+    let nowSnapPreventivos = null;
+    if (meses && meses.length) {
+      nowSnapPreventivos = snapshotPreventivos(meses);
+      const diffPrev = calcularDiffPreventivos(nowSnapPreventivos, prevSnapshotPreventivos ? prevSnapshotPreventivos.data : null);
+      const fechaAntPrevStr = prevSnapshotPreventivos ? fmtFechaCorta(new Date(prevSnapshotPreventivos.fecha)) : fechaHoyStr;
+
+      // ---- Slide: Avance por técnico (preventivos) ----
+      const conMovP = diffPrev.filter(t => t.conMovimiento).sort((a,b)=>b.newPend-a.newPend);
+      const sinMovP = diffPrev.filter(t => !t.conMovimiento && t.newPend > 0).sort((a,b)=>b.newPend-a.newPend);
+      let sAv = pres.addSlide();
+      sAv.background = { color: 'FFFFFF' };
+      addTitleRpt(sAv, 'Avance por técnico · preventivos', `Mantenimientos preventivos pendientes, ${fechaAntPrevStr} vs. ${fechaHoyStr}`);
+      sAv.addText('Con movimiento en la semana', { x:0.6, y:1.42, w:7.6, h:0.3, fontSize:12, bold:true, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+      const availPa = 6.85 - 1.75;
+      const rowHPa = Math.max(0.17, availPa / (conMovP.length + 2));
+      const fsPa = rowHPa < 0.22 ? 6.5 : (rowHPa < 0.30 ? 8 : 9);
+      const hdrPa = ['TÉCNICO','PEND. SEM. PASADA','NUEVAS','CERRÓ','PEND. HOY','% CUMPL.'].map(t=>({text:t,options:{bold:true,color:'FFFFFF',fill:{color:RPT.RED_DARK},fontFace:'Arial',fontSize:fsPa,align:'center',valign:'middle'}}));
+      const bodyPa = conMovP.map((t,idx)=>{
+        const fill = idx%2===0?'FFFFFF':RPT.LIGHT_BG;
+        return [
+          {text:t.display,options:{fontFace:'Arial',fontSize:fsPa,color:RPT.NAVY_TEXT,fill:{color:fill},align:'left',valign:'middle',bold:true}},
+          {text:String(t.oldPend),options:{fontFace:'Arial',fontSize:fsPa,fill:{color:fill},align:'center',valign:'middle'}},
+          {text:(t.nuevas>=0?'+':'')+t.nuevas,options:{fontFace:'Arial',fontSize:fsPa,color:t.nuevas<0?RPT.RED_SOFT:RPT.GREEN,fill:{color:fill},align:'center',valign:'middle',bold:true}},
+          {text:String(t.cerro),options:{fontFace:'Arial',fontSize:fsPa,color:RPT.GREEN,fill:{color:fill},align:'center',valign:'middle',bold:true}},
+          {text:String(t.newPend),options:{fontFace:'Arial',fontSize:fsPa,fill:{color:fill},align:'center',valign:'middle',bold:true}},
+          {text:(t.oldPct!==null?t.oldPct+'%':'—')+' → '+(t.newPct!==null?t.newPct+'%':'—'),options:{fontFace:'Arial',fontSize:Math.max(6,fsPa-0.5),fill:{color:fill},align:'center',valign:'middle'}},
+        ];
+      });
+      const totGP = diffPrev.reduce((a,t)=>({oldPend:a.oldPend+t.oldPend,nuevas:a.nuevas+t.nuevas,cerro:a.cerro+t.cerro,newPend:a.newPend+t.newPend}),{oldPend:0,nuevas:0,cerro:0,newPend:0});
+      const oldTotDoneP = prevSnapshotPreventivos ? prevSnapshotPreventivos.data.filter(r=>r.done).length : null;
+      const oldTotAllP = prevSnapshotPreventivos ? prevSnapshotPreventivos.data.length : null;
+      const pctOldP = oldTotDoneP!==null && oldTotAllP ? Math.round(oldTotDoneP/oldTotAllP*100) : null;
+      const pctNewP = Math.round(nowSnapPreventivos.filter(r=>r.done).length/(nowSnapPreventivos.length||1)*100);
+      const totRowPa = ['TOTAL GENERAL',totGP.oldPend,(totGP.nuevas>=0?'+':'')+totGP.nuevas,totGP.cerro,totGP.newPend,(pctOldP!==null?pctOldP+'%':'—')+' → '+pctNewP+'%'].map(v=>({text:String(v),options:{bold:true,fontFace:'Arial',fontSize:fsPa,color:'FFFFFF',fill:{color:'2B2B2B'},align:'center',valign:'middle'}}));
+      totRowPa[0].options.align='left';
+      sAv.addTable([hdrPa,...bodyPa,totRowPa], {x:0.6,y:1.75,w:7.6,colW:[2.2,1.2,0.9,0.8,1.0,1.5],rowH:rowHPa,border:{type:'solid',color:'E2E8F0',pt:0.5},autoPage:false});
+
+      sAv.addText('Sin movimiento (siguen con pendientes)', { x:8.5, y:1.42, w:4.2, h:0.3, fontSize:12, bold:true, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+      const rowHPb = Math.max(0.17, availPa / (sinMovP.length + 2));
+      const fsPb = rowHPb < 0.22 ? 6.5 : (rowHPb < 0.30 ? 8 : 9);
+      const hdrPb = ['TÉCNICO','PEND.','% CUMPL.'].map(t=>({text:t,options:{bold:true,color:'FFFFFF',fill:{color:RPT.RED_DARK},fontFace:'Arial',fontSize:fsPb,align:'center',valign:'middle'}}));
+      const bodyPb = sinMovP.map((t,idx)=>{
+        const fill = idx%2===0?'FFFFFF':RPT.LIGHT_BG;
+        return [
+          {text:t.display,options:{fontFace:'Arial',fontSize:fsPb,color:RPT.NAVY_TEXT,fill:{color:fill},align:'left',valign:'middle',bold:true}},
+          {text:String(t.newPend),options:{fontFace:'Arial',fontSize:fsPb,fill:{color:fill},align:'center',valign:'middle',bold:true}},
+          {text:(t.newPct!==null?t.newPct+'%':'—'),options:{fontFace:'Arial',fontSize:fsPb,fill:{color:fill},align:'center',valign:'middle'}},
+        ];
+      });
+      const subtotalPb = sinMovP.reduce((a,t)=>a+t.newPend,0);
+      const totRowPb = ['SUBTOTAL',subtotalPb,''].map(v=>({text:String(v),options:{bold:true,fontFace:'Arial',fontSize:fsPb,color:'FFFFFF',fill:{color:'2B2B2B'},align:'center',valign:'middle'}}));
+      totRowPb[0].options.align='left';
+      sAv.addTable([hdrPb,...bodyPb,totRowPb], {x:8.5,y:1.75,w:4.2,colW:[2.4,0.9,0.9],rowH:rowHPb,border:{type:'solid',color:'E2E8F0',pt:0.5},autoPage:false});
+      sAv.addText('* El total de pendientes ('+totGP.newPend+') incluye a los técnicos sin movimiento.', {x:0.6,y:6.85,w:12.1,h:0.3,fontSize:8.5,italic:true,color:RPT.GREY_TEXT,fontFace:'Arial',margin:0});
+      addFooterRpt(sAv, page, footTxtPrev); page++;
+
+      // ---- Slide(s): línea pendientes semana anterior vs esta semana (preventivos) ----
+      const ordenLineaP = diffPrev.slice().sort((a,b)=>b.newPend-a.newPend);
+      const CHUNK_P = 13;
+      const chunksP = [];
+      for (let i=0;i<ordenLineaP.length;i+=CHUNK_P) chunksP.push(ordenLineaP.slice(i,i+CHUNK_P));
+      chunksP.forEach((chunk, ci) => {
+        let s = pres.addSlide();
+        s.background = { color: 'FFFFFF' };
+        const cerradasChunk = chunk.reduce((a,t)=>a+t.cerro,0);
+        const detalle = chunk.filter(t=>t.cerro>0).map(t=>t.display.split(' ').slice(-1)[0]+' '+t.cerro).join(', ');
+        addTitleRpt(s, `Pendientes y cierres por técnico · preventivos (${ci+1} de ${chunksP.length})`, `${cerradasChunk>0?('se cerraron '+cerradasChunk+(detalle?': '+detalle:'')):'ninguno cerró en la semana'}`);
+        s.addChart(pres.ChartType.line, [
+          { name: `Pendientes semana anterior (${fechaAntPrevStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.oldPend) },
+          { name: `Pendientes esta semana (${fechaHoyStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.newPend) },
+          { name: 'Cerradas esta semana', labels: chunk.map(t=>t.display), values: chunk.map(t=>t.cerro) },
+        ], {
+          x:0.6,y:1.5,w:12.1,h:5.5, showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+          chartColors:[RPT.GREY_MED, RPT.RED_SOFT, RPT.GREEN], lineDataSymbol:'circle', lineDataSymbolSize:6, lineSize:2,
+          catAxisLabelFontSize:9, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT, catAxisLabelRotate:35,
+          valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+          valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'}, showValue:true, dataLabelFontSize:8,
+        });
+        addFooterRpt(s, page, footTxtPrev); page++;
+      });
+    }
+
+    // ---- Slide: Histórico preventivos (stacked por mes) ----
     if (meses && meses.length) {
       const { displayName, porTecnico, mesesLabels } = procesarPreventivos(meses);
       const keysPrev = Object.keys(porTecnico).sort((a,b)=>{
@@ -632,7 +777,7 @@ async function generarInforme() {
         valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
         valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
       });
-      addFooterRpt(s9, page, 'Mantenimientos Preventivos · Bussié'); page++;
+      addFooterRpt(s9, page, footTxtPrev); page++;
     }
 
     const fechaArchivo = fechaHoy.toISOString().slice(0,10);
@@ -644,7 +789,14 @@ async function generarInforme() {
       headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
       body: JSON.stringify({ tipo:'solicitudes', fecha: fechaHoy.toISOString().slice(0,10), data: combinedNow })
     });
-    showStatus('✅ Informe generado y snapshot guardado para la próxima comparación.', 'ok');
+    if (nowSnapPreventivos) {
+      await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
+        method: 'POST',
+        headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
+        body: JSON.stringify({ tipo:'preventivos', fecha: fechaHoy.toISOString().slice(0,10), data: nowSnapPreventivos })
+      });
+    }
+    showStatus('✅ Informe generado y snapshots guardados (solicitudes'+(nowSnapPreventivos?' y preventivos':'')+') para la próxima comparación.', 'ok');
 
   } catch (e) {
     alert('No se pudo generar el informe: ' + e.message);
