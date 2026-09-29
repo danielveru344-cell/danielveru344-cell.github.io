@@ -70,10 +70,14 @@
   <div class="card" id="previewCard" style="display:none">
     <div class="section-title">Vista previa</div>
     <div class="stat-grid" id="statGrid"></div>
+    <div style="margin:14px 0 4px;font-size:12px;color:#0D2F5C;font-weight:700;">Fecha que representan estos datos</div>
+    <input type="date" id="fechaSnapshot" style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:13px;font-family:Arial;">
     <div class="row-actions">
       <button class="btn-blue" id="genBtn" onclick="generarInforme()">📊 Generar Informe Semanal</button>
+      <button class="btn-white" id="saveSnapBtn" onclick="guardarSoloSnapshot()">💾 Guardar solo como snapshot (sin generar informe)</button>
       <button class="btn-white" onclick="resetAll()">🔄 Empezar de nuevo</button>
     </div>
+    <div style="font-size:11px;color:#64748b;margin-top:8px;">Usa "Guardar solo como snapshot" si ya generaste el informe manualmente y solo quieres dejar estos datos guardados como el punto de comparación para la próxima vez — no descarga ningún PPTX.</div>
   </div>
 </div>
 
@@ -208,6 +212,8 @@ function renderPreview() {
     <div class="stat"><div class="n" style="color:#DC2626">${rechazadas}</div><div class="l">Rechazadas</div></div>
   `;
   document.getElementById('previewCard').style.display = 'block';
+  const fi = document.getElementById('fechaSnapshot');
+  if (fi && !fi.value) fi.value = new Date().toISOString().slice(0,10);
 }
 
 // ══════════════════════════════════════════════════
@@ -335,6 +341,34 @@ async function corregirIdsYDescargar(pres, fileName) {
 function buildTablaRows(headerLabels, dataRows, colW, fontSize) {
   const headerRow = headerLabels.map(t => ({ text:t, options:{ bold:true, color:'FFFFFF', fill:{color:RPT.RED_DARK}, fontFace:'Arial', fontSize, align:'center', valign:'middle' } }));
   return { headerRow };
+}
+
+async function guardarSoloSnapshot() {
+  const btn = document.getElementById('saveSnapBtn');
+  const original = btn.textContent;
+  const fechaInput = document.getElementById('fechaSnapshot');
+  const fecha = (fechaInput && fechaInput.value) ? fechaInput.value : new Date().toISOString().slice(0,10);
+  if (!combinedNow || !combinedNow.length) {
+    alert('Primero sube los dos Excel (Platino y Bussié).');
+    return;
+  }
+  if (!confirm(`Vas a guardar este estado (${combinedNow.length} solicitudes) como snapshot con fecha ${fecha}, sin generar ningún PPTX. ¿Confirmas?`)) return;
+  btn.disabled = true; btn.textContent = '⏳ Guardando…';
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
+      method: 'POST',
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
+      body: JSON.stringify({ tipo:'solicitudes', fecha, data: combinedNow })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showStatus(`✅ Snapshot guardado con fecha ${fecha} (${combinedNow.length} solicitudes). La próxima vez que generes el informe, se comparará contra esto.`, 'ok');
+    prevSnapshot = { fecha, data: combinedNow };
+    document.getElementById('snapInfo').innerHTML = `📅 Se comparará contra el snapshot guardado el <b>${fecha}</b> (${combinedNow.length} solicitudes).`;
+  } catch (e) {
+    showStatus('⚠️ No se pudo guardar el snapshot: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
 }
 
 async function generarInforme() {
