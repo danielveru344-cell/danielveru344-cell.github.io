@@ -72,6 +72,8 @@
     <div class="stat-grid" id="statGrid"></div>
     <div style="margin:14px 0 4px;font-size:12px;color:#0D2F5C;font-weight:700;">Fecha que representan estos datos</div>
     <input type="date" id="fechaSnapshot" style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:13px;font-family:Arial;">
+    <div style="margin:14px 0 4px;font-size:12px;color:#0D2F5C;font-weight:700;">Mes de la diapositiva mensual (solicitudes)</div>
+    <input type="month" id="mesInforme" style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:13px;font-family:Arial;">
     <div class="row-actions">
       <button class="btn-blue" id="genBtn" onclick="generarInforme()">📊 Generar Informe Semanal</button>
       <button class="btn-white" id="saveSnapBtn" onclick="guardarSoloSnapshot()">💾 Guardar solo como snapshot (sin generar informe)</button>
@@ -121,6 +123,18 @@ function fechaLocalISO(d) {
 const MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 function fmtFechaLarga(d) {
   return d.getDate() + ' de ' + MESES_LARGO[d.getMonth()];
+}
+// Texto de la portada, igual que en el informe anterior: "SEMANA DEL 18 AL 29 DE SEPTIEMBRE"
+function periodoPortada(d1, d2) {
+  const mismoMes = d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
+  return mismoMes
+    ? 'SEMANA DEL ' + d1.getDate() + ' AL ' + d2.getDate() + ' DE ' + MESES_LARGO[d2.getMonth()].toUpperCase()
+    : 'SEMANA DEL ' + fmtFechaLarga(d1).toUpperCase() + ' AL ' + fmtFechaLarga(d2).toUpperCase();
+}
+// Mes de la diapositiva mensual: por defecto el del informe anterior (el mes que se venía siguiendo);
+// sin informe anterior, el mes actual. Se puede cambiar en el selector "Mes de la diapositiva mensual".
+function mesPorDefecto() {
+  return prevSnapshot ? String(prevSnapshot.fecha).slice(0, 7) : fechaLocalISO(new Date()).slice(0, 7);
 }
 
 async function cargarUltimoSnapshotTipo(tipo) {
@@ -244,6 +258,8 @@ function renderPreview() {
   document.getElementById('previewCard').style.display = 'block';
   const fi = document.getElementById('fechaSnapshot');
   if (fi && !fi.value) fi.value = fechaLocalISO(new Date());
+  const mi = document.getElementById('mesInforme');
+  if (mi && !mi.value) mi.value = mesPorDefecto();
 }
 
 // ══════════════════════════════════════════════════
@@ -488,8 +504,13 @@ async function generarInforme() {
     // ---- Slide 1: Portada ----
     let s1 = pres.addSlide();
     s1.background = { path: 'assets/sanfer_cover.png' };
-    s1.addText('SOLICITUDES DE\nMANTENIMIENTO', { x:7.3, y:2.55, w:5.4, h:1.7, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0 });
-    s1.addText(prevSnapshot ? ('Del ' + fmtFechaLarga(parseFechaISO(prevSnapshot.fecha)) + ' al ' + fmtFechaLarga(fechaHoy) + ' de ' + fechaHoy.getFullYear()) : 'Avance semanal por técnico', { x:7.35, y:4.05, w:5.4, h:0.5, fontSize:15, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+    if (prevSnapshot) {
+      // Igual que el informe anterior: título y periodo en el mismo bloque, mismo estilo
+      s1.addText('SOLICITUDES DE\nMANTENIMIENTO\n' + periodoPortada(parseFechaISO(prevSnapshot.fecha), fechaHoy), { x:7.3, y:1.95, w:5.4, h:3.0, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0, valign:'top' });
+    } else {
+      s1.addText('SOLICITUDES DE\nMANTENIMIENTO', { x:7.3, y:2.55, w:5.4, h:1.7, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0 });
+      s1.addText('Avance semanal por técnico', { x:7.35, y:4.05, w:5.4, h:0.5, fontSize:15, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+    }
 
     let page = 2;
     const footTxt = 'Solicitudes de Mantenimiento · Platino y Bussié';
@@ -575,7 +596,7 @@ async function generarInforme() {
     let s5 = pres.addSlide();
     s5.background = { color: 'FFFFFF' };
     const rango = `Solicitudes de enero 2025 al ${fechaHoyStr}/${fechaHoy.getFullYear()}`;
-    addTitleRpt(s5, 'Histórico por técnico · Platino y Bussié', `${rango}, ambas sedes juntas · técnicos con pendientes`);
+    addTitleRpt(s5, 'Histórico por técnico · Platino y Bussié', rango);
     const histOrden = diff.slice().sort((a,b)=> (b.newPend) - (a.newPend));
     // recompute per-plant pendientes for stacked bar using combinedNow directly
     const histPorTec = {};
@@ -652,18 +673,22 @@ async function generarInforme() {
     });
     addFooterRpt(s6, page, footTxt); page++;
 
-    // ---- Slide 7: mes actual (stacked) ----
-    const mesActualNum = HOY.getMonth()+1, anioActual = HOY.getFullYear();
-    function esMesActual(raw) {
+    // ---- Slide 7: mes de seguimiento (stacked) ----
+    // Por defecto el mes del informe anterior (p. ej. septiembre mientras se cierra), no "el mes de hoy".
+    const selMes = ((document.getElementById('mesInforme') || {}).value) || mesPorDefecto();
+    const anioMes = parseInt(selMes.slice(0, 4), 10), mesNum = parseInt(selMes.slice(5, 7), 10);
+    const finMes = new Date(anioMes, mesNum, 0);                 // último día del mes elegido
+    const hastaMes = finMes > HOY ? HOY : finMes;                // si el mes sigue en curso, hasta hoy
+    function esMesSel(raw) {
       const clean = String(raw||'').replace(/[^\d/]/g,'');
       const m = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
       if (!m) return false;
-      return parseInt(m[2])===mesActualNum && parseInt(m[3])===anioActual;
+      return parseInt(m[2])===mesNum && parseInt(m[3])===anioMes;
     }
     const mesPorTec = {};
     function acumMes(rowsRaw, plantTag) {
       rowsRaw.forEach(r=>{
-        if (!esMesActual(r['F. Solicitud'])) return;
+        if (!esMesSel(r['F. Solicitud'])) return;
         const key = normTechKey((r['Técnico Asignado']||'').toString().trim() || 'Sin asignar');
         const disp = (r['Técnico Asignado']||'').toString().trim() || 'Sin asignar';
         if (!mesPorTec[key]) mesPorTec[key] = {display:disp, cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0};
@@ -678,10 +703,9 @@ async function generarInforme() {
     const totalMes = mesList.reduce((a,h)=>a+h.cerradas+h.pendPlatino+h.pendBussie+h.rechazadas,0);
     const cerradasMes = mesList.reduce((a,h)=>a+h.cerradas,0);
     const pctMes = totalMes? Math.round(cerradasMes/totalMes*100):0;
-    const MESES_ES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
     let s7 = pres.addSlide();
     s7.background = { color: 'FFFFFF' };
-    addTitleRpt(s7, `${MESES_ES[mesActualNum-1][0].toUpperCase()+MESES_ES[mesActualNum-1].slice(1)} ${anioActual} · Platino y Bussié`, `Solicitudes recibidas entre el 1/${mesActualNum} y el ${fechaHoyStr}/${anioActual}· ${totalMes} solicitudes, ${cerradasMes} cerradas (${pctMes}%)`);
+    addTitleRpt(s7, `${MESES_LARGO[mesNum-1][0].toUpperCase()+MESES_LARGO[mesNum-1].slice(1)} ${anioMes} · Platino y Bussié`, `Solicitudes recibidas entre el 1/${mesNum} y el ${fmtFechaCorta(hastaMes)}/${anioMes} · ${totalMes} solicitudes, ${cerradasMes} cerradas (${pctMes}%)`);
     s7.addChart(pres.ChartType.bar, [
       {name:'Cerradas', labels:mesList.map(h=>h.display), values:mesList.map(h=>h.cerradas)},
       {name:'Pendientes Bussié', labels:mesList.map(h=>h.display), values:mesList.map(h=>h.pendBussie)},
@@ -701,7 +725,7 @@ async function generarInforme() {
     let s8 = pres.addSlide();
     s8.background = { path: 'assets/sanfer_cover.png' };
     s8.addText('MANTENIMIENTOS\nPREVENTIVOS', { x:7.3, y:2.5, w:5.4, h:1.7, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0 });
-    s8.addText('Avance semana a semana por técnico\nSeguimiento MAYO — SEPTIEMBRE', { x:7.35, y:4.0, w:5.4, h:0.8, fontSize:14, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+    s8.addText('Avance semanal por técnico\nSeguimiento MAYO — SEPTIEMBRE', { x:7.35, y:4.0, w:5.4, h:0.8, fontSize:14, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
 
     const footTxtPrev = 'Mantenimientos Preventivos · Bussié';
     const meses = await cargarPreventivos();
@@ -796,7 +820,7 @@ async function generarInforme() {
       });
       let s9 = pres.addSlide();
       s9.background = { color: 'FFFFFF' };
-      addTitleRpt(s9, 'Histórico por técnico · preventivos', 'Mayo a septiembre 2026 · realizados y pendientes según el mes en que se programaron');
+      addTitleRpt(s9, 'Histórico por técnico · preventivos', 'Mayo a septiembre 2026 · realizados y pendientes por mes');
       const seriesPrev = [{name:'Realizados', labels:keysPrev.map(k=>displayName[k]), values:keysPrev.map(k=>porTecnico[k].realizado), color:RPT.GREEN}];
       const paleta = ['FECACA','FCA5A5','F87171','DC2626','7F1D1D','7F1D1D'];
       mesesLabels.forEach((mesLbl, i) => {
