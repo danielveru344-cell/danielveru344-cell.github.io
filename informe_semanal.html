@@ -110,6 +110,18 @@ function clasificarEstado(estadoRaw) {
 function fmtFechaCorta(d) {
   return d.getDate() + '/' + (d.getMonth() + 1);
 }
+// 'AAAA-MM-DD' -> Date a mediodía local (new Date('AAAA-MM-DD') se lee como UTC y puede mostrar el día anterior)
+function parseFechaISO(s) {
+  return new Date(String(s).slice(0, 10) + 'T12:00:00');
+}
+// Date -> 'AAAA-MM-DD' con la fecha LOCAL (toISOString usa UTC y de noche daría el día siguiente)
+function fechaLocalISO(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+const MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function fmtFechaLarga(d) {
+  return d.getDate() + ' de ' + MESES_LARGO[d.getMonth()];
+}
 
 async function cargarUltimoSnapshotTipo(tipo) {
   const r = await fetch(`${SUPA_URL}/rest/v1/informe_snapshots?tipo=eq.${tipo}&select=fecha,data,creado_en&order=creado_en.desc&limit=1`, {
@@ -187,19 +199,27 @@ function resetAll() {
 document.getElementById('inputPlatino').addEventListener('change', (e) => handleFile(e.target.files[0], 'platino'));
 document.getElementById('inputBussie').addEventListener('change', (e) => handleFile(e.target.files[0], 'bussie'));
 
+// Fecha de solicitud limpia (dd/mm/aaaa). Se guarda en el snapshot para poder
+// calcular también las "abiertas de más de 1 mes" de la semana anterior.
+function limpiarFecha(raw) {
+  const m = String(raw || '').replace(/[^\d/]/g, '').match(/^(\d{1,2}\/\d{1,2}\/\d{4})/);
+  return m ? m[1] : '';
+}
 function combinarDatos() {
   const out = [];
   (rowsPlatino || []).forEach(r => out.push({
     numero: String(r['Número de Solictud'] || '').trim(),
     tecnico: (r['Técnico Asignado'] || '').toString().trim() || 'Sin asignar',
     estado: clasificarEstado(r['Estado']),
-    plant: 'platino'
+    plant: 'platino',
+    fecha: limpiarFecha(r['F. Solicitud'])
   }));
   (rowsBussie || []).forEach(r => out.push({
     numero: String(r['Número de Solictud'] || '').trim(),
     tecnico: (r['Técnico Asignado'] || '').toString().trim() || 'Sin asignar',
     estado: clasificarEstado(r['Estado']),
-    plant: 'bussie'
+    plant: 'bussie',
+    fecha: limpiarFecha(r['F. Solicitud'])
   }));
   return out;
 }
@@ -223,7 +243,7 @@ function renderPreview() {
   `;
   document.getElementById('previewCard').style.display = 'block';
   const fi = document.getElementById('fechaSnapshot');
-  if (fi && !fi.value) fi.value = new Date().toISOString().slice(0,10);
+  if (fi && !fi.value) fi.value = fechaLocalISO(new Date());
 }
 
 // ══════════════════════════════════════════════════
@@ -256,7 +276,7 @@ function calcularDiff() {
     else if (r.estado === 'cerrada') t.newCerr++;
     else if (r.estado === 'rechazada') t.newRech++;
     // ¿esta solicitud estaba pendiente en el snapshot viejo bajo este mismo técnico y ahora está cerrada?
-    const old = oldByNum[r.plant + '|' + r.numero];
+    const old = r.numero ? oldByNum[r.plant + '|' + r.numero] : null;
     if (old && old.estado === 'pendiente' && normTechKey(old.tecnico) === key && r.estado === 'cerrada') {
       t.cerroEstaSemana++;
     }
@@ -270,7 +290,7 @@ function calcularDiff() {
     return {
       key, display: t.display, oldPend: t.oldPend, nuevas, cerro: t.cerroEstaSemana,
       newPend: t.newPend, oldPct, newPct,
-      conMovimiento: (nuevas !== 0 || t.cerro !== 0) && prevSnapshot,
+      conMovimiento: (nuevas !== 0 || t.cerroEstaSemana !== 0) && !!prevSnapshot,
     };
   }).filter(t => t.newPend > 0 || t.oldPend > 0);
 
@@ -405,11 +425,30 @@ function buildTablaRows(headerLabels, dataRows, colW, fontSize) {
   return { headerRow };
 }
 
+// Resumen corto de cierres para los subtítulos: "se cerraron 13: Perilla 13, Verano 13, Sandoval 7 y 2 más"
+function nombreCorto(display, todos) {
+  const palabras = String(display).trim().split(/\s+/);
+  const ultimo = palabras[palabras.length - 1];
+  const repetido = todos.filter(x => String(x.display).trim().split(/\s+/).slice(-1)[0].toUpperCase() === ultimo.toUpperCase()).length > 1;
+  const w = repetido && palabras.length > 1 ? palabras.slice(-2) : [ultimo];
+  return w.map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join(' ');
+}
+function resumenCierres(chunk, todos) {
+  const total = chunk.reduce((a, t) => a + t.cerro, 0);
+  if (!total) return 'ninguno cerró en la semana';
+  const con = chunk.filter(t => t.cerro > 0).sort((a, b) => b.cerro - a.cerro);
+  const nombres = con.slice(0, 4).map(t => nombreCorto(t.display, todos) + ' ' + t.cerro);
+  const resto = con.length - nombres.length;
+  const lista = resto > 0 ? nombres.join(', ') + ' y ' + resto + ' más'
+    : (nombres.length > 1 ? nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1] : nombres[0]);
+  return 'se cerraron ' + total + ': ' + lista;
+}
+
 async function guardarSoloSnapshot() {
   const btn = document.getElementById('saveSnapBtn');
   const original = btn.textContent;
   const fechaInput = document.getElementById('fechaSnapshot');
-  const fecha = (fechaInput && fechaInput.value) ? fechaInput.value : new Date().toISOString().slice(0,10);
+  const fecha = (fechaInput && fechaInput.value) ? fechaInput.value : fechaLocalISO(new Date());
   if (!combinedNow || !combinedNow.length) {
     alert('Primero sube los dos Excel (Platino y Bussié).');
     return;
@@ -441,7 +480,7 @@ async function generarInforme() {
     const diff = calcularDiff();
     const fechaHoy = new Date();
     const fechaHoyStr = fmtFechaCorta(fechaHoy);
-    const fechaAntStr = prevSnapshot ? fmtFechaCorta(new Date(prevSnapshot.fecha)) : fechaHoyStr;
+    const fechaAntStr = prevSnapshot ? fmtFechaCorta(parseFechaISO(prevSnapshot.fecha)) : fechaHoyStr;
 
     const pres = new PptxGenJS();
     pres.layout = 'LAYOUT_WIDE';
@@ -450,7 +489,7 @@ async function generarInforme() {
     let s1 = pres.addSlide();
     s1.background = { path: 'assets/sanfer_cover.png' };
     s1.addText('SOLICITUDES DE\nMANTENIMIENTO', { x:7.3, y:2.55, w:5.4, h:1.7, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0 });
-    s1.addText('Avance semanal por técnico', { x:7.35, y:4.05, w:5.4, h:0.5, fontSize:15, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+    s1.addText(prevSnapshot ? ('Del ' + fmtFechaLarga(parseFechaISO(prevSnapshot.fecha)) + ' al ' + fmtFechaLarga(fechaHoy) + ' de ' + fechaHoy.getFullYear()) : 'Avance semanal por técnico', { x:7.35, y:4.05, w:5.4, h:0.5, fontSize:15, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
 
     let page = 2;
     const footTxt = 'Solicitudes de Mantenimiento · Platino y Bussié';
@@ -514,11 +553,9 @@ async function generarInforme() {
     chunks.forEach((chunk, ci) => {
       let s = pres.addSlide();
       s.background = { color: 'FFFFFF' };
-      const cerradasChunk = chunk.reduce((a,t)=>a+t.cerro,0);
-      const detalle = chunk.filter(t=>t.cerro>0).map(t=>t.display.split(' ').slice(-1)[0]+' '+t.cerro).join(', ');
-      const subtitle2 = chunks.length>1
-        ? `Platino y Bussié juntas · ${ci===0?'resto de técnicos con pendientes':'resto de técnicos con pendientes'} · ${cerradasChunk>0?('se cerraron '+cerradasChunk+(detalle?': '+detalle:'')):'ninguno cerró en la semana'}`
-        : `se cerraron ${cerradasChunk}${detalle?': '+detalle:''}`;
+      const subtitle2 = ci === 0
+        ? resumenCierres(chunk, diff)
+        : `Platino y Bussié juntas · resto de técnicos con pendientes · ${resumenCierres(chunk, diff)}`;
       addTitleRpt(s, `Pendientes y cierres por técnico (${ci+1} de ${chunks.length})`, subtitle2);
       s.addChart(pres.ChartType.line, [
         { name: `Pendientes semana anterior (${fechaAntStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.oldPend) },
@@ -551,7 +588,8 @@ async function generarInforme() {
       else if (r.estado==='rechazada') h.rechazadas++;
       else if (r.estado==='pendiente') { if (r.plant==='platino') h.pendPlatino++; else h.pendBussie++; }
     });
-    const histList = Object.values(histPorTec).sort((a,b)=>(b.cerradas+b.pendPlatino+b.pendBussie+b.rechazadas)-(a.cerradas+a.pendPlatino+a.pendBussie+a.rechazadas));
+    // Solo técnicos con pendientes (como dice el subtítulo y como en el informe de referencia)
+    const histList = Object.values(histPorTec).filter(h => h.pendPlatino + h.pendBussie > 0).sort((a,b)=>(b.cerradas+b.pendPlatino+b.pendBussie+b.rechazadas)-(a.cerradas+a.pendPlatino+a.pendBussie+a.rechazadas));
     s5.addChart(pres.ChartType.bar, [
       {name:'Cerradas', labels:histList.map(h=>h.display), values:histList.map(h=>h.cerradas)},
       {name:'Pendientes Bussié', labels:histList.map(h=>h.display), values:histList.map(h=>h.pendBussie)},
@@ -569,49 +607,45 @@ async function generarInforme() {
 
     // ---- Slide 6: Abiertas de más de 1 mes ----
     const HOY = fechaHoy;
-    function diasAbierto(rows, refDateStr) { return null; }
-    // Para "más de 30 días" usamos la fecha de hoy contra F. Solicitud del archivo actual,
-    // y comparamos contra el conteo que había en el snapshot anterior para ese mismo técnico.
-    function contarVencidas(rowsRaw, plantTag) {
+    // Pendientes con más de 30 días abiertas, por técnico, a una fecha de referencia.
+    function contarVencidas(filas, refDate) {
       const out = {};
-      rowsRaw.forEach(r => {
-        const clase = clasificarEstado(r['Estado']);
-        if (clase !== 'pendiente') return;
-        const raw = String(r['F. Solicitud'] || '').replace(/[^\d/]/g,'');
-        const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      filas.forEach(r => {
+        if (r.estado !== 'pendiente' || !r.fecha) return;
+        const m = r.fecha.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
         if (!m) return;
-        const f = new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
-        const dias = (HOY - f) / (1000*60*60*24);
-        if (dias > 30) {
-          const key = normTechKey((r['Técnico Asignado']||'').toString().trim() || 'Sin asignar');
-          out[key] = (out[key]||0) + 1;
+        const f = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+        if ((refDate - f) / 86400000 > 30) {
+          const key = normTechKey(r.tecnico);
+          out[key] = (out[key] || 0) + 1;
         }
       });
       return out;
     }
-    const vencidasNow = Object.assign({}, contarVencidas(rowsPlatino,'platino'), {});
-    const vp = contarVencidas(rowsPlatino,'platino'), vb = contarVencidas(rowsBussie,'bussie');
-    const vencidasNowCombined = {};
-    Object.keys(vp).forEach(k=>vencidasNowCombined[k]=(vencidasNowCombined[k]||0)+vp[k]);
-    Object.keys(vb).forEach(k=>vencidasNowCombined[k]=(vencidasNowCombined[k]||0)+vb[k]);
-    const vencidasOld = {};
-    if (prevSnapshot) {
-      // No tenemos fecha de solicitud en el snapshot viejo (solo numero/tecnico/estado),
-      // así que usamos como referencia el conteo de pendientes viejo total por técnico
-      // como aproximación de "semana anterior" para este gráfico.
-      diff.forEach(t => { vencidasOld[t.key] = null; });
-    }
-    const keysVenc = Object.keys(vencidasNowCombined).sort((a,b)=>vencidasNowCombined[b]-vencidasNowCombined[a]);
+    const vencNow = contarVencidas(combinedNow, HOY);
+    // La comparación con la semana anterior solo es posible si el snapshot viejo ya guardó
+    // la fecha de cada solicitud (los snapshots nuevos la guardan; los muy antiguos no).
+    const snapConFecha = !!(prevSnapshot && prevSnapshot.data.some(r => r.fecha));
+    const vencOld = snapConFecha ? contarVencidas(prevSnapshot.data, parseFechaISO(prevSnapshot.fecha)) : null;
+    const keysVenc = Object.keys(Object.assign({}, vencNow, vencOld || {}))
+      .sort((a, b) => (vencNow[b] || 0) - (vencNow[a] || 0) || ((vencOld || {})[b] || 0) - ((vencOld || {})[a] || 0));
     let s6 = pres.addSlide();
     s6.background = { color: 'FFFFFF' };
-    addTitleRpt(s6, 'Abiertas de más de 1 mes', `pendientes con más de 30 días, ${fechaAntStr} vs. ${fechaHoyStr}/${fechaHoy.getFullYear()}`);
-    const displayVenc = keysVenc.map(k => (diff.find(t=>t.key===k)||{}).display || k);
-    s6.addChart(pres.ChartType.bar, [
-      {name:`Esta semana (${fechaHoyStr})`, labels:displayVenc, values:keysVenc.map(k=>vencidasNowCombined[k])},
-    ], {
+    addTitleRpt(s6, 'Abiertas de más de 1 mes', vencOld
+      ? `pendientes con más de 30 días, ${fechaAntStr} vs. ${fechaHoyStr}/${fechaHoy.getFullYear()}`
+      : `pendientes con más de 30 días, al ${fechaHoyStr}/${fechaHoy.getFullYear()}`);
+    const displayVenc = keysVenc.map(k => (diff.find(t => t.key === k) || {}).display || k);
+    const seriesVenc = [], coloresVenc = [];
+    if (vencOld) {
+      seriesVenc.push({ name: `Semana anterior (${fechaAntStr})`, labels: displayVenc, values: keysVenc.map(k => vencOld[k] || 0) });
+      coloresVenc.push(RPT.GREY_MED);
+    }
+    seriesVenc.push({ name: `Esta semana (${fechaHoyStr})`, labels: displayVenc, values: keysVenc.map(k => vencNow[k] || 0) });
+    coloresVenc.push(RPT.RED_SOFT);
+    s6.addChart(pres.ChartType.bar, seriesVenc, {
       x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'clustered',
       showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
-      chartColors:[RPT.RED_SOFT], showValue:true, dataLabelFontSize:9,
+      chartColors:coloresVenc, showValue:true, dataLabelFontSize:9,
       catAxisLabelFontSize:9.5, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
       valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
       valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
@@ -675,7 +709,7 @@ async function generarInforme() {
     if (meses && meses.length) {
       nowSnapPreventivos = snapshotPreventivos(meses);
       const diffPrev = calcularDiffPreventivos(nowSnapPreventivos, prevSnapshotPreventivos ? prevSnapshotPreventivos.data : null);
-      const fechaAntPrevStr = prevSnapshotPreventivos ? fmtFechaCorta(new Date(prevSnapshotPreventivos.fecha)) : fechaHoyStr;
+      const fechaAntPrevStr = prevSnapshotPreventivos ? fmtFechaCorta(parseFechaISO(prevSnapshotPreventivos.fecha)) : fechaHoyStr;
 
       // ---- Slide: Avance por técnico (preventivos) ----
       const conMovP = diffPrev.filter(t => t.conMovimiento).sort((a,b)=>b.newPend-a.newPend);
@@ -735,9 +769,8 @@ async function generarInforme() {
       chunksP.forEach((chunk, ci) => {
         let s = pres.addSlide();
         s.background = { color: 'FFFFFF' };
-        const cerradasChunk = chunk.reduce((a,t)=>a+t.cerro,0);
-        const detalle = chunk.filter(t=>t.cerro>0).map(t=>t.display.split(' ').slice(-1)[0]+' '+t.cerro).join(', ');
-        addTitleRpt(s, `Pendientes y cierres por técnico · preventivos (${ci+1} de ${chunksP.length})`, `${cerradasChunk>0?('se cerraron '+cerradasChunk+(detalle?': '+detalle:'')):'ninguno cerró en la semana'}`);
+        addTitleRpt(s, `Pendientes y cierres por técnico · preventivos (${ci+1} de ${chunksP.length})`,
+          (ci === 0 ? '' : 'resto de técnicos con pendientes · ') + resumenCierres(chunk, diffPrev));
         s.addChart(pres.ChartType.line, [
           { name: `Pendientes semana anterior (${fechaAntPrevStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.oldPend) },
           { name: `Pendientes esta semana (${fechaHoyStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.newPend) },
@@ -780,20 +813,20 @@ async function generarInforme() {
       addFooterRpt(s9, page, footTxtPrev); page++;
     }
 
-    const fechaArchivo = fechaHoy.toISOString().slice(0,10);
+    const fechaArchivo = fechaLocalISO(fechaHoy);
     await corregirIdsYDescargar(pres, `Informe_Semanal_${fechaArchivo}.pptx`);
 
     // Guardar snapshot nuevo
     await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
       method: 'POST',
       headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
-      body: JSON.stringify({ tipo:'solicitudes', fecha: fechaHoy.toISOString().slice(0,10), data: combinedNow })
+      body: JSON.stringify({ tipo:'solicitudes', fecha: fechaLocalISO(fechaHoy), data: combinedNow })
     });
     if (nowSnapPreventivos) {
       await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
         method: 'POST',
         headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
-        body: JSON.stringify({ tipo:'preventivos', fecha: fechaHoy.toISOString().slice(0,10), data: nowSnapPreventivos })
+        body: JSON.stringify({ tipo:'preventivos', fecha: fechaLocalISO(fechaHoy), data: nowSnapPreventivos })
       });
     }
     showStatus('✅ Informe generado y snapshots guardados (solicitudes'+(nowSnapPreventivos?' y preventivos':'')+') para la próxima comparación.', 'ok');
