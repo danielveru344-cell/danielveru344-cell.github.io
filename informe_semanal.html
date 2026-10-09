@@ -445,6 +445,46 @@ function addTitleRpt(slide, title, subtitle) {
   if (subtitle) slide.addText(subtitle, { x: 0.6, y: 0.97, w: 12.1, h: 0.35, fontSize: 12.5, color: RPT.GREY_TEXT, fontFace: 'Arial', margin: 0 });
 }
 
+// Etiquetas de datos de una serie (números sobre/dentro de las barras y los puntos)
+// Preventivos: el informe solo lleva la gráfica de barras (histórico). Las diapositivas de "avance por técnico"
+// y de líneas de preventivos quedan apagadas; poner en true para volver a incluirlas.
+const INCLUIR_AVANCE_PREVENTIVOS = false;
+
+function xmlDLbls(c) {
+  return '<c:dLbls><c:numFmt formatCode="' + c.fmt + '" sourceLinked="0"/>'
+    + '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr b="' + c.bold + '" i="0" strike="noStrike" sz="' + c.sz + '" u="none">'
+    + '<a:solidFill><a:srgbClr val="' + c.color + '"/></a:solidFill><a:latin typeface="Arial"/></a:defRPr></a:pPr></a:p></c:txPr>'
+    + '<c:dLblPos val="' + c.pos + '"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/>'
+    + '<c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="0"/></c:dLbls>';
+}
+// Deja las gráficas como en el informe anterior: números dentro de las barras (blancos, sin ceros),
+// y en las líneas números en negrita del color de cada serie, con líneas y marcadores de distinto grosor.
+function estilizarGrafica(xml) {
+  const esLinea = xml.indexOf('<c:lineChart>') >= 0;
+  return xml.replace(/<c:ser>[\s\S]*?<\/c:ser>/g, (ser) => {
+    const m = ser.match(/<c:tx>[\s\S]*?<c:v>([^<]*)<\/c:v>/);
+    const nombre = m ? m[1] : '';
+    let cfg = null, linea = null;
+    if (esLinea) {
+      if (nombre.indexOf('Pendientes semana anterior') === 0) { cfg = { pos:'b', sz:1100, bold:1, color:'7C8591', fmt:'#,##0' }; linea = { w:25400, marker:6 }; }
+      else if (nombre.indexOf('Pendientes esta semana') === 0) { cfg = { pos:'t', sz:1100, bold:1, color:'DC2626', fmt:'#,##0' }; linea = { w:38100, marker:8 }; }
+      else if (nombre.indexOf('Cerradas esta semana') === 0) { cfg = { pos:'t', sz:1100, bold:1, color:'16A34A', fmt:'#,##0' }; linea = { w:38100, marker:7 }; }
+    } else if (['Cerradas','Pendientes Bussié','Pendientes Platino','Rechazadas'].indexOf(nombre) >= 0) {
+      cfg = { pos:'ctr', sz:900, bold:0, color:'FFFFFF', fmt:'0;;;' };
+    } else if (nombre === 'Realizados' || /^Pend\. /.test(nombre)) {
+      const claro = nombre === 'Pend. mayo' || nombre === 'Pend. junio';   // fondos claros: texto oscuro
+      cfg = { pos:'ctr', sz:900, bold:1, color: claro ? '2B2B2B' : 'FFFFFF', fmt:'0;;;' };
+    }
+    if (!cfg) return ser;
+    let out = ser.replace(/<c:dLbls>[\s\S]*?<\/c:dLbls>/, xmlDLbls(cfg));
+    if (linea) {
+      out = out.replace(/(<c:spPr>[\s\S]*?<a:ln w=")\d+(")/, '$1' + linea.w + '$2')
+               .replace(/(<c:marker>\s*<c:symbol val="circle"\/>\s*<c:size val=")\d+(")/, '$1' + linea.marker + '$2');
+    }
+    return out;
+  });
+}
+
 async function corregirIdsYDescargar(pres, fileName) {
   const blob = await pres.write({ outputType: 'blob' });
   const zip = await JSZip.loadAsync(blob);
@@ -454,6 +494,10 @@ async function corregirIdsYDescargar(pres, fileName) {
     let counter = 0;
     const fixed = xml.replace(/(<p:cNvPr\s+id=")(\d+)(")/g, (m, pre, oldId, post) => { counter++; return pre + counter + post; });
     zip.file(f, fixed);
+  }
+  const chartFiles = Object.keys(zip.files).filter(f => /^ppt\/charts\/chart\d+\.xml$/.test(f));
+  for (const f of chartFiles) {
+    zip.file(f, estilizarGrafica(await zip.file(f).async('string')));
   }
   const fixedBlob = await zip.generateAsync({ type: 'blob' });
   const url = URL.createObjectURL(fixedBlob);
@@ -610,10 +654,10 @@ async function generarInforme() {
         { name: `Pendientes esta semana (${fechaHoyStr})`, labels: chunk.map(t=>nombreTabla(t.display)), values: chunk.map(t=>t.newPend) },
         { name: 'Cerradas esta semana', labels: chunk.map(t=>nombreTabla(t.display)), values: chunk.map(t=>t.cerro) },
       ], {
-        x:0.6,y:1.5,w:12.1,h:5.5, showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+        x:0.6,y:1.5,w:12.1,h:5.5, showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
         chartColors:[RPT.GREY_MED, RPT.RED_SOFT, RPT.GREEN], lineDataSymbol:'circle', lineDataSymbolSize:6, lineSize:2,
-        catAxisLabelFontSize:9, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT, catAxisLabelRotate:35,
-        valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+        catAxisLabelFontSize:9, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+        valAxisLabelFontSize:10, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
         valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'}, showValue:true, dataLabelFontSize:8,
       });
       addFooterRpt(s, page, footTxt); page++;
@@ -644,11 +688,11 @@ async function generarInforme() {
       {name:'Pendientes Platino', labels:histList.map(h=>h.display), values:histList.map(h=>h.pendPlatino)},
       {name:'Rechazadas', labels:histList.map(h=>h.display), values:histList.map(h=>h.rechazadas)},
     ], {
-      x:0.6,y:1.45,w:12.1,h:5.55, barDir:'bar', barGrouping:'stacked',
-      showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+      x:0.6,y:1.45,w:12.1,h:5.55, barDir:'bar', barGrouping:'stacked', barGapWidthPct:35,
+      showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
       chartColors:[RPT.GREEN, RPT.BLUE, RPT.RED_SOFT, RPT.GREY_MED],
-      catAxisLabelFontSize:8.5, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
-      valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+      catAxisLabelFontSize:10, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+      valAxisLabelFontSize:10, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
       valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
     });
     addFooterRpt(s5, page, footTxt); page++;
@@ -691,11 +735,11 @@ async function generarInforme() {
     seriesVenc.push({ name: `Esta semana (${fechaHoyStr})`, labels: displayVenc, values: keysVenc.map(k => vencNow[k] || 0) });
     coloresVenc.push(RPT.RED_SOFT);
     s6.addChart(pres.ChartType.bar, seriesVenc, {
-      x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'clustered',
-      showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+      x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'clustered', barGapWidthPct:40,
+      showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
       chartColors:coloresVenc, showValue:true, dataLabelFontSize:9,
-      catAxisLabelFontSize:9.5, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
-      valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+      catAxisLabelFontSize:10, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+      valAxisLabelFontSize:10, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
       valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
     });
     addFooterRpt(s6, page, footTxt); page++;
@@ -739,11 +783,11 @@ async function generarInforme() {
       {name:'Pendientes Platino', labels:mesList.map(h=>h.display), values:mesList.map(h=>h.pendPlatino)},
       {name:'Rechazadas', labels:mesList.map(h=>h.display), values:mesList.map(h=>h.rechazadas)},
     ], {
-      x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'stacked',
-      showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+      x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'stacked', barGapWidthPct:35,
+      showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
       chartColors:[RPT.GREEN, RPT.BLUE, RPT.RED_SOFT, RPT.GREY_MED],
-      catAxisLabelFontSize:9.5, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
-      valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+      catAxisLabelFontSize:10, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+      valAxisLabelFontSize:10, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
       valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
     });
     addFooterRpt(s7, page, footTxt); page++;
@@ -762,6 +806,7 @@ async function generarInforme() {
       const diffPrev = calcularDiffPreventivos(nowSnapPreventivos, prevSnapshotPreventivos ? prevSnapshotPreventivos.data : null);
       const fechaAntPrevStr = prevSnapshotPreventivos ? fmtFechaCorta(parseFechaISO(prevSnapshotPreventivos.fecha)) : fechaHoyStr;
 
+      if (INCLUIR_AVANCE_PREVENTIVOS) {
       // ---- Slide: Avance por técnico (preventivos) ----
       const conMovP = diffPrev.filter(t => t.conMovimiento).sort((a,b)=>b.newPend-a.newPend);
       const sinMovP = diffPrev.filter(t => !t.conMovimiento && t.newPend > 0).sort((a,b)=>b.newPend-a.newPend);
@@ -827,14 +872,15 @@ async function generarInforme() {
           { name: `Pendientes esta semana (${fechaHoyStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.newPend) },
           { name: 'Cerradas esta semana', labels: chunk.map(t=>t.display), values: chunk.map(t=>t.cerro) },
         ], {
-          x:0.6,y:1.5,w:12.1,h:5.5, showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
+          x:0.6,y:1.5,w:12.1,h:5.5, showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
           chartColors:[RPT.GREY_MED, RPT.RED_SOFT, RPT.GREEN], lineDataSymbol:'circle', lineDataSymbolSize:6, lineSize:2,
-          catAxisLabelFontSize:9, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT, catAxisLabelRotate:35,
-          valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+          catAxisLabelFontSize:9, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+          valAxisLabelFontSize:10, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
           valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'}, showValue:true, dataLabelFontSize:8,
         });
         addFooterRpt(s, page, footTxtPrev); page++;
       });
+      }
     }
 
     // ---- Slide: Histórico preventivos (stacked por mes) ----
@@ -854,11 +900,11 @@ async function generarInforme() {
         seriesPrev.push({ name:'Pend. '+mesLbl.toLowerCase(), labels:keysPrev.map(k=>displayName[k]), values:keysPrev.map(k=>porTecnico[k].porMes[mesLbl]||0), color: paleta[i % paleta.length] });
       });
       s9.addChart(pres.ChartType.bar, seriesPrev.map(s=>({name:s.name,labels:s.labels,values:s.values})), {
-        x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'stacked',
-        showLegend:true, legendPos:'b', legendFontSize:9, legendFontFace:'Arial',
+        x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'stacked', barGapWidthPct:40,
+        showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
         chartColors: seriesPrev.map(s=>s.color),
-        catAxisLabelFontSize:9, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
-        valAxisLabelFontSize:9, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+        catAxisLabelFontSize:10, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+        valAxisLabelFontSize:10, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
         valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
       });
       addFooterRpt(s9, page, footTxtPrev); page++;
