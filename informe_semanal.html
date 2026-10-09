@@ -99,8 +99,35 @@ let prevSnapshot = null; // {fecha, data:[{numero,tecnico,estado,plant}]}
 let combinedNow = null;  // [{numero,tecnico,estado,plant}]
 let prevSnapshotPreventivos = null; // {fecha, data:[{key,tecnico,done,mes}]}
 
-function normTechKey(s) {
+// Un mismo técnico puede venir escrito distinto en cada sede. Aquí se unifican (variante -> nombre único).
+// Ej.: Bussié escribe "JAIME ALBERTO VERANO" y Platino "JAIME VERANO": es la misma persona.
+const ALIAS_TECNICOS = {
+  'JAIME ALBERTO VERANO': 'JAIME VERANO',
+};
+// Nombres abreviados para tablas y gráficas de líneas (igual que en el informe anterior)
+const NOMBRES_CORTOS = {
+  'CARLOS EDUARDO NINO': 'CARLOS E. NIÑO',
+  'MIGUEL RODRIGUEZ TRIANA': 'MIGUEL R. TRIANA',
+  'ALVARO DIAZ BERMUDEZ': 'ALVARO DIAZ B.',
+};
+function claveBase(s) {
   return String(s || '').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+const ALIAS_CLAVES = {};
+Object.keys(ALIAS_TECNICOS).forEach(k => { ALIAS_CLAVES[claveBase(k)] = claveBase(ALIAS_TECNICOS[k]); });
+// Clave para agrupar técnicos (ya con alias aplicado)
+function normTechKey(s) {
+  const k = claveBase(s);
+  return ALIAS_CLAVES[k] || k;
+}
+// Nombre para mostrar: sin espacios dobles y con el alias aplicado
+function nombreCanonico(raw) {
+  const limpio = String(raw || '').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim() || 'Sin asignar';
+  const alias = ALIAS_TECNICOS[Object.keys(ALIAS_TECNICOS).find(a => claveBase(a) === claveBase(limpio))];
+  return alias || limpio;
+}
+function nombreTabla(display) {
+  return NOMBRES_CORTOS[claveBase(display)] || display;
 }
 function clasificarEstado(estadoRaw) {
   const e = String(estadoRaw || '').trim().toUpperCase();
@@ -278,7 +305,7 @@ function calcularDiff() {
 
   oldData.forEach(r => {
     const key = normTechKey(r.tecnico);
-    const t = ensure(key, r.tecnico);
+    const t = ensure(key, nombreCanonico(r.tecnico));
     t.oldTotal++;
     if (r.estado === 'pendiente') t.oldPend++;
     else if (r.estado === 'cerrada') t.oldCerr++;
@@ -286,7 +313,7 @@ function calcularDiff() {
   });
   combinedNow.forEach(r => {
     const key = normTechKey(r.tecnico);
-    const t = ensure(key, r.tecnico);
+    const t = ensure(key, nombreCanonico(r.tecnico));
     t.newTotal++;
     if (r.estado === 'pendiente') t.newPend++;
     else if (r.estado === 'cerrada') t.newCerr++;
@@ -374,13 +401,13 @@ function calcularDiffPreventivos(nowSnap, oldSnap) {
   }
   (oldSnap || []).forEach(r => {
     const key = normTechKey(r.tecnico);
-    const t = ensure(key, r.tecnico);
+    const t = ensure(key, nombreCanonico(r.tecnico));
     t.oldTotal++;
     if (r.done) t.oldDone++; else t.oldPend++;
   });
   nowSnap.forEach(r => {
     const key = normTechKey(r.tecnico);
-    const t = ensure(key, r.tecnico);
+    const t = ensure(key, nombreCanonico(r.tecnico));
     t.newTotal++;
     if (r.done) t.newDone++; else t.newPend++;
     const old = oldByKey[r.key];
@@ -530,7 +557,7 @@ async function generarInforme() {
     const body1 = conMov.map((t,idx)=>{
       const fill = idx%2===0?'FFFFFF':RPT.LIGHT_BG;
       return [
-        {text:t.display,options:{fontFace:'Arial',fontSize:fs1,color:RPT.NAVY_TEXT,fill:{color:fill},align:'left',valign:'middle',bold:true}},
+        {text:nombreTabla(t.display),options:{fontFace:'Arial',fontSize:fs1,color:RPT.NAVY_TEXT,fill:{color:fill},align:'left',valign:'middle',bold:true}},
         {text:String(t.oldPend),options:{fontFace:'Arial',fontSize:fs1,fill:{color:fill},align:'center',valign:'middle'}},
         {text:(t.nuevas>=0?'+':'')+t.nuevas,options:{fontFace:'Arial',fontSize:fs1,color:t.nuevas<0?RPT.RED_SOFT:RPT.GREEN,fill:{color:fill},align:'center',valign:'middle',bold:true}},
         {text:String(t.cerro),options:{fontFace:'Arial',fontSize:fs1,color:RPT.GREEN,fill:{color:fill},align:'center',valign:'middle',bold:true}},
@@ -553,7 +580,7 @@ async function generarInforme() {
     const body2 = sinMov.map((t,idx)=>{
       const fill = idx%2===0?'FFFFFF':RPT.LIGHT_BG;
       return [
-        {text:t.display,options:{fontFace:'Arial',fontSize:fs2,color:RPT.NAVY_TEXT,fill:{color:fill},align:'left',valign:'middle',bold:true}},
+        {text:nombreTabla(t.display),options:{fontFace:'Arial',fontSize:fs2,color:RPT.NAVY_TEXT,fill:{color:fill},align:'left',valign:'middle',bold:true}},
         {text:String(t.newPend),options:{fontFace:'Arial',fontSize:fs2,fill:{color:fill},align:'center',valign:'middle',bold:true}},
         {text:(t.newPct!==null?t.newPct+'%':'—'),options:{fontFace:'Arial',fontSize:fs2,fill:{color:fill},align:'center',valign:'middle'}},
       ];
@@ -579,9 +606,9 @@ async function generarInforme() {
         : `Platino y Bussié juntas · resto de técnicos con pendientes · ${resumenCierres(chunk, diff)}`;
       addTitleRpt(s, `Pendientes y cierres por técnico (${ci+1} de ${chunks.length})`, subtitle2);
       s.addChart(pres.ChartType.line, [
-        { name: `Pendientes semana anterior (${fechaAntStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.oldPend) },
-        { name: `Pendientes esta semana (${fechaHoyStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.newPend) },
-        { name: 'Cerradas esta semana', labels: chunk.map(t=>t.display), values: chunk.map(t=>t.cerro) },
+        { name: `Pendientes semana anterior (${fechaAntStr})`, labels: chunk.map(t=>nombreTabla(t.display)), values: chunk.map(t=>t.oldPend) },
+        { name: `Pendientes esta semana (${fechaHoyStr})`, labels: chunk.map(t=>nombreTabla(t.display)), values: chunk.map(t=>t.newPend) },
+        { name: 'Cerradas esta semana', labels: chunk.map(t=>nombreTabla(t.display)), values: chunk.map(t=>t.cerro) },
       ], {
         x:0.6,y:1.5,w:12.1,h:5.5, showLegend:true, legendPos:'b', legendFontSize:10, legendFontFace:'Arial',
         chartColors:[RPT.GREY_MED, RPT.RED_SOFT, RPT.GREEN], lineDataSymbol:'circle', lineDataSymbolSize:6, lineSize:2,
@@ -603,7 +630,7 @@ async function generarInforme() {
     diff.forEach(t => histPorTec[t.key] = { display:t.display, cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0 });
     combinedNow.forEach(r=>{
       const key = normTechKey(r.tecnico);
-      if (!histPorTec[key]) histPorTec[key] = { display:r.tecnico, cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0 };
+      if (!histPorTec[key]) histPorTec[key] = { display:nombreCanonico(r.tecnico), cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0 };
       const h = histPorTec[key];
       if (r.estado==='cerrada') h.cerradas++;
       else if (r.estado==='rechazada') h.rechazadas++;
@@ -690,7 +717,7 @@ async function generarInforme() {
       rowsRaw.forEach(r=>{
         if (!esMesSel(r['F. Solicitud'])) return;
         const key = normTechKey((r['Técnico Asignado']||'').toString().trim() || 'Sin asignar');
-        const disp = (r['Técnico Asignado']||'').toString().trim() || 'Sin asignar';
+        const disp = nombreCanonico(r['Técnico Asignado']);
         if (!mesPorTec[key]) mesPorTec[key] = {display:disp, cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0};
         const clase = clasificarEstado(r['Estado']);
         if (clase==='cerrada') mesPorTec[key].cerradas++;
