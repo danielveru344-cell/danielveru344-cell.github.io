@@ -14321,6 +14321,22 @@ return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",backgroun
 <style>
 #bck-btn{position:fixed;bottom:22px;right:22px;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#0D2F5C,#2d7dd2);color:#fff;border:none;cursor:pointer;box-shadow:0 6px 22px rgba(13,47,92,0.4);z-index:99998;font-size:26px;display:flex;align-items:center;justify-content:center;transition:transform .15s;}
 #bck-btn:hover{transform:scale(1.06);}
+#bck-btn{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
+#bck-btn.dragging{transition:none;transform:scale(1.12);box-shadow:0 10px 30px rgba(13,47,92,0.55);opacity:.92;}
+#bck-btn.snap{transition:left .22s ease,top .22s ease,transform .15s;}
+#bck-btn.hidden-b{display:none;}
+@media (max-width:700px){#bck-btn{bottom:96px;width:52px;height:52px;font-size:23px;}}
+#bck-drop{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) scale(.85);width:64px;height:64px;border-radius:50%;background:rgba(192,0,26,.85);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;z-index:99997;opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;box-shadow:0 6px 20px rgba(0,0,0,.25);}
+#bck-drop.show{opacity:1;}
+#bck-drop.over{transform:translateX(-50%) scale(1.12);background:#c0001a;}
+#bck-drop-lbl{position:fixed;left:50%;bottom:calc(98px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:rgba(9,31,62,.85);color:#fff;font:700 12px Montserrat,Arial,sans-serif;padding:5px 12px;border-radius:20px;z-index:99997;opacity:0;pointer-events:none;transition:opacity .15s;white-space:nowrap;}
+#bck-drop-lbl.show{opacity:1;}
+#bck-tab{position:fixed;right:0;top:55%;width:18px;height:56px;border-radius:12px 0 0 12px;background:linear-gradient(135deg,#0D2F5C,#2d7dd2);color:#fff;border:none;cursor:pointer;z-index:99998;display:none;align-items:center;justify-content:center;font-size:11px;padding:0;box-shadow:-2px 2px 10px rgba(13,47,92,.35);opacity:.75;}
+#bck-tab.left{right:auto;left:0;border-radius:0 12px 12px 0;}
+#bck-tab.show{display:flex;}
+#bck-hide{background:rgba(255,255,255,.12);border:none;color:#fff;height:26px;border-radius:8px;cursor:pointer;font-size:11px;padding:0 8px;font-weight:700;}
+#bck-toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:rgba(9,31,62,.92);color:#fff;font:600 12px Montserrat,Arial,sans-serif;padding:8px 14px;border-radius:20px;z-index:99999;opacity:0;pointer-events:none;transition:opacity .2s;max-width:86vw;text-align:center;}
+#bck-toast.show{opacity:1;}
 #bck-panel{position:fixed;bottom:92px;right:22px;width:370px;max-width:92vw;height:520px;max-height:75vh;background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(13,47,92,0.28);z-index:99999;display:none;flex-direction:column;overflow:hidden;font-family:Arial,sans-serif;}
 #bck-panel.open{display:flex;}
 #bck-hdr{background:#0D2F5C;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;}
@@ -14339,12 +14355,16 @@ return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",backgroun
 #bck-send:disabled{opacity:.5;cursor:default;}
 </style>
 <button id="bck-btn" title="Asistente de mantenimiento">💬</button>
+<div id="bck-drop">✕</div><div id="bck-drop-lbl">Suelta aquí para ocultar</div>
+<button id="bck-tab" title="Mostrar asistente">💬</button>
+<div id="bck-toast"></div>
 <div id="bck-panel">
   <div id="bck-hdr">
     <div>
       <div class="t">🤖 Asistente Bussié</div>
       <div class="s">Bitácora · Preventivos · Solicitudes · Web</div>
     </div>
+    <button id="bck-hide" title="Ocultar la burbuja">Ocultar</button>
     <button id="bck-close">✕</button>
   </div>
   <div id="bck-msgs"></div>
@@ -14410,7 +14430,86 @@ return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",backgroun
     }
   }
 
-  btn.addEventListener('click', () => panel.classList.toggle('open'));
+  // ── Burbuja movible / ocultable ──────────────────────────────────────────
+  const drop = document.getElementById('bck-drop');
+  const dropLbl = document.getElementById('bck-drop-lbl');
+  const tab = document.getElementById('bck-tab');
+  const hideBtn = document.getElementById('bck-hide');
+  const toast = document.getElementById('bck-toast');
+  const POS_KEY = 'bck_pos_v1', HID_KEY = 'bck_hidden_v1';
+  function lsGet(k){ try { return JSON.parse(localStorage.getItem(k)); } catch(_) { return null; } }
+  function lsSet(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(_) {} }
+  let pos = lsGet(POS_KEY); // {side:'left'|'right', y: fracción 0..1}
+  const M = 10;
+  function size(){ return btn.offsetWidth || 56; }
+  function clampY(y){ const h = size(); return Math.max(M + 50, Math.min(window.innerHeight - h - M - 20, y)); }
+  function applyPos(animate){
+    if (!pos) { btn.style.left=''; btn.style.top=''; btn.style.right=''; btn.style.bottom=''; return; }
+    const w = size();
+    btn.classList.toggle('snap', !!animate);
+    btn.style.right='auto'; btn.style.bottom='auto';
+    btn.style.left = (pos.side === 'left' ? M : window.innerWidth - w - M) + 'px';
+    btn.style.top = clampY(pos.y * window.innerHeight) + 'px';
+  }
+  function placePanel(){
+    const r = btn.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    panel.style.left = panel.style.right = panel.style.top = panel.style.bottom = '';
+    if (r.left + r.width/2 < vw/2) { panel.style.left = Math.max(8, r.left) + 'px'; panel.style.right = 'auto'; }
+    else { panel.style.right = Math.max(8, vw - r.right) + 'px'; panel.style.left = 'auto'; }
+    if (r.top + r.height/2 < vh/2) { panel.style.top = (r.bottom + 10) + 'px'; panel.style.bottom = 'auto'; panel.style.maxHeight = (vh - r.bottom - 20) + 'px'; }
+    else { panel.style.bottom = (vh - r.top + 10) + 'px'; panel.style.top = 'auto'; panel.style.maxHeight = (r.top - 20) + 'px'; }
+  }
+  function showToast(t){ toast.textContent = t; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(() => toast.classList.remove('show'), 3200); }
+  function setHidden(h, notify){
+    lsSet(HID_KEY, !!h);
+    btn.classList.toggle('hidden-b', !!h);
+    tab.classList.toggle('show', !!h);
+    tab.classList.toggle('left', !!(pos && pos.side === 'left'));
+    if (h) { panel.classList.remove('open'); if (notify) showToast('Asistente oculto. Toca la pestaña del borde para mostrarlo.'); }
+  }
+  function togglePanel(){ if (!panel.classList.contains('open')) placePanel(); panel.classList.toggle('open'); }
+
+  let drag = null;
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    const r = btn.getBoundingClientRect();
+    drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, moved: false };
+    try { btn.setPointerCapture(e.pointerId); } catch(_) {}
+  });
+  btn.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 8) return;
+    if (!drag.moved) { drag.moved = true; btn.classList.add('dragging'); btn.classList.remove('snap'); panel.classList.remove('open'); drop.classList.add('show'); dropLbl.classList.add('show'); }
+    e.preventDefault();
+    const w = size();
+    const x = Math.max(0, Math.min(window.innerWidth - w, e.clientX - drag.ox));
+    const y = Math.max(0, Math.min(window.innerHeight - w, e.clientY - drag.oy));
+    btn.style.right='auto'; btn.style.bottom='auto';
+    btn.style.left = x + 'px'; btn.style.top = y + 'px';
+    const d = drop.getBoundingClientRect();
+    const over = Math.hypot(e.clientX - (d.left + d.width/2), e.clientY - (d.top + d.height/2)) < 60;
+    drop.classList.toggle('over', over); drag.over = over;
+  });
+  function endDrag(e){
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    const d = drag; drag = null;
+    btn.classList.remove('dragging'); drop.classList.remove('show','over'); dropLbl.classList.remove('show');
+    if (!d.moved) { togglePanel(); return; }
+    const r = btn.getBoundingClientRect();
+    pos = { side: (r.left + r.width/2) < window.innerWidth/2 ? 'left' : 'right', y: r.top / window.innerHeight };
+    lsSet(POS_KEY, pos);
+    applyPos(true);
+    if (d.over) setHidden(true, true);
+  }
+  btn.addEventListener('pointerup', endDrag);
+  btn.addEventListener('pointercancel', endDrag);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  hideBtn.addEventListener('click', () => setHidden(true, true));
+  tab.addEventListener('click', () => { setHidden(false); applyPos(false); });
+  window.addEventListener('resize', () => { applyPos(false); if (panel.classList.contains('open')) placePanel(); });
+  applyPos(false);
+  setHidden(lsGet(HID_KEY) === true, false);
   closeBtn.addEventListener('click', () => panel.classList.remove('open'));
   sendBtn.addEventListener('click', enviar);
   input.addEventListener('keydown', (e) => {
