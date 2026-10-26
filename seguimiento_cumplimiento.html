@@ -509,7 +509,7 @@ function render() {
   <div class="footer">
     <span class="footer-info">${m.mes.toUpperCase()} · ${activeTech} · ${doneMine} realizados · ${pendMine} pendientes</span>
     <button class="btn-green" style="margin-left:auto" onclick="exportReport()">⬇ Exportar informe</button>
-    <button class="btn-blue" id="pptxBtn" onclick="generarInformePPTX()">📊 Informe PPTX</button>
+    <button class="btn-blue" id="pptxBtn" onclick="abrirInformeSemanal()">📊 Informe PPTX</button>
   </div>`;
 
   root.innerHTML = html;
@@ -784,6 +784,25 @@ async function generarInformePPTX() {
   loading = false;
   render();
 })();
+</script>
+<div id="infSemOverlay" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(9,31,62,.55);">
+  <div style="position:absolute;inset:12px;background:#f1f5f9;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.3);">
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#0D2F5C;color:#fff;padding:8px 14px;">
+      <b style="font-size:13px;">📊 Informe semanal (PPTX)</b>
+      <button onclick="cerrarInformeSemanal()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer;">✕ Cerrar</button>
+    </div>
+    <iframe id="infSemFrame" title="Informe semanal" style="flex:1;border:none;width:100%;background:#f1f5f9;"></iframe>
+  </div>
+</div>
+<script>
+// El botón "Informe PPTX" abre el generador del informe semanal (Solicitudes + Preventivos, comparado con la semana anterior).
+// La función anterior generarInformePPTX() se conserva en este archivo por si se quiere volver a usar.
+function abrirInformeSemanal() {
+  const f = document.getElementById('infSemFrame');
+  if (!f.getAttribute('src')) f.setAttribute('src', 'informe_semanal.html?v=20261026a');
+  document.getElementById('infSemOverlay').style.display = 'block';
+}
+function cerrarInformeSemanal() { document.getElementById('infSemOverlay').style.display = 'none'; }
 </script>
 </body>
 </html>

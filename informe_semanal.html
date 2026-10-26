@@ -38,48 +38,85 @@
   input[type=file] { display: none; }
   .snap-info { font-size: 11.5px; color: #64748b; margin-top: 10px; line-height: 1.5; }
   .snap-info b { color: #0D2F5C; }
+  .drop-all { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 26px 14px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop-all:hover, .drop-all.drag { border-color: #2d7dd2; background: #f0f7ff; }
+  .drop-all.ok { border-color: #16a34a; background: #f0fdf4; }
+  .drop-all h2 { font-size: 14px; margin: 8px 0 4px; }
+  .drop-all p { font-size: 11.5px; color: #64748b; margin: 0; line-height: 1.5; }
+  .file-list { margin-top: 12px; font-size: 12px; }
+  .file-list div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 2px; border-bottom: 1px solid #f1f5f9; }
+  .file-list .tag { font-weight: 700; white-space: nowrap; }
+  .file-list .nm { color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vtable { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0 14px; }
+  .vtable th { background: #0D2F5C; color: #fff; font-weight: 700; padding: 7px 6px; text-align: center; font-size: 11px; }
+  .vtable td { padding: 6px; border-bottom: 1px solid #e2e8f0; text-align: center; }
+  .vtable td:first-child { text-align: left; font-weight: 700; }
+  .vtable .ant { color: #94a3b8; font-size: 10.5px; display: block; }
+  .vscroll { overflow-x: auto; }
+  .alerta { font-size: 12px; padding: 8px 10px; border-radius: 8px; margin: 6px 0; line-height: 1.45; }
+  .alerta.err { background: #fef2f2; color: #b91c1c; }
+  .alerta.warn { background: #fffbeb; color: #92400e; }
+  .alerta.ok { background: #ecfdf5; color: #047857; }
+  .confirm-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; font-weight: 700; margin-top: 12px; cursor: pointer; }
+  .confirm-row input { margin-top: 2px; width: 16px; height: 16px; }
+  .lbl { margin: 14px 0 4px; font-size: 12px; color: #0D2F5C; font-weight: 700; }
+  .inp-date { padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 9px; font-size: 13px; font-family: Arial; }
+  .link-btn { background: none; border: none; color: #2d7dd2; padding: 0; font-size: 11.5px; font-weight: 700; text-decoration: underline; cursor: pointer; }
 </style>
 </head>
 <body>
 <div class="header">
   <h1>📊 Informe Semanal · Solicitudes y Preventivos</h1>
-  <small>Compara automáticamente contra la última vez que generaste este informe</small>
+  <small>Compara contra la base guardada de la semana anterior</small>
 </div>
 
 <div class="wrap">
   <div class="card">
-    <div class="section-title">1. Sube las solicitudes de ambas sedes</div>
-    <div class="upload-grid">
-      <div class="upload-box" id="dropPlatino" onclick="document.getElementById('inputPlatino').click()">
-        <div style="font-size:30px">📁</div>
-        <h2 id="titlePlatino">Platino</h2>
-        <p id="subPlatino">Sube el Excel de Solicitudes</p>
-      </div>
-      <div class="upload-box" id="dropBussie" onclick="document.getElementById('inputBussie').click()">
-        <div style="font-size:30px">📁</div>
-        <h2 id="titleBussie">Bussié</h2>
-        <p id="subBussie">Sube el Excel de Solicitudes</p>
+    <div class="section-title">Base de comparación (semana anterior)</div>
+    <div class="snap-info" id="snapInfo" style="margin-top:0">Consultando la última base guardada…</div>
+    <div id="baseInicial" style="display:none;margin-top:10px">
+      <div class="alerta warn">No hay una base guardada para comparar. Si es la primera vez, carga el archivo <b>Base_comparacion_….json</b>.</div>
+      <div class="row-actions" style="margin-top:8px">
+        <button class="btn-white" onclick="document.getElementById('inputJsonGuardar').click()">📥 Cargar base inicial (JSON) y guardarla</button>
       </div>
     </div>
-    <input type="file" id="inputPlatino" accept=".xlsx,.xls">
-    <input type="file" id="inputBussie" accept=".xlsx,.xls">
+    <div style="margin-top:8px"><button class="link-btn" onclick="document.getElementById('inputJsonTemporal').click()">Usar un JSON solo para esta comparación (no se guarda)</button></div>
+    <input type="file" id="inputJsonGuardar" accept=".json,application/json">
+    <input type="file" id="inputJsonTemporal" accept=".json,application/json">
+  </div>
+
+  <div class="card">
+    <div class="section-title">1. Suelta aquí todos los Excel de la semana</div>
+    <div class="drop-all" id="dropAll" onclick="document.getElementById('inputAll').click()">
+      <div style="font-size:30px">📁</div>
+      <h2>Solicitudes Platino, Solicitudes Bussié y los Informe_Mtto de cada mes</h2>
+      <p>Puedes soltarlos todos a la vez o hacer clic para elegirlos.<br>La app reconoce cada archivo por su nombre.</p>
+    </div>
+    <input type="file" id="inputAll" accept=".xlsx,.xls" multiple>
+    <div class="file-list" id="fileList"></div>
+    <label class="confirm-row" id="usarAppRow" style="display:none;font-weight:400"><input type="checkbox" id="usarPrevApp"> No subí los Informe_Mtto: usar los preventivos guardados en Cumplimiento (mtto_meses)</label>
     <div id="statusMsg"></div>
-    <div class="snap-info" id="snapInfo">Consultando la última comparación guardada…</div>
   </div>
 
   <div class="card" id="previewCard" style="display:none">
-    <div class="section-title">Vista previa</div>
-    <div class="stat-grid" id="statGrid"></div>
-    <div style="margin:14px 0 4px;font-size:12px;color:#0D2F5C;font-weight:700;">Fecha que representan estos datos</div>
-    <input type="date" id="fechaSnapshot" style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:13px;font-family:Arial;">
-    <div style="margin:14px 0 4px;font-size:12px;color:#0D2F5C;font-weight:700;">Mes de la diapositiva mensual (solicitudes)</div>
-    <input type="month" id="mesInforme" style="padding:9px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:13px;font-family:Arial;">
+    <div class="section-title">2. Verificación de archivos</div>
+    <div class="lbl" style="margin-top:0">Fecha de corte (hoy)</div>
+    <input type="date" id="fechaSnapshot" class="inp-date">
+    <div class="lbl">Mes de la diapositiva mensual (solicitudes)</div>
+    <input type="month" id="mesInforme" class="inp-date">
+    <div id="verifBody" style="margin-top:14px"></div>
+    <label class="confirm-row"><input type="checkbox" id="confirmVerif" onchange="actualizarBotones()"> Revisé la verificación y los archivos son los de esta semana</label>
     <div class="row-actions">
-      <button class="btn-blue" id="genBtn" onclick="generarInforme()">📊 Generar Informe Semanal</button>
-      <button class="btn-white" id="saveSnapBtn" onclick="guardarSoloSnapshot()">💾 Guardar solo como snapshot (sin generar informe)</button>
+      <button class="btn-blue" id="genBtn" onclick="generarInforme()" disabled>📊 Generar informe</button>
+      <button class="btn-white" id="saveSnapBtn" onclick="guardarBase()" disabled>💾 Guardar como base de la próxima semana</button>
       <button class="btn-white" onclick="resetAll()">🔄 Empezar de nuevo</button>
     </div>
-    <div style="font-size:11px;color:#64748b;margin-top:8px;">Usa "Guardar solo como snapshot" si ya generaste el informe manualmente y solo quieres dejar estos datos guardados como el punto de comparación para la próxima vez — no descarga ningún PPTX.</div>
+    <div style="font-size:11px;color:#64748b;margin-top:8px;">"Guardar como base" se habilita después de generar el informe.</div>
+  </div>
+
+  <div class="card" id="controlesCard" style="display:none">
+    <div class="section-title">3. Controles del informe</div>
+    <div id="controlesBody"></div>
   </div>
 </div>
 
@@ -93,16 +130,26 @@ const RPT = {
   BLUE: '2563EB', LIGHT_BG: 'F5F5F5', NAVY: '0D2F5C'
 };
 
-let filePlatino = null, fileBussie = null;
 let rowsPlatino = null, rowsBussie = null;
-let prevSnapshot = null; // {fecha, data:[{numero,tecnico,estado,plant}]}
-let combinedNow = null;  // [{numero,tecnico,estado,plant}]
-let prevSnapshotPreventivos = null; // {fecha, data:[{key,tecnico,done,mes}]}
+let prevSnapshot = null; // {fecha, data:[{numero,tecnico,estado,plant,fecha}]}
+let combinedNow = null;  // [{numero,tecnico,estado,plant,fecha}]
+let prevSnapshotPreventivos = null; // {fecha, data:[{key,tecnico,done,mes,ref}]}
+let prevSnapshotArchivos = null;    // {fecha, data:[{tipo,mes,nombre,hash,filas,ultimaFecha}]}
+let archivos = { platino: null, bussie: null, preventivos: {} };   // archivos de esta semana ya leídos
+let mesesExcel = null;               // preventivos armados desde los Informe_Mtto (mismo formato que mtto_meses)
+let baseTemporal = false;            // true si la base viene de un JSON cargado solo para esta comparación
+let generado = null;                 // datos del último informe generado (para "Guardar como base")
 
 // Un mismo técnico puede venir escrito distinto en cada sede. Aquí se unifican (variante -> nombre único).
 // Ej.: Bussié escribe "JAIME ALBERTO VERANO" y Platino "JAIME VERANO": es la misma persona.
 const ALIAS_TECNICOS = {
   'JAIME ALBERTO VERANO': 'JAIME VERANO',
+};
+// Cuando una fuente trae el nombre sin tilde/ñ (Preventivos: "DIEGO PEREZ") se muestra con ella, como en Solicitudes.
+const NOMBRES_CON_TILDE = {
+  'DIEGO PEREZ': 'DIEGO PÉREZ',
+  'DANIEL VERU': 'DANIEL VERÚ',
+  'BRANDON MUNOZ': 'BRANDON MUÑOZ',
 };
 // Nombres abreviados para tablas y gráficas de líneas (igual que en el informe anterior)
 const NOMBRES_CORTOS = {
@@ -124,7 +171,8 @@ function normTechKey(s) {
 function nombreCanonico(raw) {
   const limpio = String(raw || '').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim() || 'Sin asignar';
   const alias = ALIAS_TECNICOS[Object.keys(ALIAS_TECNICOS).find(a => claveBase(a) === claveBase(limpio))];
-  return alias || limpio;
+  const nombre = alias || limpio;
+  return NOMBRES_CON_TILDE[claveBase(nombre)] || nombre;
 }
 function nombreTabla(display) {
   return NOMBRES_CORTOS[claveBase(display)] || display;
@@ -173,72 +221,221 @@ async function cargarUltimoSnapshotTipo(tipo) {
   return rows.length ? rows[0] : null;
 }
 
+function infoBase() {
+  const el = document.getElementById('snapInfo');
+  const fmt = (snap, unidad) => snap
+    ? `del <b>${fmtFechaCorta(parseFechaISO(snap.fecha))}/${parseFechaISO(snap.fecha).getFullYear()}</b> (${snap.data.length} ${unidad})`
+    : '<b>sin base</b>';
+  el.innerHTML = (baseTemporal ? '🧪 <b>Base temporal cargada desde JSON (no se guarda).</b><br>' : '')
+    + `📅 Solicitudes: se compara contra la base ${fmt(prevSnapshot, 'filas')}.`
+    + `<br>📅 Preventivos: se compara contra la base ${fmt(prevSnapshotPreventivos, 'tareas')}.`;
+  document.getElementById('baseInicial').style.display = (!prevSnapshot || !prevSnapshotPreventivos) && !baseTemporal ? 'block' : 'none';
+}
 async function cargarUltimoSnapshot() {
   try {
     prevSnapshot = await cargarUltimoSnapshotTipo('solicitudes');
-    let msg = prevSnapshot
-      ? `📅 Solicitudes: se comparará contra el snapshot del <b>${prevSnapshot.fecha}</b> (${prevSnapshot.data.length} filas).`
-      : `⚠️ Solicitudes: no hay snapshot todavía (este informe no tendrá comparación).`;
-    try {
-      prevSnapshotPreventivos = await cargarUltimoSnapshotTipo('preventivos');
-      msg += '<br>' + (prevSnapshotPreventivos
-        ? `📅 Preventivos: se comparará contra el snapshot del <b>${prevSnapshotPreventivos.fecha}</b> (${prevSnapshotPreventivos.data.length} tareas).`
-        : `⚠️ Preventivos: no hay snapshot todavía (este informe no tendrá comparación).`);
-    } catch (e2) { msg += `<br>⚠️ Preventivos: no se pudo consultar (${e2.message}).`; }
-    document.getElementById('snapInfo').innerHTML = msg;
+    prevSnapshotPreventivos = await cargarUltimoSnapshotTipo('preventivos');
+    try { prevSnapshotArchivos = await cargarUltimoSnapshotTipo('archivos'); } catch (e) { prevSnapshotArchivos = null; }
+    baseTemporal = false;
+    infoBase();
   } catch (e) {
-    document.getElementById('snapInfo').innerHTML = `⚠️ No se pudo consultar el snapshot anterior: ${e.message}`;
+    document.getElementById('snapInfo').innerHTML = `⚠️ No se pudo consultar la base anterior (${e.message}). Revisa que exista la tabla <b>informe_snapshots</b> en Supabase.`;
+    document.getElementById('baseInicial').style.display = 'block';
   }
+  if (combinedNow) renderPreview();
 }
 cargarUltimoSnapshot();
 
-function parseExcelRows(arrayBuffer) {
-  const wb = XLSX.read(arrayBuffer, { type: 'array' });
-  const sheetName = wb.SheetNames.includes('Solicitudes') ? 'Solicitudes' : wb.SheetNames[0];
-  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+// ── Base inicial desde el JSON (Base_comparacion_AAAA-MM-DD.json) ──
+// solicitudes ya viene en formato snapshot; preventivos_meses trae tasks[{id,resp}] y done{id:true}.
+function snapshotsDesdeJSON(d) {
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.fecha || '')) || !Array.isArray(d.solicitudes) || !Array.isArray(d.preventivos_meses)) {
+    throw new Error('el archivo no tiene fecha, solicitudes y preventivos_meses');
+  }
+  const prev = [];
+  d.preventivos_meses.forEach(m => (m.tasks || []).forEach(t => prev.push({
+    key: m.id + '-' + t.id, tecnico: String(t.resp || '').trim() || 'Sin asignar', done: !!(m.done && m.done[t.id]), mes: m.mes
+  })));
+  return { fecha: d.fecha, solicitudes: d.solicitudes, preventivos: prev };
+}
+async function leerJSON(file) { return JSON.parse(await file.text()); }
+async function insertarSnapshot(tipo, fecha, data) {
+  const r = await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
+    method: 'POST',
+    headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ tipo, fecha, data })
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status + ' al guardar ' + tipo);
+}
+document.getElementById('inputJsonGuardar').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const b = snapshotsDesdeJSON(await leerJSON(f));
+    if (!confirm(`Se guardará en Supabase la base del ${b.fecha} (${b.solicitudes.length} solicitudes y ${b.preventivos.length} tareas de preventivos). ¿Confirmas?`)) return;
+    await insertarSnapshot('solicitudes', b.fecha, b.solicitudes);
+    await insertarSnapshot('preventivos', b.fecha, b.preventivos);
+    showStatus(`✅ Base inicial del ${b.fecha} guardada.`, 'ok');
+    await cargarUltimoSnapshot();
+  } catch (err) { showStatus('⚠️ No se pudo cargar la base: ' + err.message, 'err'); }
+});
+document.getElementById('inputJsonTemporal').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const b = snapshotsDesdeJSON(await leerJSON(f));
+    prevSnapshot = { fecha: b.fecha, data: b.solicitudes };
+    prevSnapshotPreventivos = { fecha: b.fecha, data: b.preventivos };
+    prevSnapshotArchivos = null;
+    baseTemporal = true;
+    infoBase();
+    const mi = document.getElementById('mesInforme'); if (mi) mi.value = mesPorDefecto();
+    if (combinedNow) renderPreview();
+  } catch (err) { showStatus('⚠️ No se pudo leer el JSON: ' + err.message, 'err'); }
+});
+
+// ── Lectura y clasificación de los Excel ──
+const MESES_MAYUS = MESES_LARGO.map(m => m.toUpperCase());
+function sinFilasVacias(rows) {
+  return rows.filter(r => Object.keys(r).some(k => String(r[k] == null ? '' : r[k]).trim() !== ''));
+}
+function leerHoja(wb, nombre, opciones) {
+  const sh = wb.Sheets[nombre];
+  return sh ? sinFilasVacias(XLSX.utils.sheet_to_json(sh, Object.assign({ defval: '' }, opciones || {}))) : null;
+}
+async function hashContenido(obj) {
+  const buf = new TextEncoder().encode(JSON.stringify(obj));
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// Nombre del archivo -> qué es. Los nombres pueden traer sufijos como "(1)", "__8_" o "__1".
+function clasificarArchivo(nombre, wb) {
+  const n = nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (/SOLICITUDES[ _-]*DE[ _-]*MANTENIMIENTO[ _-]*BUSSIE/.test(n)) return { tipo: 'bussie' };
+  if (/SOLICITUDES[ _-]*DE[ _-]*MANTENIMIENTO[ _-]*1/.test(n)) return { tipo: 'platino' };
+  const m = n.match(/INFORME[ _-]*MTTO[ _-]*([A-Z]+)/);
+  if (m) {
+    const idx = MESES_MAYUS.indexOf(m[1]);
+    if (idx >= 0) return { tipo: 'preventivos', mesIdx: idx };
+  }
+  // Respaldo por hojas, por si el nombre cambió
+  if (wb.SheetNames.includes('Detalle')) return { tipo: 'preventivos', mesIdx: -1 };
+  if (wb.SheetNames.includes('Solicitudes')) return { tipo: 'platino' };
+  return null;
+}
+function ultimaFechaSolicitud(filas) {
+  let max = null;
+  filas.forEach(r => {
+    const m = String(r.fecha || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return;
+    const f = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]), 12);
+    if (!max || f > max) max = f;
+  });
+  return max;
+}
+function fechaCorte() {
+  const v = (document.getElementById('fechaSnapshot') || {}).value;
+  return v ? parseFechaISO(v) : parseFechaISO(fechaLocalISO(new Date()));
+}
+// Id de mes compatible con mtto_meses (mayo 2026 = 1, junio = 2, ...)
+function idMes(anio, mesIdx) { return (anio - 2026) * 12 + mesIdx - 3; }
+function anioDeMes(mesIdx) {
+  const c = fechaCorte();
+  return mesIdx > c.getMonth() ? c.getFullYear() - 1 : c.getFullYear();
 }
 
-function handleFile(file, plant) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
+async function procesarArchivos(files) {
+  const errores = [];
+  for (const file of files) {
     try {
-      const rows = parseExcelRows(e.target.result);
-      if (!rows.length || !('Estado' in rows[0])) {
-        showStatus(`⚠️ El archivo de ${plant} no tiene el formato esperado.`, 'err');
-        return;
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const c = clasificarArchivo(file.name, wb);
+      if (!c) { errores.push(`No reconozco el archivo "${file.name}".`); continue; }
+      if (c.tipo === 'platino' || c.tipo === 'bussie') {
+        const hoja = c.tipo === 'platino' ? 'Solicitudes' : wb.SheetNames[0];
+        const rows = leerHoja(wb, hoja);
+        if (!rows || !rows.length || !('Estado' in rows[0]) || !('Número de Solictud' in rows[0])) {
+          errores.push(`"${file.name}" no tiene la hoja "${hoja}" con las columnas esperadas.`); continue;
+        }
+        archivos[c.tipo] = { nombre: file.name, rows, hash: await hashContenido(rows) };
+      } else {
+        const rows = leerHoja(wb, 'Detalle', { raw: false });
+        if (!rows || !rows.length || !('ESTADO' in rows[0]) || !('TÉCNICO' in rows[0])) {
+          errores.push(`"${file.name}" no tiene la hoja "Detalle" con las columnas esperadas.`); continue;
+        }
+        if (c.mesIdx < 0) { errores.push(`No pude saber de qué mes es "${file.name}" (el nombre debe ser Informe_Mtto_<MES>).`); continue; }
+        if (archivos.preventivos[c.mesIdx] && archivos.preventivos[c.mesIdx].nombre !== file.name) {
+          errores.push(`Hay dos archivos de ${MESES_LARGO[c.mesIdx]}: "${archivos.preventivos[c.mesIdx].nombre}" y "${file.name}". Se usa el último.`);
+        }
+        archivos.preventivos[c.mesIdx] = { nombre: file.name, rows, hash: await hashContenido(rows), mesIdx: c.mesIdx };
       }
-      if (plant === 'platino') { rowsPlatino = rows; filePlatino = file; markUploaded('Platino', rows.length); }
-      else { rowsBussie = rows; fileBussie = file; markUploaded('Bussié', rows.length); }
-      checkReady();
-    } catch (err) {
-      showStatus(`⚠️ No se pudo leer el archivo de ${plant}: ${err.message}`, 'err');
-    }
-  };
-  reader.readAsArrayBuffer(file);
+    } catch (err) { errores.push(`No se pudo leer "${file.name}": ${err.message}`); }
+  }
+  rowsPlatino = archivos.platino ? archivos.platino.rows : null;
+  rowsBussie = archivos.bussie ? archivos.bussie.rows : null;
+  armarMesesExcel();
+  pintarListaArchivos();
+  if (errores.length) showStatus(errores.map(x => '⚠️ ' + x).join('<br>'), 'warn'); else document.getElementById('statusMsg').innerHTML = '';
+  checkReady();
 }
-function markUploaded(label, n) {
-  const box = label === 'Platino' ? document.getElementById('dropPlatino') : document.getElementById('dropBussie');
-  const sub = label === 'Platino' ? document.getElementById('subPlatino') : document.getElementById('subBussie');
-  box.classList.add('ok');
-  sub.textContent = `✅ ${n} solicitudes cargadas`;
+// Informe_Mtto (hoja Detalle) -> mismo formato que mtto_meses: {id, mes, tasks:[{id,resp,ref}], done:{id:true}}
+function armarMesesExcel() {
+  const idxs = Object.keys(archivos.preventivos).map(Number).sort((a, b) => idMes(anioDeMes(a), a) - idMes(anioDeMes(b), b));
+  if (!idxs.length) { mesesExcel = null; return; }
+  mesesExcel = idxs.map(mi => {
+    const a = archivos.preventivos[mi];
+    const id = idMes(anioDeMes(mi), mi);
+    const mesNombre = MESES_LARGO[mi].charAt(0).toUpperCase() + MESES_LARGO[mi].slice(1);
+    const tasks = [], done = {}, apar = {};
+    a.rows.forEach((r, i) => {
+      const tid = 'm' + id + 't' + i;
+      // Clave compuesta para emparejar entre semanas: mes|técnico|CÓDIGO|ACTIVIDAD|FECHA LÍMITE (+ número de aparición)
+      const base = [mesNombre, claveBase(r['TÉCNICO']), claveBase(r['CÓDIGO']), claveBase(r['ACTIVIDAD']), claveBase(r['FECHA LÍMITE'])].join('|');
+      apar[base] = (apar[base] || 0) + 1;
+      tasks.push({ id: tid, resp: String(r['TÉCNICO'] || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim(), ref: base + '#' + apar[base] });
+      if (String(r['ESTADO'] || '').trim().toUpperCase() === 'REALIZADO') done[tid] = true;
+    });
+    return { id, mes: mesNombre, tasks, done };
+  });
+}
+function pintarListaArchivos() {
+  const items = [];
+  if (archivos.platino) items.push(['Solicitudes Platino', archivos.platino.nombre, archivos.platino.rows.length + ' filas']);
+  if (archivos.bussie) items.push(['Solicitudes Bussié', archivos.bussie.nombre, archivos.bussie.rows.length + ' filas']);
+  (mesesExcel || []).forEach(m => {
+    const a = Object.values(archivos.preventivos).find(x => MESES_LARGO[x.mesIdx] === m.mes.toLowerCase());
+    items.push(['Preventivos ' + m.mes.toLowerCase(), a.nombre, m.tasks.length + ' tareas']);
+  });
+  document.getElementById('fileList').innerHTML = items.map(x => `<div><span class="tag">✅ ${x[0]}</span><span class="nm" title="${escAttr(x[1])}">${escAttr(x[1])}</span><span>${x[2]}</span></div>`).join('');
+  document.getElementById('dropAll').classList.toggle('ok', items.length > 0);
+  document.getElementById('usarAppRow').style.display = (archivos.platino || archivos.bussie) && !mesesExcel ? 'flex' : 'none';
 }
 function showStatus(msg, type) {
   document.getElementById('statusMsg').innerHTML = `<div class="status-msg status-${type}">${msg}</div>`;
 }
 function resetAll() {
-  filePlatino = fileBussie = rowsPlatino = rowsBussie = combinedNow = null;
+  archivos = { platino: null, bussie: null, preventivos: {} };
+  rowsPlatino = rowsBussie = combinedNow = mesesExcel = generado = null;
   document.getElementById('previewCard').style.display = 'none';
+  document.getElementById('controlesCard').style.display = 'none';
   document.getElementById('statusMsg').innerHTML = '';
-  document.getElementById('inputPlatino').value = '';
-  document.getElementById('inputBussie').value = '';
-  ['dropPlatino','dropBussie'].forEach(id => document.getElementById(id).classList.remove('ok'));
-  document.getElementById('subPlatino').textContent = 'Sube el Excel de Solicitudes';
-  document.getElementById('subBussie').textContent = 'Sube el Excel de Solicitudes';
+  document.getElementById('fileList').innerHTML = '';
+  document.getElementById('inputAll').value = '';
+  document.getElementById('confirmVerif').checked = false;
+  document.getElementById('dropAll').classList.remove('ok');
+  document.getElementById('usarAppRow').style.display = 'none';
+  actualizarBotones();
 }
-
-document.getElementById('inputPlatino').addEventListener('change', (e) => handleFile(e.target.files[0], 'platino'));
-document.getElementById('inputBussie').addEventListener('change', (e) => handleFile(e.target.files[0], 'bussie'));
+(function () {
+  const drop = document.getElementById('dropAll');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+  drop.addEventListener('drop', e => procesarArchivos(Array.from(e.dataTransfer.files || [])));
+  document.getElementById('inputAll').addEventListener('change', e => { procesarArchivos(Array.from(e.target.files || [])); e.target.value = ''; });
+  document.getElementById('usarPrevApp').addEventListener('change', () => { if (combinedNow) renderPreview(); });
+  document.getElementById('fechaSnapshot').addEventListener('change', () => { armarMesesExcel(); pintarListaArchivos(); if (combinedNow) renderPreview(); });
+})();
 
 // Fecha de solicitud limpia (dd/mm/aaaa). Se guarda en el snapshot para poder
 // calcular también las "abiertas de más de 1 mes" de la semana anterior.
@@ -266,27 +463,89 @@ function combinarDatos() {
 }
 
 function checkReady() {
-  if (!rowsPlatino || !rowsBussie) return;
+  if (!rowsPlatino || !rowsBussie) {
+    if (rowsPlatino || rowsBussie || mesesExcel) showStatus('Falta ' + [!rowsPlatino ? 'Solicitudes Platino' : '', !rowsBussie ? 'Solicitudes Bussié' : ''].filter(Boolean).join(' y ') + '.', 'warn');
+    return;
+  }
   combinedNow = combinarDatos();
+  generado = null;
   renderPreview();
 }
 
+function contarSol(filas, plant) {
+  const f = filas.filter(r => r.plant === plant);
+  return { filas: f.length, cerradas: f.filter(r => r.estado === 'cerrada').length, pendientes: f.filter(r => r.estado === 'pendiente').length, ultima: ultimaFechaSolicitud(f) };
+}
+function contarPrevPorMes(snapRows) {
+  const out = {};
+  snapRows.forEach(r => {
+    const k = String(r.mes).toLowerCase();
+    if (!out[k]) out[k] = { tareas: 0, realizadas: 0, pendientes: 0 };
+    out[k].tareas++; if (r.done) out[k].realizadas++; else out[k].pendientes++;
+  });
+  return out;
+}
+function fmtF(d) { return d ? d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear() : '—'; }
+function celda(hoy, ant) { return `${hoy}${ant !== undefined && ant !== null ? `<span class="ant">ant. ${ant}</span>` : ''}`; }
+
 function renderPreview() {
-  const total = combinedNow.length;
-  const cerradas = combinedNow.filter(r => r.estado === 'cerrada').length;
-  const pendientes = combinedNow.filter(r => r.estado === 'pendiente').length;
-  const rechazadas = combinedNow.filter(r => r.estado === 'rechazada').length;
-  document.getElementById('statGrid').innerHTML = `
-    <div class="stat"><div class="n" style="color:#A41E20">${total}</div><div class="l">Total</div></div>
-    <div class="stat"><div class="n" style="color:#16A34A">${cerradas}</div><div class="l">Cerradas</div></div>
-    <div class="stat"><div class="n" style="color:#CA8A04">${pendientes}</div><div class="l">Pendientes</div></div>
-    <div class="stat"><div class="n" style="color:#DC2626">${rechazadas}</div><div class="l">Rechazadas</div></div>
-  `;
   document.getElementById('previewCard').style.display = 'block';
   const fi = document.getElementById('fechaSnapshot');
   if (fi && !fi.value) fi.value = fechaLocalISO(new Date());
   const mi = document.getElementById('mesInforme');
   if (mi && !mi.value) mi.value = mesPorDefecto();
+  const alertas = [];
+  const antArch = prevSnapshotArchivos ? prevSnapshotArchivos.data : [];
+  const hashAnt = (tipo, mes) => (antArch.find(a => a.tipo === tipo && (a.mes || '') === (mes || '')) || {}).hash;
+
+  // Solicitudes por sede
+  let h = '<div class="lbl" style="margin-top:0">Solicitudes</div><div class="vscroll"><table class="vtable"><tr><th>Sede</th><th>Última solicitud</th><th>Filas</th><th>Cerradas</th><th>Pendientes</th></tr>';
+  [['platino', 'Platino'], ['bussie', 'Bussié']].forEach(([p, nombre]) => {
+    const hoy = contarSol(combinedNow, p);
+    const ant = prevSnapshot ? contarSol(prevSnapshot.data, p) : null;
+    h += `<tr><td>${nombre}</td><td>${celda(fmtF(hoy.ultima), ant ? fmtF(ant.ultima) : null)}</td><td>${celda(hoy.filas, ant && ant.filas)}</td><td>${celda(hoy.cerradas, ant && ant.cerradas)}</td><td>${celda(hoy.pendientes, ant && ant.pendientes)}</td></tr>`;
+    if (hashAnt(p) && hashAnt(p) === archivos[p].hash) alertas.push(['err', `El Excel de ${nombre} es idéntico al de la semana pasada.`]);
+    if (ant && ant.ultima && hoy.ultima && hoy.ultima <= ant.ultima) alertas.push(['warn', `En ${nombre} la última solicitud (${fmtF(hoy.ultima)}) no avanzó respecto a la semana pasada (${fmtF(ant.ultima)}).`]);
+    if (ant && hoy.filas < ant.filas) alertas.push(['warn', `${nombre} tiene menos filas que la semana pasada (${hoy.filas} vs. ${ant.filas}).`]);
+  });
+  h += '</table></div>';
+
+  // Preventivos por mes
+  const usarApp = document.getElementById('usarPrevApp').checked;
+  if (mesesExcel) {
+    const antMes = prevSnapshotPreventivos ? contarPrevPorMes(prevSnapshotPreventivos.data) : {};
+    h += '<div class="lbl">Preventivos</div><div class="vscroll"><table class="vtable"><tr><th>Mes</th><th>Tareas</th><th>Realizadas</th><th>Pendientes</th></tr>';
+    mesesExcel.forEach(m => {
+      const real = m.tasks.filter(t => m.done[t.id]).length;
+      const a = antMes[m.mes.toLowerCase()];
+      h += `<tr><td>${m.mes}</td><td>${celda(m.tasks.length, a && a.tareas)}</td><td>${celda(real, a && a.realizadas)}</td><td>${celda(m.tasks.length - real, a && a.pendientes)}</td></tr>`;
+      const arch = Object.values(archivos.preventivos).find(x => MESES_LARGO[x.mesIdx] === m.mes.toLowerCase());
+      if (hashAnt('preventivos', m.mes) && hashAnt('preventivos', m.mes) === arch.hash) alertas.push(['warn', `El Informe_Mtto de ${m.mes.toLowerCase()} es idéntico al de la semana pasada` + (m.tasks.length - real > 0 ? '.' : ' (normal si el mes ya está cerrado).')]);
+    });
+    h += '</table></div>';
+    // Meses faltantes: de mayo al mes de corte
+    const c = fechaCorte(), presentes = mesesExcel.map(m => m.id);
+    for (let id = 1; id <= idMes(c.getFullYear(), c.getMonth()); id++) {
+      if (presentes.indexOf(id) < 0) { const mi = (id + 3) % 12; alertas.push(['err', `Falta el Informe_Mtto de ${MESES_LARGO[mi]}.`]); }
+    }
+  } else if (!usarApp) {
+    alertas.push(['err', 'No subiste los Informe_Mtto de preventivos. Súbelos o marca la opción de usar los preventivos de Cumplimiento.']);
+  } else {
+    h += '<div class="alerta warn" style="margin-top:4px">Preventivos: se usarán los datos guardados en Cumplimiento (mtto_meses).</div>';
+  }
+  if (!prevSnapshot) alertas.push(['warn', 'No hay base de solicitudes: el informe saldrá sin comparación.']);
+  if (!prevSnapshotPreventivos) alertas.push(['warn', 'No hay base de preventivos: no saldrán las diapositivas de pendientes y cierres de preventivos.']);
+  if (prevSnapshot && parseFechaISO(prevSnapshot.fecha) >= fechaCorte()) alertas.push(['err', `La fecha de corte no es posterior a la de la base (${prevSnapshot.fecha}).`]);
+
+  h += alertas.length ? alertas.map(a => `<div class="alerta ${a[0]}">${a[0] === 'err' ? '⛔' : '⚠️'} ${a[1]}</div>`).join('') : '<div class="alerta ok">✅ Sin alertas.</div>';
+  document.getElementById('verifBody').innerHTML = h;
+  document.getElementById('confirmVerif').checked = false;
+  actualizarBotones();
+}
+function actualizarBotones() {
+  const listo = !!combinedNow && (!!mesesExcel || document.getElementById('usarPrevApp').checked);
+  document.getElementById('genBtn').disabled = !(listo && document.getElementById('confirmVerif').checked);
+  document.getElementById('saveSnapBtn').disabled = !generado || baseTemporal;
 }
 
 // ══════════════════════════════════════════════════
@@ -294,8 +553,15 @@ function renderPreview() {
 // ══════════════════════════════════════════════════
 function calcularDiff() {
   const oldData = prevSnapshot ? prevSnapshot.data : [];
-  const oldByNum = {};
-  oldData.forEach(r => { oldByNum[r.plant + '|' + r.numero] = r; });
+  // Si un número de solicitud está repetido (pasa en Bussié), se empareja fila con fila (1.ª con 1.ª, 2.ª con 2.ª)
+  const oldByNum = {}, contViejo = {};
+  oldData.forEach(r => {
+    if (!r.numero) return;
+    const base = r.plant + '|' + r.numero;
+    contViejo[base] = (contViejo[base] || 0) + 1;
+    oldByNum[base + '#' + contViejo[base]] = r;
+  });
+  const contNuevo = {};
 
   const techs = {}; // key -> {display, oldPend,oldCerr,oldRech,oldTotal,newPend,newCerr,newRech,newTotal,cerroEstaSemana}
   function ensure(key, display) {
@@ -319,7 +585,12 @@ function calcularDiff() {
     else if (r.estado === 'cerrada') t.newCerr++;
     else if (r.estado === 'rechazada') t.newRech++;
     // ¿esta solicitud estaba pendiente en el snapshot viejo bajo este mismo técnico y ahora está cerrada?
-    const old = r.numero ? oldByNum[r.plant + '|' + r.numero] : null;
+    let old = null;
+    if (r.numero) {
+      const base = r.plant + '|' + r.numero;
+      contNuevo[base] = (contNuevo[base] || 0) + 1;
+      old = oldByNum[base + '#' + contNuevo[base]] || null;
+    }
     if (old && old.estado === 'pendiente' && normTechKey(old.tecnico) === key && r.estado === 'cerrada') {
       t.cerroEstaSemana++;
     }
@@ -365,7 +636,7 @@ function procesarPreventivos(meses) {
     tasks.forEach(t => {
       const key = normTechKey(t.resp);
       if (!key) return;
-      if (!displayName[key]) displayName[key] = String(t.resp).trim();
+      if (!displayName[key]) displayName[key] = nombreCanonico(t.resp).toUpperCase();
       if (!porTecnico[key]) porTecnico[key] = { realizado: 0, porMes: {} };
       const done = m.done && m.done[t.id];
       if (done) porTecnico[key].realizado++;
@@ -383,7 +654,9 @@ function snapshotPreventivos(meses) {
   meses.forEach(m => {
     const tasks = Array.isArray(m.tasks) ? m.tasks : [];
     tasks.forEach(t => {
-      out.push({ key: m.id + '-' + t.id, tecnico: String(t.resp || '').trim() || 'Sin asignar', done: !!(m.done && m.done[t.id]), mes: m.mes });
+      const fila = { key: m.id + '-' + t.id, tecnico: String(t.resp || '').trim() || 'Sin asignar', done: !!(m.done && m.done[t.id]), mes: m.mes };
+      if (t.ref) fila.ref = t.ref;   // clave compuesta (solo cuando viene del Excel)
+      out.push(fila);
     });
   });
   return out;
@@ -391,8 +664,10 @@ function snapshotPreventivos(meses) {
 
 // Compara el snapshot viejo de preventivos contra el estado actual, técnico por técnico.
 function calcularDiffPreventivos(nowSnap, oldSnap) {
-  const oldByKey = {};
-  (oldSnap || []).forEach(r => { oldByKey[r.key] = r; });
+  // Se empareja por la clave compuesta (mes|técnico|CÓDIGO|ACTIVIDAD|FECHA LÍMITE + aparición) cuando las dos
+  // semanas la tienen; si la semana anterior viene de mtto_meses o del JSON base, por mes + posición de la tarea.
+  const oldByKey = {}, oldByRef = {};
+  (oldSnap || []).forEach(r => { oldByKey[r.key] = r; if (r.ref) oldByRef[r.ref] = r; });
 
   const techs = {};
   function ensure(key, display) {
@@ -401,16 +676,16 @@ function calcularDiffPreventivos(nowSnap, oldSnap) {
   }
   (oldSnap || []).forEach(r => {
     const key = normTechKey(r.tecnico);
-    const t = ensure(key, nombreCanonico(r.tecnico));
+    const t = ensure(key, nombreCanonico(r.tecnico).toUpperCase());
     t.oldTotal++;
     if (r.done) t.oldDone++; else t.oldPend++;
   });
   nowSnap.forEach(r => {
     const key = normTechKey(r.tecnico);
-    const t = ensure(key, nombreCanonico(r.tecnico));
+    const t = ensure(key, nombreCanonico(r.tecnico).toUpperCase());
     t.newTotal++;
     if (r.done) t.newDone++; else t.newPend++;
-    const old = oldByKey[r.key];
+    const old = (r.ref && oldByRef[r.ref]) || oldByKey[r.key];
     if (old && !old.done && normTechKey(old.tecnico) === key && r.done) t.cerro++;
   });
 
@@ -449,9 +724,23 @@ function addTitleRpt(slide, title, subtitle) {
 // Preventivos: el informe solo lleva la gráfica de barras (histórico). Las diapositivas de "avance por técnico"
 // y de líneas de preventivos quedan apagadas; poner en true para volver a incluirlas.
 const INCLUIR_AVANCE_PREVENTIVOS = false;
+// Gráficas de líneas de Preventivos (semana anterior vs esta semana, como las diapositivas 3 y 4 de Solicitudes)
+const INCLUIR_LINEAS_PREVENTIVOS = true;
 
+function escAttr(t) { return String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Mayor total apilado entre categorías (para saber qué tan ancho es un tramo en la barra)
+function maxApilado(xml) {
+  const sumas = {};
+  (xml.match(/<c:ser>[\s\S]*?<\/c:ser>/g) || []).forEach(ser => {
+    const val = ser.match(/<c:val>[\s\S]*?<\/c:val>/);
+    if (!val) return;
+    const re = /<c:pt idx="(\d+)">\s*<c:v>([^<]*)<\/c:v>/g; let m;
+    while ((m = re.exec(val[0]))) sumas[m[1]] = (sumas[m[1]] || 0) + (parseFloat(m[2]) || 0);
+  });
+  return Math.max.apply(null, Object.keys(sumas).map(k => sumas[k]).concat([0]));
+}
 function xmlDLbls(c) {
-  return '<c:dLbls><c:numFmt formatCode="' + c.fmt + '" sourceLinked="0"/>'
+  return '<c:dLbls><c:numFmt formatCode="' + escAttr(c.fmt) + '" sourceLinked="0"/>'
     + '<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr b="' + c.bold + '" i="0" strike="noStrike" sz="' + c.sz + '" u="none">'
     + '<a:solidFill><a:srgbClr val="' + c.color + '"/></a:solidFill><a:latin typeface="Arial"/></a:defRPr></a:pPr></a:p></c:txPr>'
     + '<c:dLblPos val="' + c.pos + '"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/>'
@@ -460,23 +749,36 @@ function xmlDLbls(c) {
 // Deja las gráficas como en el informe anterior: números dentro de las barras (blancos, sin ceros),
 // y en las líneas números en negrita del color de cada serie, con líneas y marcadores de distinto grosor.
 function estilizarGrafica(xml) {
+  // En barras, forzar que se muestre el nombre de TODOS los técnicos (si no, con muchas barras se salta uno sí y uno no)
+  if (xml.indexOf('<c:barChart>') >= 0 && xml.indexOf('<c:tickLblSkip') < 0) {
+    xml = xml.replace(/<c:noMultiLvlLbl/, '<c:tickLblSkip val="1"/><c:noMultiLvlLbl');
+  }
   const esLinea = xml.indexOf('<c:lineChart>') >= 0;
+  const apilado = xml.indexOf('<c:grouping val="stacked"/>') >= 0;
+  const fmtApilado = '0;;;';   // todos los números se muestran; solo se esconden los ceros
+  // Tamaño del número según cuántas barras hay: pocas barras = números más grandes
+  const nCat = (function () { const m = xml.match(/<c:cat>[\s\S]*?<c:ptCount val="(\d+)"/); return m ? parseInt(m[1], 10) : 10; })();
+  const tamNum = nCat <= 6 ? 1300 : (nCat <= 16 ? 1100 : 1000);
   return xml.replace(/<c:ser>[\s\S]*?<\/c:ser>/g, (ser) => {
     const m = ser.match(/<c:tx>[\s\S]*?<c:v>([^<]*)<\/c:v>/);
     const nombre = m ? m[1] : '';
     let cfg = null, linea = null;
     if (esLinea) {
-      if (nombre.indexOf('Pendientes semana anterior') === 0) { cfg = { pos:'b', sz:1100, bold:1, color:'7C8591', fmt:'#,##0' }; linea = { w:25400, marker:6 }; }
-      else if (nombre.indexOf('Pendientes esta semana') === 0) { cfg = { pos:'t', sz:1100, bold:1, color:'DC2626', fmt:'#,##0' }; linea = { w:38100, marker:8 }; }
-      else if (nombre.indexOf('Cerradas esta semana') === 0) { cfg = { pos:'t', sz:1100, bold:1, color:'16A34A', fmt:'#,##0' }; linea = { w:38100, marker:7 }; }
+      if (nombre.indexOf('Pendientes semana anterior') === 0 || nombre.indexOf('(semana pasada)') >= 0) { cfg = { pos:'b', sz:1100, bold:1, color:'7C8591', fmt:'#,##0' }; linea = { w:25400, marker:6 }; }
+      else if (nombre.indexOf('Pendientes esta semana') === 0 || nombre.indexOf('(hoy)') >= 0) { cfg = { pos:'t', sz:1100, bold:1, color:'DC2626', fmt:'#,##0' }; linea = { w:38100, marker:8 }; }
+      else if (nombre.indexOf('Cerradas esta semana') === 0 || nombre.indexOf('Cerradas del ') === 0) { cfg = { pos:'t', sz:1100, bold:1, color:'16A34A', fmt:'#,##0' }; linea = { w:38100, marker:7 }; }
     } else if (['Cerradas','Pendientes Bussié','Pendientes Platino','Rechazadas'].indexOf(nombre) >= 0) {
-      cfg = { pos:'ctr', sz:900, bold:0, color:'FFFFFF', fmt:'0;;;' };
+      cfg = { pos:'ctr', sz:tamNum, bold:1, color: nombre === 'Rechazadas' ? '2B2B2B' : 'FFFFFF', fmt:fmtApilado };
     } else if (nombre === 'Realizados' || /^Pend\. /.test(nombre)) {
-      const claro = nombre === 'Pend. mayo' || nombre === 'Pend. junio';   // fondos claros: texto oscuro
-      cfg = { pos:'ctr', sz:900, bold:1, color: claro ? '2B2B2B' : 'FFFFFF', fmt:'0;;;' };
+      const claro = ['Pend. mayo', 'Pend. junio', 'Pend. julio'].indexOf(nombre) >= 0;   // fondos claros/medios: texto oscuro
+      cfg = { pos:'ctr', sz:tamNum, bold:1, color: claro ? '2B2B2B' : 'FFFFFF', fmt:fmtApilado };
     }
     if (!cfg) return ser;
     let out = ser.replace(/<c:dLbls>[\s\S]*?<\/c:dLbls>/, xmlDLbls(cfg));
+    if (apilado) {   // línea blanca fina entre tramos para que se distingan
+      out = out.replace(/(<c:spPr>\s*<a:solidFill>[\s\S]*?<\/a:solidFill>)(\s*<a:effectLst\/>)/,
+        '$1<a:ln w="9525"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:ln>$2');
+    }
     if (linea) {
       out = out.replace(/(<c:spPr>[\s\S]*?<a:ln w=")\d+(")/, '$1' + linea.w + '$2')
                .replace(/(<c:marker>\s*<c:symbol val="circle"\/>\s*<c:size val=")\d+(")/, '$1' + linea.marker + '$2');
@@ -531,31 +833,51 @@ function resumenCierres(chunk, todos) {
   return 'se cerraron ' + total + ': ' + lista;
 }
 
-async function guardarSoloSnapshot() {
-  const btn = document.getElementById('saveSnapBtn');
-  const original = btn.textContent;
-  const fechaInput = document.getElementById('fechaSnapshot');
-  const fecha = (fechaInput && fechaInput.value) ? fechaInput.value : fechaLocalISO(new Date());
-  if (!combinedNow || !combinedNow.length) {
-    alert('Primero sube los dos Excel (Platino y Bussié).');
-    return;
-  }
-  if (!confirm(`Vas a guardar este estado (${combinedNow.length} solicitudes) como snapshot con fecha ${fecha}, sin generar ningún PPTX. ¿Confirmas?`)) return;
+async function guardarBase() {
+  if (!generado) { alert('Primero genera el informe.'); return; }
+  if (baseTemporal) { alert('La base actual es un JSON de prueba: recarga la página para guardar contra la base real.'); return; }
+  const g = generado;
+  if (!confirm(`Se guardará el estado del ${g.fecha} como base de la próxima semana:\n• ${g.solicitudes.length} solicitudes\n• ${g.preventivos ? g.preventivos.length + ' tareas de preventivos' : 'sin preventivos'}\n¿Confirmas?`)) return;
+  const btn = document.getElementById('saveSnapBtn'); const original = btn.textContent;
   btn.disabled = true; btn.textContent = '⏳ Guardando…';
   try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
-      method: 'POST',
-      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
-      body: JSON.stringify({ tipo:'solicitudes', fecha, data: combinedNow })
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    showStatus(`✅ Snapshot guardado con fecha ${fecha} (${combinedNow.length} solicitudes). La próxima vez que generes el informe, se comparará contra esto.`, 'ok');
-    prevSnapshot = { fecha, data: combinedNow };
-    document.getElementById('snapInfo').innerHTML = `📅 Se comparará contra el snapshot guardado el <b>${fecha}</b> (${combinedNow.length} solicitudes).`;
+    await insertarSnapshot('solicitudes', g.fecha, g.solicitudes);
+    if (g.preventivos) await insertarSnapshot('preventivos', g.fecha, g.preventivos);
+    try { await insertarSnapshot('archivos', g.fecha, g.archivos); } catch (e) { console.warn('No se guardaron los hashes', e); }
+    showStatus(`✅ Base del ${g.fecha} guardada. La próxima semana se comparará contra estos datos.`, 'ok');
+    generado = null;
+    await cargarUltimoSnapshot();
   } catch (e) {
-    showStatus('⚠️ No se pudo guardar el snapshot: ' + e.message, 'err');
-  } finally {
-    btn.disabled = false; btn.textContent = original;
+    showStatus('⚠️ No se pudo guardar la base: ' + e.message, 'err');
+  } finally { btn.textContent = original; actualizarBotones(); }
+}
+
+// Controles que se muestran antes de descargar
+function pintarControles(ctrl) {
+  const card = document.getElementById('controlesCard');
+  card.style.display = 'block';
+  document.getElementById('controlesBody').innerHTML = ctrl.map(c =>
+    `<div class="alerta ${c.nivel}">${c.nivel === 'ok' ? '✅' : (c.nivel === 'warn' ? '⚠️' : '⛔')} ${c.texto}</div>`).join('');
+}
+function revisarNombres(lista, etiqueta, clavesAnt, ctrl) {
+  const disp = {};
+  lista.forEach(t => {
+    if (/\s{2,}|\u00a0/.test(t.display)) ctrl.push({ nivel: 'err', texto: `${etiqueta}: "${t.display}" tiene espacios dobles.` });
+    const d = claveBase(t.display);
+    if (disp[d] && disp[d] !== t.key) ctrl.push({ nivel: 'err', texto: `${etiqueta}: el técnico "${t.display}" sale repetido.` });
+    disp[d] = t.key;
+  });
+  // Posibles alias faltantes: mismo primer nombre y mismo apellido final, distinta clave
+  const pal = lista.map(t => ({ t, w: t.key.split(' ') }));
+  for (let i = 0; i < pal.length; i++) for (let j = i + 1; j < pal.length; j++) {
+    const a = pal[i].w, b = pal[j].w;
+    if (a.length > 1 && b.length > 1 && a[0] === b[0] && a[a.length - 1] === b[b.length - 1]) {
+      ctrl.push({ nivel: 'warn', texto: `${etiqueta}: "${pal[i].t.display}" y "${pal[j].t.display}" podrían ser la misma persona (sin alias).` });
+    }
+  }
+  if (clavesAnt) {
+    const nuevos = lista.filter(t => !clavesAnt.has(t.key)).map(t => t.display);
+    if (nuevos.length) ctrl.push({ nivel: 'warn', texto: `${etiqueta}: técnicos nuevos respecto a la semana pasada: ${nuevos.join(', ')}.` });
   }
 }
 
@@ -565,7 +887,8 @@ async function generarInforme() {
   btn.disabled = true; btn.textContent = '⏳ Generando…';
   try {
     const diff = calcularDiff();
-    const fechaHoy = new Date();
+    const fechaHoy = fechaCorte();
+    const ctrl = [];
     const fechaHoyStr = fmtFechaCorta(fechaHoy);
     const fechaAntStr = prevSnapshot ? fmtFechaCorta(parseFechaISO(prevSnapshot.fecha)) : fechaHoyStr;
 
@@ -634,7 +957,7 @@ async function generarInforme() {
     totalRow2[0].options.align='left';
     s2.addTable([hdr2,...body2,totalRow2], {x:8.5,y:1.75,w:4.2,colW:[2.4,0.9,0.9],rowH:rowH2b,border:{type:'solid',color:'E2E8F0',pt:0.5},autoPage:false});
 
-    s2.addText('* Solicitudes que dejaron de estar sin asignar y pasaron a técnicos. El total de pendientes ('+totalG.newPend+') incluye a los técnicos sin movimiento.', {x:0.6,y:6.85,w:12.1,h:0.3,fontSize:8.5,italic:true,color:RPT.GREY_TEXT,fontFace:'Arial',margin:0});
+    s2.addText('* ' + (((diff.find(t => t.key === 'SIN ASIGNAR') || {}).nuevas || 0) < 0 ? 'Solicitudes que dejaron de estar sin asignar y pasaron a técnicos. ' : '') + 'El total de pendientes ('+totalG.newPend+') incluye a los técnicos sin movimiento.', {x:0.6,y:6.85,w:12.1,h:0.3,fontSize:8.5,italic:true,color:RPT.GREY_TEXT,fontFace:'Arial',margin:0});
     addFooterRpt(s2, page, footTxt); page++;
 
     // ---- Slides 3-4: línea pendientes semana anterior vs esta semana ----
@@ -645,9 +968,7 @@ async function generarInforme() {
     chunks.forEach((chunk, ci) => {
       let s = pres.addSlide();
       s.background = { color: 'FFFFFF' };
-      const subtitle2 = ci === 0
-        ? resumenCierres(chunk, diff)
-        : `Platino y Bussié juntas · resto de técnicos con pendientes · ${resumenCierres(chunk, diff)}`;
+      const subtitle2 = (ci === 0 ? '' : 'Platino y Bussié juntas · ') + 'se cerraron ' + chunk.reduce((a, t) => a + t.cerro, 0);
       addTitleRpt(s, `Pendientes y cierres por técnico (${ci+1} de ${chunks.length})`, subtitle2);
       s.addChart(pres.ChartType.line, [
         { name: `Pendientes semana anterior (${fechaAntStr})`, labels: chunk.map(t=>nombreTabla(t.display)), values: chunk.map(t=>t.oldPend) },
@@ -664,12 +985,7 @@ async function generarInforme() {
     });
 
     // ---- Slide 5: Histórico por técnico (stacked) ----
-    let s5 = pres.addSlide();
-    s5.background = { color: 'FFFFFF' };
     const rango = `Solicitudes de enero 2025 al ${fechaHoyStr}/${fechaHoy.getFullYear()}`;
-    addTitleRpt(s5, 'Histórico por técnico · Platino y Bussié', rango);
-    const histOrden = diff.slice().sort((a,b)=> (b.newPend) - (a.newPend));
-    // recompute per-plant pendientes for stacked bar using combinedNow directly
     const histPorTec = {};
     diff.forEach(t => histPorTec[t.key] = { display:t.display, cerradas:0, pendPlatino:0, pendBussie:0, rechazadas:0 });
     combinedNow.forEach(r=>{
@@ -681,21 +997,36 @@ async function generarInforme() {
       else if (r.estado==='pendiente') { if (r.plant==='platino') h.pendPlatino++; else h.pendBussie++; }
     });
     // Solo técnicos con pendientes (como dice el subtítulo y como en el informe de referencia)
-    const histList = Object.values(histPorTec).filter(h => h.pendPlatino + h.pendBussie > 0).sort((a,b)=>(b.cerradas+b.pendPlatino+b.pendBussie+b.rechazadas)-(a.cerradas+a.pendPlatino+a.pendBussie+a.rechazadas));
-    s5.addChart(pres.ChartType.bar, [
-      {name:'Cerradas', labels:histList.map(h=>h.display), values:histList.map(h=>h.cerradas)},
-      {name:'Pendientes Bussié', labels:histList.map(h=>h.display), values:histList.map(h=>h.pendBussie)},
-      {name:'Pendientes Platino', labels:histList.map(h=>h.display), values:histList.map(h=>h.pendPlatino)},
-      {name:'Rechazadas', labels:histList.map(h=>h.display), values:histList.map(h=>h.rechazadas)},
-    ], {
-      x:0.6,y:1.45,w:12.1,h:5.55, barDir:'bar', barGrouping:'stacked', barGapWidthPct:35,
-      showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
-      chartColors:[RPT.GREEN, RPT.BLUE, RPT.RED_SOFT, RPT.GREY_MED],
-      catAxisLabelFontSize:10, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
-      valAxisLabelFontSize:10, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
-      valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
+    const totalHist = h => h.cerradas + h.pendBussie + h.pendPlatino + h.rechazadas;
+    const histList = Object.values(histPorTec).filter(h => h.pendPlatino + h.pendBussie > 0).sort((a,b)=> totalHist(b) - totalHist(a));
+    // Si en una sola escala conviven técnicos con 350 solicitudes y otros con 5, los tramos pequeños quedan de un par
+    // de píxeles y los números se montan. Por eso van en dos diapositivas, cada una con su propia escala.
+    const LIMITE_ESCALA_HIST = 110;
+    const histGrandes = histList.filter(h => totalHist(h) > LIMITE_ESCALA_HIST);
+    const histChicos = histList.filter(h => totalHist(h) <= LIMITE_ESCALA_HIST);
+    const gruposHist = (histGrandes.length > 0 && histChicos.length > 0) ? [histGrandes, histChicos] : [histList];
+    gruposHist.forEach((lista, gi) => {
+      let s5 = pres.addSlide();
+      s5.background = { color: 'FFFFFF' };
+      const dividido = gruposHist.length > 1;
+      addTitleRpt(s5, 'Histórico por técnico · Platino y Bussié' + (dividido ? ` (${gi+1} de 2)` : ''),
+        rango + (dividido ? (gi === 0 ? ' · técnicos con más solicitudes' : ' · resto de técnicos · escala distinta a la anterior') : ''));
+      const chico = lista.length > 6;
+      s5.addChart(pres.ChartType.bar, [
+        {name:'Cerradas', labels:lista.map(x=>x.display), values:lista.map(x=>x.cerradas)},
+        {name:'Pendientes Bussié', labels:lista.map(x=>x.display), values:lista.map(x=>x.pendBussie)},
+        {name:'Pendientes Platino', labels:lista.map(x=>x.display), values:lista.map(x=>x.pendPlatino)},
+        {name:'Rechazadas', labels:lista.map(x=>x.display), values:lista.map(x=>x.rechazadas)},
+      ], {
+        x:0.6, y:1.45, w:12.1, h:5.55, barDir:'bar', barGrouping:'stacked', barGapWidthPct: chico ? 30 : 80,
+        showLegend:true, legendPos:'t', legendFontSize:12, legendFontFace:'Arial',
+        chartColors:[RPT.GREEN, RPT.BLUE, RPT.RED_SOFT, RPT.GREY_MED],
+        catAxisLabelFontSize: chico ? (lista.length > 16 ? 10 : 11) : 12, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+        valAxisLabelFontSize:11, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+        valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
+      });
+      addFooterRpt(s5, page, footTxt); page++;
     });
-    addFooterRpt(s5, page, footTxt); page++;
 
     // ---- Slide 6: Abiertas de más de 1 mes ----
     const HOY = fechaHoy;
@@ -793,13 +1124,16 @@ async function generarInforme() {
     addFooterRpt(s7, page, footTxt); page++;
 
     // ---- Slide 8: Portada Preventivos ----
+    const meses = mesesExcel || (document.getElementById('usarPrevApp').checked ? await cargarPreventivos() : null);
+    // Primer y último mes con datos (p. ej. Mayo y Octubre): salen en la portada y en el subtítulo del histórico
+    const primerMes = (meses && meses.length) ? String(meses[0].mes) : 'Mayo';
+    const ultimoMes = (meses && meses.length) ? String(meses[meses.length - 1].mes) : 'Septiembre';
     let s8 = pres.addSlide();
     s8.background = { path: 'assets/sanfer_cover.png' };
     s8.addText('MANTENIMIENTOS\nPREVENTIVOS', { x:7.3, y:2.5, w:5.4, h:1.7, fontSize:30, bold:true, color:RPT.RED_DARK, fontFace:'Cambria', lineSpacing:36, margin:0 });
-    s8.addText('Avance semanal por técnico\nSeguimiento MAYO — SEPTIEMBRE', { x:7.35, y:4.0, w:5.4, h:0.8, fontSize:14, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
+    s8.addText('Avance semanal por técnico\nSeguimiento ' + primerMes.toUpperCase() + ' — ' + ultimoMes.toUpperCase(), { x:7.35, y:4.0, w:5.4, h:0.8, fontSize:14, color:RPT.NAVY_TEXT, fontFace:'Arial', margin:0 });
 
     const footTxtPrev = 'Mantenimientos Preventivos · Bussié';
-    const meses = await cargarPreventivos();
     let nowSnapPreventivos = null;
     if (meses && meses.length) {
       nowSnapPreventivos = snapshotPreventivos(meses);
@@ -857,20 +1191,30 @@ async function generarInforme() {
       sAv.addText('* El total de pendientes ('+totGP.newPend+') incluye a los técnicos sin movimiento.', {x:0.6,y:6.85,w:12.1,h:0.3,fontSize:8.5,italic:true,color:RPT.GREY_TEXT,fontFace:'Arial',margin:0});
       addFooterRpt(sAv, page, footTxtPrev); page++;
 
+      }
+      if (INCLUIR_LINEAS_PREVENTIVOS && prevSnapshotPreventivos) {   // solo si hay con qué comparar
       // ---- Slide(s): línea pendientes semana anterior vs esta semana (preventivos) ----
       const ordenLineaP = diffPrev.slice().sort((a,b)=>b.newPend-a.newPend);
       const CHUNK_P = 13;
+      // Si en una sola escala conviven técnicos con 300 pendientes y otros con 3, los números pequeños se montan:
+      // se separan en dos gráficas (muchos pendientes / el resto), cada una con su propia escala.
+      const LIMITE_LINEAS_PREV = 30;
+      const grandesP = ordenLineaP.filter(t => Math.max(t.oldPend, t.newPend) > LIMITE_LINEAS_PREV);
+      const chicosP = ordenLineaP.filter(t => Math.max(t.oldPend, t.newPend) <= LIMITE_LINEAS_PREV);
+      const separadasP = grandesP.length > 0 && chicosP.length > 0;
       const chunksP = [];
-      for (let i=0;i<ordenLineaP.length;i+=CHUNK_P) chunksP.push(ordenLineaP.slice(i,i+CHUNK_P));
+      const trocearP = (lista) => { for (let i=0;i<lista.length;i+=CHUNK_P) chunksP.push(lista.slice(i,i+CHUNK_P)); };
+      if (separadasP) { trocearP(grandesP); trocearP(chicosP); } else { trocearP(ordenLineaP); }
       chunksP.forEach((chunk, ci) => {
         let s = pres.addSlide();
         s.background = { color: 'FFFFFF' };
         addTitleRpt(s, `Pendientes y cierres por técnico · preventivos (${ci+1} de ${chunksP.length})`,
-          (ci === 0 ? '' : 'resto de técnicos con pendientes · ') + resumenCierres(chunk, diffPrev));
+          (ci === 0 ? ('Preventivos que faltaban el ' + fechaAntPrevStr + ' comparados con los que faltan hoy ' + fechaHoyStr + ' · ') : '·')
+            + 'se cerraron ' + chunk.reduce((a, t) => a + t.cerro, 0));
         s.addChart(pres.ChartType.line, [
-          { name: `Pendientes semana anterior (${fechaAntPrevStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.oldPend) },
-          { name: `Pendientes esta semana (${fechaHoyStr})`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.newPend) },
-          { name: 'Cerradas esta semana', labels: chunk.map(t=>t.display), values: chunk.map(t=>t.cerro) },
+          { name: `Pendientes el ${fechaAntPrevStr} (semana pasada)`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.oldPend) },
+          { name: `Pendientes el ${fechaHoyStr} (hoy)`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.newPend) },
+          { name: `Cerradas del ${fechaAntPrevStr} al ${fechaHoyStr}`, labels: chunk.map(t=>t.display), values: chunk.map(t=>t.cerro) },
         ], {
           x:0.6,y:1.5,w:12.1,h:5.5, showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
           chartColors:[RPT.GREY_MED, RPT.RED_SOFT, RPT.GREEN], lineDataSymbol:'circle', lineDataSymbolSize:6, lineSize:2,
@@ -886,53 +1230,96 @@ async function generarInforme() {
     // ---- Slide: Histórico preventivos (stacked por mes) ----
     if (meses && meses.length) {
       const { displayName, porTecnico, mesesLabels } = procesarPreventivos(meses);
-      const keysPrev = Object.keys(porTecnico).sort((a,b)=>{
-        const totA = porTecnico[a].realizado + Object.values(porTecnico[a].porMes).reduce((x,y)=>x+y,0);
-        const totB = porTecnico[b].realizado + Object.values(porTecnico[b].porMes).reduce((x,y)=>x+y,0);
-        return totB - totA;
+      const totalDe = k => porTecnico[k].realizado + Object.values(porTecnico[k].porMes).reduce((x,y)=>x+y,0);
+      const keysPrev = Object.keys(porTecnico).sort((a,b) => totalDe(b) - totalDe(a));
+      // Un color bien distinto por mes (de amarillo a rojo oscuro, y gris azulado para el último)
+      const paleta = ['FDE68A','FDBA74','FB923C','DC2626','7F1D1D','334155','1E293B','0F172A'];
+      // Si en una sola escala conviven técnicos con 500 tareas y otros con 5, los tramos pequeños quedan de un par de
+      // píxeles y los números se montan. Por eso van en dos diapositivas, cada una con su propia escala.
+      const LIMITE_ESCALA = 130;
+      const grandes = keysPrev.filter(k => totalDe(k) > LIMITE_ESCALA);
+      const chicos = keysPrev.filter(k => totalDe(k) <= LIMITE_ESCALA);
+      const gruposPrev = (grandes.length > 0 && chicos.length > 0) ? [grandes, chicos] : [keysPrev];
+      const basePrev = primerMes + ' a ' + ultimoMes.toLowerCase() + ' ' + fechaHoy.getFullYear() + ' · realizados y pendientes por mes';
+      gruposPrev.forEach((keys, gi) => {
+        let s9 = pres.addSlide();
+        s9.background = { color: 'FFFFFF' };
+        const dividido = gruposPrev.length > 1;
+        addTitleRpt(s9, 'Histórico por técnico · preventivos' + (dividido ? ` (${gi+1} de 2)` : ''),
+          basePrev + (dividido && gi === 0 ? ' ·' : ''));
+        const series = [{name:'Realizados', labels:keys.map(k=>displayName[k]), values:keys.map(k=>porTecnico[k].realizado), color:RPT.GREEN}];
+        mesesLabels.forEach((mesLbl, i) => {
+          series.push({ name:'Pend. '+mesLbl.toLowerCase(), labels:keys.map(k=>displayName[k]), values:keys.map(k=>porTecnico[k].porMes[mesLbl]||0), color: paleta[i % paleta.length] });
+        });
+        const chico = keys.length > 6;
+        s9.addChart(pres.ChartType.bar, series.map(x=>({name:x.name,labels:x.labels,values:x.values})), {
+          x:0.6, y:1.5, w:12.1, h:5.5, barDir:'bar', barGrouping:'stacked', barGapWidthPct: chico ? 30 : 80,
+          showLegend:true, legendPos:'t', legendFontSize:12, legendFontFace:'Arial',
+          chartColors: series.map(x=>x.color),
+          catAxisLabelFontSize: chico ? 11 : 12, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
+          valAxisLabelFontSize:11, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
+          valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
+        });
+        addFooterRpt(s9, page, footTxtPrev); page++;
       });
-      let s9 = pres.addSlide();
-      s9.background = { color: 'FFFFFF' };
-      addTitleRpt(s9, 'Histórico por técnico · preventivos', 'Mayo a septiembre 2026 · realizados y pendientes por mes');
-      const seriesPrev = [{name:'Realizados', labels:keysPrev.map(k=>displayName[k]), values:keysPrev.map(k=>porTecnico[k].realizado), color:RPT.GREEN}];
-      const paleta = ['FECACA','FCA5A5','F87171','DC2626','7F1D1D','7F1D1D'];
-      mesesLabels.forEach((mesLbl, i) => {
-        seriesPrev.push({ name:'Pend. '+mesLbl.toLowerCase(), labels:keysPrev.map(k=>displayName[k]), values:keysPrev.map(k=>porTecnico[k].porMes[mesLbl]||0), color: paleta[i % paleta.length] });
+    }
+
+    // ══ Controles antes de descargar ══
+    const cuentaExcel = (rows) => rows.filter(r => clasificarEstado(r['Estado']) === 'pendiente').length;
+    const pendExcelP = cuentaExcel(rowsPlatino), pendExcelB = cuentaExcel(rowsBussie);
+    const pendInfP = histList.reduce((a, h) => a + h.pendPlatino, 0), pendInfB = histList.reduce((a, h) => a + h.pendBussie, 0);
+    ctrl.push({ nivel: pendInfP === pendExcelP && pendInfB === pendExcelB ? 'ok' : 'err',
+      texto: `Pendientes del informe: Platino ${pendInfP} y Bussié ${pendInfB} · en los Excel: Platino ${pendExcelP} y Bussié ${pendExcelB}.` });
+    const malFila = diff.filter(t => t.oldPend + t.nuevas - t.cerro !== t.newPend);
+    ctrl.push({ nivel: malFila.length ? 'err' : 'ok', texto: malFila.length
+      ? 'Diap. 2: no cuadra anterior + nuevas − cerró = hoy en: ' + malFila.map(t => t.display).join(', ') + '.'
+      : `Diap. 2: en todas las filas anterior + nuevas − cerró = hoy (total ${totalG.oldPend} + ${totalG.nuevas} − ${totalG.cerro} = ${totalG.newPend}).` });
+    const sumaLineas = chunks.reduce((a, ch) => a + ch.reduce((x, t) => x + t.newPend, 0), 0);
+    ctrl.push({ nivel: sumaLineas === totalG.newPend ? 'ok' : 'err', texto: `Total de pendientes de la diap. 2 (${totalG.newPend}) vs. suma de las líneas de pendientes y cierres (${sumaLineas}).` });
+    revisarNombres(diff, 'Solicitudes', prevSnapshot ? new Set(prevSnapshot.data.map(r => normTechKey(r.tecnico))) : null, ctrl);
+    if (meses && meses.length) {
+      const { porTecnico } = procesarPreventivos(meses);
+      const malMes = [];
+      let totReal = 0;
+      meses.forEach(m => {
+        const realExcel = m.tasks.filter(t => m.done[t.id]).length, pendExcel = m.tasks.length - realExcel;
+        const pendInf = Object.keys(porTecnico).reduce((a, k) => a + (porTecnico[k].porMes[m.mes] || 0), 0);
+        totReal += realExcel;
+        if (pendInf !== pendExcel) malMes.push(m.mes);
       });
-      s9.addChart(pres.ChartType.bar, seriesPrev.map(s=>({name:s.name,labels:s.labels,values:s.values})), {
-        x:0.6,y:1.5,w:12.1,h:5.5, barDir:'bar', barGrouping:'stacked', barGapWidthPct:40,
-        showLegend:true, legendPos:'t', legendFontSize:11, legendFontFace:'Arial',
-        chartColors: seriesPrev.map(s=>s.color),
-        catAxisLabelFontSize:10, catAxisLabelFontFace:'Arial', catAxisLabelColor:RPT.NAVY_TEXT,
-        valAxisLabelFontSize:10, valAxisMinVal:0, valAxisLabelFontFace:'Arial', valAxisLabelColor:RPT.GREY_TEXT,
-        valGridLine:{color:'E2E8F0',size:1}, catGridLine:{style:'none'},
-      });
-      addFooterRpt(s9, page, footTxtPrev); page++;
+      const realInf = Object.keys(porTecnico).reduce((a, k) => a + porTecnico[k].realizado, 0);
+      const pendPorMes = meses.map(m => m.mes.toLowerCase() + ' ' + (m.tasks.length - m.tasks.filter(t => m.done[t.id]).length)).join(', ');
+      ctrl.push({ nivel: !malMes.length && realInf === totReal ? 'ok' : 'err', texto: `Preventivos: ${realInf.toLocaleString('es-CO')} realizados (Excel ${totReal.toLocaleString('es-CO')}) y pendientes por mes ${pendPorMes}` + (malMes.length ? ` · no cuadra en ${malMes.join(', ')}` : '') + '.' });
+      if (nowSnapPreventivos && prevSnapshotPreventivos) {
+        const dp = calcularDiffPreventivos(nowSnapPreventivos, prevSnapshotPreventivos.data);
+        const tot = dp.reduce((a, t) => ({ o: a.o + t.oldPend, c: a.c + t.cerro, n: a.n + t.newPend }), { o: 0, c: 0, n: 0 });
+        const conNuevas = dp.filter(t => t.oldPend - t.cerro !== t.newPend);
+        ctrl.push({ nivel: conNuevas.length ? 'warn' : 'ok', texto: `Preventivos: ${tot.o} pendientes antes − ${tot.c} cerradas = ${tot.n} hoy` + (conNuevas.length
+          ? ` · no cuadra (tareas nuevas o reasignadas) en: ${conNuevas.map(t => `${t.display} (${t.oldPend} − ${t.cerro} ≠ ${t.newPend})`).join(', ')}.` : ' · cuadra en cada técnico.') });
+        revisarNombres(dp, 'Preventivos', new Set(prevSnapshotPreventivos.data.map(r => normTechKey(r.tecnico))), ctrl);
+      }
+    }
+    pintarControles(ctrl);
+    if (ctrl.some(c => c.nivel === 'err') && !confirm('Hay controles con diferencias (en rojo). ¿Descargar el informe de todas formas?')) {
+      showStatus('Informe no descargado: revisa los controles.', 'warn');
+      return;
     }
 
     const fechaArchivo = fechaLocalISO(fechaHoy);
     await corregirIdsYDescargar(pres, `Informe_Semanal_${fechaArchivo}.pptx`);
 
-    // Guardar snapshot nuevo
-    await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
-      method: 'POST',
-      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
-      body: JSON.stringify({ tipo:'solicitudes', fecha: fechaLocalISO(fechaHoy), data: combinedNow })
-    });
-    if (nowSnapPreventivos) {
-      await fetch(`${SUPA_URL}/rest/v1/informe_snapshots`, {
-        method: 'POST',
-        headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=minimal' },
-        body: JSON.stringify({ tipo:'preventivos', fecha: fechaLocalISO(fechaHoy), data: nowSnapPreventivos })
-      });
-    }
-    showStatus('✅ Informe generado y snapshots guardados (solicitudes'+(nowSnapPreventivos?' y preventivos':'')+') para la próxima comparación.', 'ok');
+    // La base de la próxima semana se guarda aparte, con el botón "Guardar como base de la próxima semana"
+    const archivosSnap = [];
+    ['platino', 'bussie'].forEach(p => archivosSnap.push({ tipo: p, mes: '', nombre: archivos[p].nombre, hash: archivos[p].hash, filas: archivos[p].rows.length, ultimaFecha: fmtF(contarSol(combinedNow, p).ultima) }));
+    Object.values(archivos.preventivos).forEach(a => archivosSnap.push({ tipo: 'preventivos', mes: MESES_LARGO[a.mesIdx].charAt(0).toUpperCase() + MESES_LARGO[a.mesIdx].slice(1), nombre: a.nombre, hash: a.hash, filas: a.rows.length, ultimaFecha: '' }));
+    generado = { fecha: fechaArchivo, solicitudes: combinedNow, preventivos: nowSnapPreventivos, archivos: archivosSnap };
+    showStatus('✅ Informe generado y descargado. Si está bien, guárdalo como base de la próxima semana.', 'ok');
 
   } catch (e) {
     alert('No se pudo generar el informe: ' + e.message);
     console.error(e);
   } finally {
-    btn.disabled = false; btn.textContent = original;
+    btn.textContent = original; actualizarBotones();
   }
 }
 </script>
