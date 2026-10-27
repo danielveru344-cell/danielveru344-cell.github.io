@@ -611,7 +611,7 @@ async function corregirIdsYDescargar(pres, fileName) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-async function generarInformePPTX() {
+async function generarInformeCumplimientoPPTX() {
   const btn = document.getElementById('pptxBtn');
   const original = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Generando…'; }
@@ -798,10 +798,31 @@ async function generarInformePPTX() {
 // El botón "Informe PPTX" abre el generador del informe semanal (Solicitudes + Preventivos, comparado con la semana anterior).
 // La función anterior generarInformePPTX() se conserva en este archivo por si se quiere volver a usar.
 function abrirInformeSemanal() {
+  // Se abre en la ventana principal de la app (a pantalla completa); si no se puede, dentro de este marco.
+  try {
+    const top = window.parent && window.parent !== window ? window.parent : null;
+    if (top && top.document && top.document.body) {
+      const d = top.document;
+      let ov = d.getElementById('infSemOverlayApp');
+      if (!ov) {
+        ov = d.createElement('div');
+        ov.id = 'infSemOverlayApp';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(9,31,62,.55);padding:calc(10px + env(safe-area-inset-top,0px)) 10px calc(10px + env(safe-area-inset-bottom,0px));box-sizing:border-box;';
+        ov.innerHTML = '<div style="height:100%;background:#f1f5f9;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.3)"><div style="display:flex;align-items:center;justify-content:space-between;background:#0D2F5C;color:#fff;padding:8px 14px;font-family:Montserrat,Arial,sans-serif"><b style="font-size:13px">📊 Informe semanal (PPTX)</b><button type="button" id="infSemCerrarApp" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer;font-family:inherit">✕ Cerrar</button></div><iframe title="Informe semanal" src="informe_semanal.html?v=20261027a" style="flex:1;border:none;width:100%;background:#f1f5f9"></iframe></div>';
+        d.body.appendChild(ov);
+        d.getElementById('infSemCerrarApp').addEventListener('click', () => { ov.style.display = 'none'; });
+      }
+      ov.style.display = 'block';
+      return;
+    }
+  } catch (e) { /* sin acceso a la ventana principal: se abre aquí */ }
   const f = document.getElementById('infSemFrame');
-  if (!f.getAttribute('src')) f.setAttribute('src', 'informe_semanal.html?v=20261026a');
+  if (!f.getAttribute('src')) f.setAttribute('src', 'informe_semanal.html?v=20261027a');
   document.getElementById('infSemOverlay').style.display = 'block';
 }
+// La app llama a generarInformePPTX() desde el botón "📊 Informe PPTX" de la cabecera de Cumplimiento:
+// ahora abre el informe semanal. El informe de cumplimiento anterior queda en generarInformeCumplimientoPPTX().
+function generarInformePPTX() { abrirInformeSemanal(); return Promise.resolve(); }
 function cerrarInformeSemanal() { document.getElementById('infSemOverlay').style.display = 'none'; }
 </script>
 </body>
