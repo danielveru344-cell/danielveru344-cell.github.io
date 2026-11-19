@@ -13453,6 +13453,67 @@ function areaDesdeCodigoEquipo(codigo){
   if(partes.length<3) return "";
   return partes.slice(1,-1).join("-");
 }
+// ── Actividades del instructivo (numeral 7.3) dentro del F-MAN-008 ──────────
+var FMAN008_FILA_INI=12;
+var FMAN008_FILA_FIN=37;
+var FMAN008_ULTIMA_FILA_PAG1=38;
+function altoFilaActividadFMAN008(ws,texto){
+  // Ancho útil = columnas A..K combinadas (en unidades de Excel ≈ 7 px)
+  var px=0;
+  for(var c=1;c<=11;c++){px+=((ws.getColumn(c).width||8.43)*7+5);}
+  var charsPorLinea=Math.max(40,Math.floor((px-12)/6.0));   // Arial 9 ≈ 6.0 px por carácter (estimación conservadora)
+  var lineas=0;
+  String(texto).split(/\r?\n/).forEach(function(p){lineas+=Math.max(1,Math.ceil(p.length/charsPorLinea));});
+  return Math.max(19,lineas*12.5+7);
+}
+function ajustarEscalaPagina1FMAN008(ws){
+  // Que las filas más altas no empujen el pie (fila 38) a la página 2.
+  var total=0;
+  for(var r=1;r<=FMAN008_ULTIMA_FILA_PAG1;r++){total+=(ws.getRow(r).height||15);}
+  var m=ws.pageSetup.margins||{top:0.75,bottom:0.75};
+  var disponible=(8.5-(m.top||0.75)-(m.bottom||0.75))*72;
+  var escala=Math.floor(disponible/total*100);
+  ws.pageSetup.scale=Math.max(50,Math.min(80,escala));
+}
+function llenarActividadesFMAN008(ws,actividades){
+  actividades=(actividades||[]).filter(function(t){return t&&String(t).trim();});
+  var capacidad=FMAN008_FILA_FIN-FMAN008_FILA_INI+1;
+  var sobran=Math.max(0,actividades.length-capacidad);
+  for(var i=0;i<capacidad&&i<actividades.length;i++){
+    var fila=FMAN008_FILA_INI+i;
+    var texto=String(actividades[i]).trim();
+    var celda=ws.getCell("A"+fila);
+    celda.value=texto;
+    celda.font={name:"Arial",size:9};
+    celda.alignment={wrapText:true,vertical:"middle",horizontal:"left",indent:1};
+    ws.getRow(fila).height=altoFilaActividadFMAN008(ws,texto);
+  }
+  ajustarEscalaPagina1FMAN008(ws);
+  return sobran;
+}
+
+async function obtenerActividadesFMAN008(equipoCodigo,cache){
+  // Actividades del numeral 7.3 del instructivo que le corresponde al equipo.
+  // Si no hay instructivo asignado (o las tablas aún no existen), devuelve [] y las filas quedan en blanco.
+  if(!equipoCodigo)return [];
+  if(cache&&cache[equipoCodigo])return cache[equipoCodigo];
+  try{
+    var m=await sb.from("equipo_instructivo").select("instructivo_codigo").eq("equipo_codigo",equipoCodigo).maybeSingle();
+    if(m.error||!m.data||!m.data.instructivo_codigo)return [];
+    var a=await sb.from("instructivo_actividades").select("orden,actividad").eq("instructivo_codigo",m.data.instructivo_codigo).order("orden",{ascending:true});
+    if(a.error||!a.data)return [];
+    var lista=a.data.map(function(x){return x.actividad;});
+    if(cache)cache[equipoCodigo]=lista;
+    return lista;
+  }catch(e){return [];}
+}
+async function aplicarActividadesFMAN008(ws,ord,cache){
+  if(ord.frecuencia==="Correctivo")return;   // los correctivos no llevan la rutina del instructivo
+  var acts=await obtenerActividadesFMAN008(ord.equipo_codigo,cache);
+  if(!acts.length)return;
+  var sobran=llenarActividadesFMAN008(ws,acts);
+  if(sobran>0)alert("El instructivo de "+(ord.equipo_codigo||"este equipo")+" tiene "+acts.length+" actividades y el formato admite "+(FMAN008_FILA_FIN-FMAN008_FILA_INI+1)+". Se imprimieron las primeras "+(FMAN008_FILA_FIN-FMAN008_FILA_INI+1)+".");
+}
 async function generarBufferFMAN008(ord,templateBuf){
   var wb=new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuf.slice(0));
@@ -13482,6 +13543,7 @@ async function generarBufferFMAN008(ord,templateBuf){
   celdaObs.value=ord.observaciones||"";
   celdaObs.alignment=Object.assign({},celdaObs.alignment,{wrapText:true,vertical:"top",horizontal:"left"});
   ws.getCell("A78").value=ord.ejecutor||"";
+  await aplicarActividadesFMAN008(ws,ord,null);
   return wb.xlsx.writeBuffer();
 }
 function descargarBuffer(buffer,filename){
@@ -13531,6 +13593,7 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
   try{
     var templateBuf=await obtenerPlantillaFMAN008();
     var wbDestino=new ExcelJS.Workbook();
+    var cacheActividades={};
     var usados={};
     for(var i=0;i<ordenes.length;i++){
       var ord=ordenes[i];
@@ -13553,6 +13616,7 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
       celdaObs.value=ord.observaciones||"";
       celdaObs.alignment=Object.assign({},celdaObs.alignment,{wrapText:true,vertical:"top",horizontal:"left"});
       wsSrc.getCell("A78").value=ord.ejecutor||"";
+      await aplicarActividadesFMAN008(wsSrc,ord,cacheActividades);
 
       var base=String(ord.equipo_codigo||ord.consecutivo||("Orden"+(i+1))).replace(/[\[\]\*\?\/\\:]/g,"-").slice(0,28)||("Orden"+(i+1));
       var nombreHoja=base;
