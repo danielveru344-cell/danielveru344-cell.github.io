@@ -13466,14 +13466,30 @@ function altoFilaActividadFMAN008(ws,texto){
   String(texto).split(/\r?\n/).forEach(function(p){lineas+=Math.max(1,Math.ceil(p.length/charsPorLinea));});
   return Math.max(19,lineas*12.5+7);
 }
-function ajustarEscalaPagina1FMAN008(ws){
-  // Que las filas más altas no empujen el pie (fila 38) a la página 2.
-  var total=0;
-  for(var r=1;r<=FMAN008_ULTIMA_FILA_PAG1;r++){total+=(ws.getRow(r).height||15);}
-  var m=ws.pageSetup.margins||{top:0.75,bottom:0.75};
-  var disponible=(8.5-(m.top||0.75)-(m.bottom||0.75))*72;
-  var escala=Math.floor(disponible/total*100);
-  ws.pageSetup.scale=Math.max(50,Math.min(80,escala));
+function ultimaColumnaFMAN008(ws){
+  var pa=ws.pageSetup&&ws.pageSetup.printArea;
+  var m=pa&&String(pa).match(/:\$?([A-Z]+)\$?\d+/);
+  if(m){var n=0;m[1].split("").forEach(function(ch){n=n*26+ch.charCodeAt(0)-64;});return n;}
+  for(var c=ws.columnCount||20;c>=1;c--){var b=ws.getCell(FMAN008_FILA_INI,c).border;if(b&&(b.left||b.right||b.top||b.bottom))return c;}
+  return 13;
+}
+function ajustarEscalaPaginaFMAN008(ws){
+  // Escala para que el formato quepa a lo ancho y que la fila 38 (pie) quede al final de la página 1.
+  // Respeta la orientación, los márgenes y la escala fija de la plantilla que se haya subido.
+  var ps=ws.pageSetup||{};
+  var vertical=(ps.orientation||"portrait")!=="landscape";
+  var mg=ps.margins||{};
+  var ml=mg.left!=null?mg.left:0.7,mr=mg.right!=null?mg.right:0.7,mt=mg.top!=null?mg.top:0.75,mb=mg.bottom!=null?mg.bottom:0.75;
+  var anchoHoja=(vertical?8.5:11),altoHoja=(vertical?11:8.5);   // tamaño carta
+  var px=0,ult=ultimaColumnaFMAN008(ws);
+  for(var c=1;c<=ult;c++){px+=((ws.getColumn(c).width||8.43)*7+5);}
+  var escalaAncho=Math.floor((anchoHoja-ml-mr)*72/(px*0.75)*100*0.97);
+  var alto=0;
+  for(var r=1;r<=FMAN008_ULTIMA_FILA_PAG1;r++){alto+=(ws.getRow(r).height||15);}
+  var escalaAlto=Math.floor((altoHoja-mt-mb)*72/alto*100);
+  var tope=ws.__escalaBase>0?ws.__escalaBase:100;   // la escala fija de la plantilla es el máximo
+  ws.pageSetup.fitToPage=false;
+  ws.pageSetup.scale=Math.max(40,Math.min(tope,escalaAncho,escalaAlto));
 }
 function llenarActividadesFMAN008(ws,actividades){
   actividades=(actividades||[]).filter(function(t){return t&&String(t).trim();});
@@ -13486,9 +13502,8 @@ function llenarActividadesFMAN008(ws,actividades){
     celda.value=texto;
     celda.font={name:"Arial",size:9};
     celda.alignment={wrapText:true,vertical:"middle",horizontal:"left",indent:1};
-    ws.getRow(fila).height=altoFilaActividadFMAN008(ws,texto);
+    ws.getRow(fila).height=Math.max(ws.getRow(fila).height||0,altoFilaActividadFMAN008(ws,texto));
   }
-  ajustarEscalaPagina1FMAN008(ws);
   return sobran;
 }
 
@@ -13508,11 +13523,16 @@ async function obtenerActividadesFMAN008(equipoCodigo,cache){
   }catch(e){return [];}
 }
 async function aplicarActividadesFMAN008(ws,ord,cache){
-  if(ord.frecuencia==="Correctivo")return;   // los correctivos no llevan la rutina del instructivo
-  var acts=await obtenerActividadesFMAN008(ord.equipo_codigo,cache);
-  if(!acts.length)return;
-  var sobran=llenarActividadesFMAN008(ws,acts);
-  if(sobran>0)alert("El instructivo de "+(ord.equipo_codigo||"este equipo")+" tiene "+acts.length+" actividades y el formato admite "+(FMAN008_FILA_FIN-FMAN008_FILA_INI+1)+". Se imprimieron las primeras "+(FMAN008_FILA_FIN-FMAN008_FILA_INI+1)+".");
+  try{
+    if(ord.frecuencia!=="Correctivo"){   // los correctivos no llevan la rutina del instructivo
+      var acts=await obtenerActividadesFMAN008(ord.equipo_codigo,cache);
+      if(acts.length){
+        var sobran=llenarActividadesFMAN008(ws,acts);
+        var cap=FMAN008_FILA_FIN-FMAN008_FILA_INI+1;
+        if(sobran>0)alert("El instructivo de "+(ord.equipo_codigo||"este equipo")+" tiene "+acts.length+" actividades y el formato admite "+cap+". Se imprimieron las primeras "+cap+".");
+      }
+    }
+  }finally{ajustarEscalaPaginaFMAN008(ws);}
 }
 async function generarBufferFMAN008(ord,templateBuf){
   var wb=new ExcelJS.Workbook();
@@ -13524,8 +13544,8 @@ async function generarBufferFMAN008(ord,templateBuf){
   // página 2. Se fuerza una escala fija más chica y un salto de página
   // manual justo después de la fila 38, así queda pegada a la página 1
   // y la página 2 (repuestos/observaciones/firmas) arranca limpia.
+  ws.__escalaBase=ws.pageSetup.fitToPage?0:(ws.pageSetup.scale||0);   // escala fija que traiga la plantilla
   ws.pageSetup.fitToPage=false;
-  ws.pageSetup.scale=80;
   ws.getRow(38).addPageBreak();
   var esCorrectivo=ord.frecuencia==="Correctivo";
   var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
@@ -13601,8 +13621,8 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
       var wbSrc=new ExcelJS.Workbook();
       await wbSrc.xlsx.load(templateBuf.slice(0));
       var wsSrc=wbSrc.worksheets[0];
+      wsSrc.__escalaBase=wsSrc.pageSetup.fitToPage?0:(wsSrc.pageSetup.scale||0);
       wsSrc.pageSetup.fitToPage=false;
-      wsSrc.pageSetup.scale=80;
       wsSrc.getRow(38).addPageBreak();
       var esCorrectivo=ord.frecuencia==="Correctivo";
       var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
