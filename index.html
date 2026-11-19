@@ -13532,6 +13532,7 @@ async function generarBufferFMAN008(ord,templateBuf){
   var celdaCons=ws.getCell("K1");
   celdaCons.value=ord.consecutivo||"";
   celdaCons.alignment=Object.assign({},celdaCons.alignment,{horizontal:"center",vertical:"center",shrinkToFit:true});
+  ws.getCell("H3").value=null;ws.getCell("H4").value=null;
   ws.getCell(esCorrectivo?"H4":"H3").value="X";
   ws.getCell("I3").value=freqTexto;
   ws.getCell("J4").value=areaDesdeCodigoEquipo(ord.equipo_codigo)||ord.seccion||"";
@@ -13605,6 +13606,7 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
       wsSrc.getRow(38).addPageBreak();
       var esCorrectivo=ord.frecuencia==="Correctivo";
       var freqTexto=esCorrectivo?"Correctivo":(MTTO_FREQ[ord.frecuencia]||ord.frecuencia||"");
+      wsSrc.getCell("H3").value=null;wsSrc.getCell("H4").value=null;
       wsSrc.getCell(esCorrectivo?"H4":"H3").value="X";
       wsSrc.getCell("I3").value=freqTexto;
       wsSrc.getCell("J4").value=areaDesdeCodigoEquipo(ord.equipo_codigo)||ord.seccion||"";
@@ -13670,6 +13672,295 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
 function MttoEjecutarModal(_ref20){var ord=_ref20.ord,currentUser=_ref20.currentUser,onClose=_ref20.onClose,onSave=_ref20.onSave;var f=React.useState(new Date().toISOString().slice(0,10));var fecha=f[0],setFecha=f[1];var e=React.useState(ord.asignado_a||currentUser&&(currentUser.nombre||currentUser.username)||"");var ejec=e[0],setEjec=e[1];var o=React.useState("");var obs=o[0],setObs=o[1];var l=React.useState(false);var saving=l[0],setSaving=l[1];return/*#__PURE__*/React.createElement("div",{className:"overlay",onClick:onClose},/*#__PURE__*/React.createElement("div",{className:"sheet",onClick:function onClick(ev){ev.stopPropagation();},style:{maxWidth:440}},/*#__PURE__*/React.createElement("div",{className:"sheet-handle"}),/*#__PURE__*/React.createElement("div",{className:"sheet-title"},"Ejecutar orden"),/*#__PURE__*/React.createElement("div",{style:{padding:"14px 20px 24px",display:"flex",flexDirection:"column",gap:12}},/*#__PURE__*/React.createElement("div",{style:{fontSize:13,color:"var(--gray)",fontWeight:600}},ord.equipo_codigo," \xB7 ",ord.equipo_desc," \xB7 ",MTTO_MESES[ord.mes-1]),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"ios-input-label"},"Fecha de ejecuci\xF3n"),/*#__PURE__*/React.createElement("input",{className:"ios-input",type:"date",value:fecha,onChange:function onChange(ev){setFecha(ev.target.value);}})),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"ios-input-label"},"Ejecutado por"),/*#__PURE__*/React.createElement("input",{className:"ios-input",value:ejec,onChange:function onChange(ev){setEjec(ev.target.value);}})),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"ios-input-label"},"Observaciones"),/*#__PURE__*/React.createElement("textarea",{className:"ios-input",rows:3,value:obs,onChange:function onChange(ev){setObs(ev.target.value);},placeholder:"Actividades realizadas, hallazgos\u2026",style:{resize:"vertical"}})),/*#__PURE__*/React.createElement("button",{className:"ios-btn ios-btn-blue",disabled:saving||!fecha||!ejec,onClick:/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee4(){return _regenerator().w(function(_context4){while(1)switch(_context4.n){case 0:setSaving(true);_context4.n=1;return onSave({estado:"ejecutado",fecha_ejecucion:fecha,ejecutor:ejec.trim(),observaciones:obs.trim()});case 1:setSaving(false);case 2:return _context4.a(2);}},_callee4);})),style:{padding:"13px",fontSize:14}},saving?"Guardando…":"✓ Marcar como ejecutada"))));}// ── Modal reprogramar ────────────────────────────────────────────────────────
 function MttoReprogramarModal(_ref22){var ord=_ref22.ord,onClose=_ref22.onClose,onSave=_ref22.onSave;var m=React.useState(ord.mes<12?ord.mes+1:12);var mes=m[0],setMes=m[1];var o=React.useState("");var motivo=o[0],setMotivo=o[1];var l=React.useState(false);var saving=l[0],setSaving=l[1];return/*#__PURE__*/React.createElement("div",{className:"overlay",onClick:onClose},/*#__PURE__*/React.createElement("div",{className:"sheet",onClick:function onClick(ev){ev.stopPropagation();},style:{maxWidth:440}},/*#__PURE__*/React.createElement("div",{className:"sheet-handle"}),/*#__PURE__*/React.createElement("div",{className:"sheet-title"},"Reprogramar"),/*#__PURE__*/React.createElement("div",{style:{padding:"14px 20px 24px",display:"flex",flexDirection:"column",gap:12}},/*#__PURE__*/React.createElement("div",{style:{fontSize:13,color:"var(--gray)",fontWeight:600}},ord.equipo_codigo," \xB7 ",ord.equipo_desc," \xB7 programada en ",MTTO_MESES[ord.mes-1]),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"ios-input-label"},"Nuevo mes"),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:mes,onChange:function onChange(ev){setMes(parseInt(ev.target.value,10));}},MTTO_MESES.map(function(mn,i){return/*#__PURE__*/React.createElement("option",{key:i,value:i+1},mn);}))),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"ios-input-label"},"Motivo"),/*#__PURE__*/React.createElement("textarea",{className:"ios-input",rows:2,value:motivo,onChange:function onChange(ev){setMotivo(ev.target.value);},placeholder:"Ej: equipo en producci\xF3n, falta de repuesto\u2026",style:{resize:"vertical"}})),/*#__PURE__*/React.createElement("button",{className:"ios-btn ios-btn-blue",disabled:saving,onClick:/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee5(){var obs;return _regenerator().w(function(_context5){while(1)switch(_context5.n){case 0:setSaving(true);obs="Reprogramada de "+MTTO_MESES[ord.mes-1]+" a "+MTTO_MESES[mes-1]+(motivo?": "+motivo.trim():"");_context5.n=1;return onSave({estado:"reprogramado",mes_reprogramado:mes,observaciones:obs});case 1:setSaving(false);case 2:return _context5.a(2);}},_callee5);})),style:{padding:"13px",fontSize:14}},saving?"Guardando…":"↻ Reprogramar"))));}// ── Detalle de orden (sheet) ─────────────────────────────────────────────────
 function MttoOrdenSheet(_ref24){var ord=_ref24.ord,currentUser=_ref24.currentUser,usuarios=_ref24.usuarios,onClose=_ref24.onClose,onUpdate=_ref24.onUpdate;var m=React.useState(null);var modal=m[0],setModal=m[1];var a=React.useState(ord.asignado_a||"");var asig=a[0],setAsig=a[1];var sv=React.useState(false);var savingAsig=sv[0],setSavingAsig=sv[1];React.useEffect(function(){setAsig(ord.asignado_a||"");},[ord.id,ord.asignado_a]);var canEdit=currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0;var fq=MTTO_FREQ_STYLE[ord.frecuencia]||MTTO_FREQ_STYLE.T;var est=MTTO_ESTADO[ord.estado]||MTTO_ESTADO.programado;var hoyMes=new Date().getMonth()+1;var vencida=ord.estado==="programado"&&ord.anio<=new Date().getFullYear()&&ord.mes<hoyMes;return/*#__PURE__*/React.createElement("div",{className:"overlay",onClick:onClose},/*#__PURE__*/React.createElement("div",{className:"sheet",onClick:function onClick(ev){ev.stopPropagation();},style:{maxWidth:480}},/*#__PURE__*/React.createElement("div",{className:"sheet-handle"}),/*#__PURE__*/React.createElement("div",{className:"sheet-title",style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}},ord.equipo_codigo,/*#__PURE__*/React.createElement("span",{className:"badge "+(vencida?"badge-red":est.cls),style:{textTransform:"none"}},vencida?"Vencida":est.label)),/*#__PURE__*/React.createElement("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:14}},/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{style:{fontSize:15,fontWeight:700,color:"var(--navy)"}},ord.equipo_desc),/*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"var(--gray)",marginTop:3,fontWeight:600}},ord.seccion||"—")),/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("span",{className:"badge",style:{background:fq.bg,color:fq.col}},MTTO_FREQ[ord.frecuencia]||ord.frecuencia),/*#__PURE__*/React.createElement("span",{className:"badge badge-blue"},MTTO_MESES[ord.mes-1]," ",ord.anio),ord.consecutivo&&/*#__PURE__*/React.createElement("span",{className:"badge",style:{background:"var(--light)",color:"var(--navy)"}},ord.consecutivo)),canEdit&&ord.estado!=="ejecutado"?/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center"}},/*#__PURE__*/React.createElement("select",{className:"ios-input",value:asig,style:{flex:1,padding:"10px 12px",fontSize:13,fontWeight:600},onChange:function onChange(ev){setAsig(ev.target.value);}},/*#__PURE__*/React.createElement("option",{value:""},"\u2014 Sin asignar \u2014"),(usuarios||[]).map(function(u){var n=u.nombre||u.username;return/*#__PURE__*/React.createElement("option",{key:u.id,value:n},n);})),asig!==(ord.asignado_a||"")&&/*#__PURE__*/React.createElement("button",{className:"ios-btn ios-btn-blue",disabled:savingAsig,style:{padding:"10px 14px",fontSize:12,flexShrink:0},onClick:/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee6(){return _regenerator().w(function(_context6){while(1)switch(_context6.n){case 0:setSavingAsig(true);_context6.n=1;return onUpdate({asignado_a:asig||null,asignado_por:currentUser&&(currentUser.nombre||currentUser.username)||null,fecha_asignacion:asig?new Date().toISOString():null});case 1:if(asig)pushNotificacion("🔧 Orden asignada",(ord.consecutivo||ord.equipo_codigo)+" · "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+") → "+asig);setSavingAsig(false);case 2:return _context6.a(2);}},_callee6);}))},savingAsig?"…":"Asignar")):ord.asignado_a?/*#__PURE__*/React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"var(--accent)"}},"\uD83D\uDC64 Asignada a ",ord.asignado_a,ord.asignado_por&&/*#__PURE__*/React.createElement("span",{style:{color:"var(--gray)",fontWeight:600}}," \xB7 por ",ord.asignado_por)):null,ord.estado==="ejecutado"&&/*#__PURE__*/React.createElement("div",{style:{background:"#F2FBF6",border:"1px solid #C6EBD6",borderRadius:12,padding:"11px 14px",fontSize:13}},/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("b",null,"Ejecutada:")," ",ord.fecha_ejecucion||"—"),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("b",null,"Por:")," ",ord.ejecutor||"—"),ord.observaciones&&/*#__PURE__*/React.createElement("div",{style:{marginTop:4,color:"#3c5a49"}},ord.observaciones)),ord.estado==="reprogramado"&&/*#__PURE__*/React.createElement("div",{style:{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:12,padding:"11px 14px",fontSize:13}},/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("b",null,"Nuevo mes:")," ",ord.mes_reprogramado?MTTO_MESES[ord.mes_reprogramado-1]:"—"),ord.observaciones&&/*#__PURE__*/React.createElement("div",{style:{marginTop:4,color:"#7a5a2e"}},ord.observaciones)),/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:9}},canEdit&&ord.estado!=="ejecutado"&&/*#__PURE__*/React.createElement("button",{className:"ios-btn ios-btn-blue",style:{padding:"13px",fontSize:14},onClick:function onClick(){setModal("ejecutar");}},"\u2713 Marcar ejecutada"),canEdit&&ord.estado==="programado"&&/*#__PURE__*/React.createElement("button",{className:"ios-btn",style:{padding:"13px",fontSize:14,background:"var(--light)",color:"var(--navy)"},onClick:function onClick(){setModal("reprogramar");}},"\u21BB Reprogramar"),/*#__PURE__*/React.createElement("button",{className:"ios-btn",style:{padding:"13px",fontSize:14,background:"var(--navy-deep)",color:"#fff"},onClick:function onClick(){printFMAN008(ord);}},"\uD83D\uDDA8\uFE0F Imprimir F-MAN-008"),canEdit&&ord.estado==="ejecutado"&&/*#__PURE__*/React.createElement("button",{className:"ios-btn",style:{padding:"11px",fontSize:13,background:"transparent",color:"#C0001A"},onClick:/*#__PURE__*/_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee7(){return _regenerator().w(function(_context7){while(1)switch(_context7.n){case 0:_context7.n=1;return onUpdate({estado:"programado",fecha_ejecucion:null,ejecutor:null,observaciones:null});case 1:return _context7.a(2);}},_callee7);}))},"Revertir a programada"))),modal==="ejecutar"&&/*#__PURE__*/React.createElement(MttoEjecutarModal,{ord:ord,currentUser:currentUser,onClose:function onClose(){setModal(null);},onSave:(/*#__PURE__*/function(){var _ref27=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee8(patch){return _regenerator().w(function(_context8){while(1)switch(_context8.n){case 0:_context8.n=1;return onUpdate(patch);case 1:setModal(null);case 2:return _context8.a(2);}},_callee8);}));return function(_x5){return _ref27.apply(this,arguments);};}())}),modal==="reprogramar"&&/*#__PURE__*/React.createElement(MttoReprogramarModal,{ord:ord,onClose:function onClose(){setModal(null);},onSave:(/*#__PURE__*/function(){var _ref28=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee9(patch){return _regenerator().w(function(_context9){while(1)switch(_context9.n){case 0:_context9.n=1;return onUpdate(patch);case 1:setModal(null);case 2:return _context9.a(2);}},_callee9);}));return function(_x6){return _ref28.apply(this,arguments);};}())})));}// ── App principal del módulo ─────────────────────────────────────────────────
+// ── Lector de instructivos (PDF) → actividades del numeral 7.3 ───────────────
+function cargarPdfJs(){
+  if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+  return new Promise(function(res,rej){
+    var s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload=function(){
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      res(window.pdfjsLib);
+    };
+    s.onerror=function(){rej(new Error("No se pudo cargar el lector de PDF. Revisa tu conexión."));};
+    document.head.appendChild(s);
+  });
+}
+function unirItemsPDF(items){
+  var t="",prev=null;
+  items.forEach(function(it){
+    var hueco=prev&&(it.x-(prev.x+prev.w))>it.h*0.15;
+    if(prev&&hueco&&!/\s$/.test(t)&&!/^\s/.test(it.s))t+=" ";
+    t+=it.s;prev=it;
+  });
+  return t.replace(/\s+/g," ").trim();
+}
+function lineasDePaginaPDF(items,ancho,alto,quitarEncabezado){
+  var arr=[];
+  items.forEach(function(it){
+    if(!it.str||!it.str.trim())return;
+    var y=alto-it.transform[5];
+    if(quitarEncabezado&&(y<alto*0.115||y>alto*0.935))return;   // tabla de encabezado y pie repetidos en cada hoja
+    arr.push({s:it.str,x:it.transform[4],y:y,h:Math.abs(it.transform[3])||10,w:it.width||0});
+  });
+  arr.sort(function(a,b){return a.y-b.y;});
+  var grupos=[];
+  arr.forEach(function(it){
+    var g=grupos[grupos.length-1];
+    if(g&&Math.abs(it.y-g.y)<=Math.min(g.h,it.h)*0.6)g.items.push(it);
+    else grupos.push({y:it.y,h:it.h,items:[it]});
+  });
+  return grupos.map(function(g){
+    g.items.sort(function(a,b){return a.x-b.x;});
+    return{texto:unirItemsPDF(g.items),y:g.y,items:g.items};
+  }).filter(function(l){return l.texto;});
+}
+async function leerInstructivoPDF(pdfjsLib,buffer,nombreArchivo){
+  var pdf=await pdfjsLib.getDocument({data:new Uint8Array(buffer)}).promise;
+  var lineas=[],meta={codigo:"",version:"",nombre:""};
+  for(var p=1;p<=pdf.numPages;p++){
+    var page=await pdf.getPage(p);
+    var vp=page.getViewport({scale:1});
+    var tc=await page.getTextContent();
+    var ls=lineasDePaginaPDF(tc.items,vp.width,vp.height,p>1);
+    if(p===1){
+      var cab=ls.filter(function(l){return l.y<vp.height*0.12;});
+      var todoCab=cab.map(function(l){return l.texto;}).join(" ");
+      var mc=todoCab.match(/C[óo]digo:\s*([A-Z]{1,4}-[A-Z]{2,5}-\d+)/i);if(mc)meta.codigo=mc[1].toUpperCase();
+      var mv=todoCab.match(/Versi[óo]n:\s*(\d+)/i);if(mv)meta.version=mv[1];
+      meta.nombre=cab.map(function(l){
+        var c=l.items.filter(function(it){return it.x>vp.width*0.30&&it.x<vp.width*0.70&&!/^INSTRUCTIVO$/i.test(it.s.trim());});
+        return unirItemsPDF(c);
+      }).filter(Boolean).join(" ");
+    }
+    ls.forEach(function(l){
+      if(/^(C[óo]digo|Versi[óo]n|P[áa]gina):/i.test(l.texto)&&p>1)return;
+      if(/^C[óo]DIGO:\s*F-/i.test(l.texto))return;
+      lineas.push(l.texto);
+    });
+  }
+  if(!meta.codigo){var mf=(nombreArchivo||"").match(/([A-Z]{1,4}-[A-Z]{2,5}-\d+)/i);if(mf)meta.codigo=mf[1].toUpperCase();}
+  // Numeral 7.3 → hasta el siguiente numeral de primer nivel
+  var ini=-1,fin=lineas.length;
+  for(var i=0;i<lineas.length;i++){
+    if(ini<0&&/^7\.3\.?\s+\S/.test(lineas[i])&&!/^7\.3\.\d/.test(lineas[i])){ini=i+1;continue;}
+    if(ini>=0&&(/^(8|9)\.\s+\S/.test(lineas[i])||/^7\.4\.?\s+\S/.test(lineas[i]))){fin=i;break;}
+  }
+  var items=[];
+  if(ini>=0){
+    for(var k=ini;k<fin;k++){
+      var m=lineas[k].match(/^7\.3\.(\d+)\.?\s*(.*)$/);
+      if(m)items.push({numeral:"7.3."+m[1],texto:m[2].trim()});
+      else if(items.length){var ant=items[items.length-1].texto;items[items.length-1].texto=(/\S-$/.test(ant)?ant+lineas[k]:ant+" "+lineas[k]).trim();}
+    }
+  }
+  return{meta:meta,items:items,encontro73:ini>=0};
+}
+
+// ── Panel de administrador: instructivos (actividades del numeral 7.3) ───────
+function AdminInstructivosPanel(){
+  var S=React.useState;
+  var _l=S([]),lista=_l[0],setLista=_l[1];
+  var _c=S(true),cargando=_c[0],setCargando=_c[1];
+  var _e=S([]),catEquipos=_e[0],setCatEquipos=_e[1];
+  var _a=S({}),asignados=_a[0],setAsignados=_a[1];
+  var _d=S(null),draft=_d[0],setDraft=_d[1];
+  var _b=S(false),busy=_b[0],setBusy=_b[1];
+  var _m=S(null),msg=_m[0],setMsg=_m[1];
+  var _f=S(""),filtro=_f[0],setFiltro=_f[1];
+  var fileRef=React.useRef(null);
+
+  async function recargar(){
+    setCargando(true);
+    try{
+      var r1=await sb.from("instructivos").select("codigo,nombre,version").order("codigo",{ascending:true});
+      if(r1.error)throw r1.error;
+      var r2=await sb.from("instructivo_actividades").select("instructivo_codigo");
+      var r3=await sb.from("equipo_instructivo").select("equipo_codigo,instructivo_codigo");
+      var nAct={},nEq={},asig={};
+      (r2.data||[]).forEach(function(x){nAct[x.instructivo_codigo]=(nAct[x.instructivo_codigo]||0)+1;});
+      (r3.data||[]).forEach(function(x){nEq[x.instructivo_codigo]=(nEq[x.instructivo_codigo]||0)+1;asig[x.equipo_codigo]=x.instructivo_codigo;});
+      setLista((r1.data||[]).map(function(i){return{codigo:i.codigo,nombre:i.nombre,version:i.version,nAct:nAct[i.codigo]||0,nEq:nEq[i.codigo]||0};}));
+      setAsignados(asig);
+    }catch(e){
+      setMsg({ok:false,text:"No se pudieron leer los instructivos. ¿Ya creaste las tablas en Supabase? ("+((e&&e.message)||e)+")"});
+    }
+    setCargando(false);
+  }
+  async function cargarCatalogo(){
+    try{
+      var r=await sb.from("mtto_ordenes").select("equipo_codigo,equipo_desc").eq("anio",new Date().getFullYear()).limit(5000);
+      var mapa={};
+      (r.data||[]).forEach(function(o){if(o.equipo_codigo&&o.equipo_codigo!=="N/A"&&!(o.equipo_codigo in mapa))mapa[o.equipo_codigo]=o.equipo_desc||"";});
+      setCatEquipos(mapa);
+    }catch(e){}
+  }
+  React.useEffect(function(){recargar();cargarCatalogo();},[]);
+
+  // Equipos que se pueden asignar: los del cronograma del año + los que ya tienen instructivo
+  var catalogo={};
+  Object.keys(catEquipos||{}).forEach(function(c){catalogo[c]=catEquipos[c];});
+  Object.keys(asignados).forEach(function(c){if(!(c in catalogo))catalogo[c]="";});
+
+  async function handleArchivo(ev){
+    var file=ev.target.files&&ev.target.files[0];
+    ev.target.value="";
+    if(!file)return;
+    if(!/\.pdf$/i.test(file.name)){setMsg({ok:false,text:"El instructivo debe ser un archivo .pdf"});return;}
+    setBusy(true);setMsg(null);
+    try{
+      var lib=await cargarPdfJs();
+      var buf=await file.arrayBuffer();
+      var r=await leerInstructivoPDF(lib,buf,file.name);
+      var eq={};
+      Object.keys(asignados).forEach(function(c){if(asignados[c]===r.meta.codigo)eq[c]=true;});
+      setDraft({
+        codigo:r.meta.codigo,nombre:r.meta.nombre,version:r.meta.version,
+        items:r.items.map(function(it,i){return{numeral:it.numeral,texto:it.texto,incluir:i>0};}),   // el primer ítem (informar al gerente) no se imprime
+        equipos:eq,origen:file.name,existe:lista.some(function(x){return x.codigo===r.meta.codigo;})
+      });
+      if(!r.encontro73)setMsg({ok:false,text:"No encontré el numeral 7.3 en este PDF. Puedes escribir las actividades a mano."});
+      else if(!r.items.length)setMsg({ok:false,text:"Encontré el numeral 7.3 pero sin actividades numeradas (7.3.1, 7.3.2…). Puedes escribirlas a mano."});
+    }catch(e){
+      setMsg({ok:false,text:"No se pudo leer el PDF: "+((e&&e.message)||e)});
+    }
+    setBusy(false);
+  }
+  async function editar(codigo){
+    setBusy(true);setMsg(null);
+    try{
+      var inst=lista.filter(function(x){return x.codigo===codigo;})[0]||{};
+      var r=await sb.from("instructivo_actividades").select("orden,numeral,actividad").eq("instructivo_codigo",codigo).order("orden",{ascending:true});
+      if(r.error)throw r.error;
+      var eq={};
+      Object.keys(asignados).forEach(function(c){if(asignados[c]===codigo)eq[c]=true;});
+      setDraft({codigo:codigo,nombre:inst.nombre||"",version:inst.version||"",
+        items:(r.data||[]).map(function(x){return{numeral:x.numeral||"",texto:x.actividad,incluir:true};}),
+        equipos:eq,origen:null,existe:true});
+    }catch(e){setMsg({ok:false,text:"No se pudo abrir el instructivo: "+((e&&e.message)||e)});}
+    setBusy(false);
+  }
+  async function eliminar(codigo){
+    if(!window.confirm("¿Eliminar el instructivo "+codigo+"? Los equipos que lo usan quedarán sin actividades en el F-MAN-008."))return;
+    setBusy(true);setMsg(null);
+    var r=await sb.from("instructivos").delete().eq("codigo",codigo);
+    if(r.error)setMsg({ok:false,text:"No se pudo eliminar: "+r.error.message});
+    else setMsg({ok:true,text:"Instructivo "+codigo+" eliminado."});
+    await recargar();setBusy(false);
+  }
+  async function guardar(){
+    var codigo=(draft.codigo||"").trim().toUpperCase();
+    var incluidas=draft.items.filter(function(i){return i.incluir&&String(i.texto).trim();});
+    if(!codigo){setMsg({ok:false,text:"Escribe el código del instructivo (por ejemplo IT-MAN-012)."});return;}
+    if(!incluidas.length){setMsg({ok:false,text:"Marca al menos una actividad para guardar."});return;}
+    setBusy(true);setMsg(null);
+    try{
+      var r1=await sb.from("instructivos").upsert({codigo:codigo,nombre:(draft.nombre||"").trim()||codigo,version:(draft.version||"").trim()||null},{onConflict:"codigo"});
+      if(r1.error)throw r1.error;
+      var filas=incluidas.map(function(it,idx){return{instructivo_codigo:codigo,orden:idx+1,numeral:it.numeral||null,actividad:String(it.texto).trim()};});
+      var r2=await sb.from("instructivo_actividades").upsert(filas,{onConflict:"instructivo_codigo,orden"});
+      if(r2.error)throw r2.error;
+      var r3=await sb.from("instructivo_actividades").delete().eq("instructivo_codigo",codigo).gt("orden",filas.length);
+      if(r3.error)throw r3.error;
+      var sel=Object.keys(draft.equipos).filter(function(c){return draft.equipos[c];});
+      if(sel.length){
+        var r4=await sb.from("equipo_instructivo").upsert(sel.map(function(c){return{equipo_codigo:c,instructivo_codigo:codigo};}),{onConflict:"equipo_codigo"});
+        if(r4.error)throw r4.error;
+      }
+      var q=sb.from("equipo_instructivo").delete().eq("instructivo_codigo",codigo);
+      if(sel.length)q=q.not("equipo_codigo","in",'("'+sel.join('","')+'")');
+      var r5=await q;
+      if(r5.error)throw r5.error;
+      setMsg({ok:true,text:"✅ Instructivo "+codigo+" guardado: "+filas.length+" actividades, "+sel.length+" equipo"+(sel.length===1?"":"s")+"."});
+      setDraft(null);setFiltro("");
+      await recargar();
+    }catch(e){
+      setMsg({ok:false,text:"No se pudo guardar: "+((e&&e.message)||e)});
+    }
+    setBusy(false);
+  }
+  function setCampo(k,v){setDraft(function(d){var n=Object.assign({},d);n[k]=v;return n;});}
+  function setItem(i,patch){setDraft(function(d){var items=d.items.slice();items[i]=Object.assign({},items[i],patch);return Object.assign({},d,{items:items});});}
+  function quitarItem(i){setDraft(function(d){var items=d.items.slice();items.splice(i,1);return Object.assign({},d,{items:items});});}
+  function agregarItem(){setDraft(function(d){return Object.assign({},d,{items:d.items.concat([{numeral:"",texto:"",incluir:true}])});});}
+  function toggleEquipo(c){setDraft(function(d){var eq=Object.assign({},d.equipos);if(eq[c])delete eq[c];else eq[c]=true;return Object.assign({},d,{equipos:eq});});}
+
+  var card={background:"#fff",border:"1px solid var(--border)",borderRadius:16,padding:"22px 20px",boxShadow:"0 1px 8px rgba(13,47,92,0.05)"};
+  var btnPrim={background:"var(--navy)",color:"#fff",border:"none",borderRadius:10,padding:"11px 18px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:busy?"default":"pointer",opacity:busy?0.7:1};
+  var btnSec={background:"var(--lighter)",color:"var(--navy)",border:"1px solid var(--border)",borderRadius:10,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer"};
+  var h=React.createElement;
+
+  var vista;
+  if(draft){
+    var f=filtro.trim().toLowerCase();
+    var codigos=Object.keys(catalogo).sort().filter(function(c){return !f||c.toLowerCase().indexOf(f)>=0||(catalogo[c]||"").toLowerCase().indexOf(f)>=0;});
+    var nSel=Object.keys(draft.equipos).length;
+    var nInc=draft.items.filter(function(i){return i.incluir&&String(i.texto).trim();}).length;
+    vista=h("div",null,
+      h("div",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:15,color:"var(--navy)",marginBottom:4}},draft.existe?"✏️ Actualizar instructivo":"📋 Nuevo instructivo"),
+      draft.origen&&h("div",{style:{fontSize:12,color:"var(--gray)",marginBottom:10}},"Leído de: "+draft.origen+(draft.existe?" · ya existe, se reemplazarán sus actividades":"")),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 90px",gap:8,marginBottom:8}},
+        h("input",{className:"ios-input",value:draft.codigo,placeholder:"Código (IT-MAN-012)",onChange:function(e){setCampo("codigo",e.target.value);}}),
+        h("input",{className:"ios-input",value:draft.version,placeholder:"Versión",onChange:function(e){setCampo("version",e.target.value);}})
+      ),
+      h("input",{className:"ios-input",style:{marginBottom:14},value:draft.nombre,placeholder:"Nombre del instructivo",onChange:function(e){setCampo("nombre",e.target.value);}}),
+      h("div",{style:{fontWeight:700,fontSize:12.5,color:"var(--navy)",marginBottom:6}},"Actividades del numeral 7.3 ("+nInc+" se imprimirán)"),
+      h("div",{style:{fontSize:11.5,color:"var(--gray)",marginBottom:8,lineHeight:1.4}},"Salen en el F-MAN-008 en este orden. El primer ítem viene desmarcado porque no se imprime; puedes marcarlo, editar cualquier texto o quitar actividades."),
+      draft.items.map(function(it,i){
+        return h("div",{key:i,style:{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8,opacity:it.incluir?1:0.5}},
+          h("input",{type:"checkbox",checked:!!it.incluir,style:{marginTop:12,flexShrink:0},onChange:function(e){setItem(i,{incluir:e.target.checked});}}),
+          h("div",{style:{fontSize:10.5,color:"var(--gray)",width:38,marginTop:11,flexShrink:0}},it.numeral),
+          h("textarea",{className:"ios-input",rows:2,style:{flex:1,resize:"vertical",fontSize:13},value:it.texto,onChange:function(e){setItem(i,{texto:e.target.value});}}),
+          h("button",{type:"button",title:"Quitar",onClick:function(){quitarItem(i);},style:Object.assign({},btnSec,{padding:"6px 9px",marginTop:6})},"✕")
+        );
+      }),
+      h("button",{type:"button",onClick:agregarItem,style:Object.assign({},btnSec,{marginBottom:18})},"+ Agregar actividad"),
+      h("div",{style:{fontWeight:700,fontSize:12.5,color:"var(--navy)",marginBottom:6}},"Equipos que usan este instructivo ("+nSel+")"),
+      h("input",{className:"ios-input",style:{marginBottom:8},value:filtro,placeholder:"Buscar equipo por código o nombre…",onChange:function(e){setFiltro(e.target.value);}}),
+      h("div",{style:{maxHeight:260,overflowY:"auto",border:"1px solid var(--border)",borderRadius:10,padding:"6px 10px",marginBottom:16}},
+        codigos.length===0?h("div",{style:{fontSize:12,color:"var(--gray)",padding:8}},"No hay equipos que coincidan."):
+        codigos.map(function(c){
+          var otro=asignados[c]&&asignados[c]!==draft.codigo.trim().toUpperCase()?asignados[c]:null;
+          return h("label",{key:c,style:{display:"flex",gap:8,alignItems:"center",padding:"5px 0",fontSize:12.5,cursor:"pointer"}},
+            h("input",{type:"checkbox",checked:!!draft.equipos[c],onChange:function(){toggleEquipo(c);}}),
+            h("span",{style:{fontWeight:700,color:"var(--navy)",minWidth:84}},c),
+            h("span",{style:{flex:1,color:"var(--gray)"}},catalogo[c]||""),
+            otro&&h("span",{style:{fontSize:10.5,color:"#C45200",fontWeight:700}},"hoy: "+otro)
+          );
+        })
+      ),
+      h("div",{style:{display:"flex",gap:10,flexWrap:"wrap"}},
+        h("button",{type:"button",disabled:busy,onClick:guardar,style:btnPrim},busy?"⏳ Guardando…":"💾 Guardar instructivo"),
+        h("button",{type:"button",disabled:busy,onClick:function(){setDraft(null);setMsg(null);setFiltro("");},style:btnSec},"Cancelar")
+      )
+    );
+  }else{
+    vista=h("div",null,
+      h("div",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:15,color:"var(--navy)",marginBottom:6}},"📋 Instructivos de mantenimiento"),
+      h("div",{style:{fontSize:13,color:"var(--gray)",marginBottom:16,lineHeight:1.5}},"Sube el PDF de un instructivo: la app toma las actividades del numeral 7.3 y las imprime, una por fila, en el F-MAN-008 de los equipos que le asignes. Para actualizar uno, sube su nueva versión (mismo código) y se reemplazan las actividades."),
+      h("input",{ref:fileRef,type:"file",accept:".pdf,application/pdf",style:{display:"none"},onChange:handleArchivo}),
+      h("button",{type:"button",disabled:busy,onClick:function(){fileRef.current&&fileRef.current.click();},style:Object.assign({},btnPrim,{marginBottom:18})},busy?"⏳ Leyendo…":"⬆ Subir instructivo (.pdf)"),
+      cargando?h("div",{style:{fontSize:12,color:"var(--gray)"}},"Consultando instructivos…"):
+      lista.length===0?h("div",{style:{background:"var(--lighter)",borderRadius:10,padding:"10px 14px",fontSize:12.5,color:"var(--gray)"}},"Aún no hay instructivos cargados."):
+      lista.map(function(i){
+        return h("div",{key:i.codigo,style:{display:"flex",gap:10,alignItems:"center",padding:"10px 12px",background:"var(--lighter)",borderRadius:10,marginBottom:8,flexWrap:"wrap"}},
+          h("div",{style:{flex:1,minWidth:180}},
+            h("div",{style:{fontWeight:800,fontSize:13,color:"var(--navy)"}},i.codigo+(i.version?" · v"+i.version:"")),
+            h("div",{style:{fontSize:12,color:"var(--gray)"}},(i.nombre||"")+" — "+i.nAct+" actividades · "+i.nEq+" equipo"+(i.nEq===1?"":"s"))
+          ),
+          h("button",{type:"button",disabled:busy,onClick:function(){editar(i.codigo);},style:btnSec},"Editar"),
+          h("button",{type:"button",disabled:busy,onClick:function(){eliminar(i.codigo);},style:Object.assign({},btnSec,{color:"#C0001A"})},"Eliminar")
+        );
+      })
+    );
+  }
+  return h("div",{style:{maxWidth:620,margin:"0 auto"}},
+    h("div",{style:card},vista,
+      msg&&h("div",{style:{marginTop:14,fontSize:12.5,fontWeight:600,color:msg.ok?"#1D7A3E":"#C0001A"}},msg.text)
+    )
+  );
+}
+
 function AdminFMAN008Panel(){
   var st=React.useState(null);var info=st[0],setInfo=st[1];
   var ls=React.useState(true);var loadingInfo=ls[0],setLoadingInfo=ls[1];
@@ -13775,7 +14066,7 @@ function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator
     )
   )
 ),
-tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="admin"&&canImport&&React.createElement(AdminFMAN008Panel,null))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
+tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="admin"&&canImport&&React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:16}},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminInstructivosPanel,null)))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
 // Los equipos de producción vienen como "COD-ÁREA-N - NOMBRE" (ej: "EP-322-1 - ENVASADORA PPR").
 // El código de área es todo antes del último "-N". Con ese número final buscamos el
 // nombre real del área en AREAS_LOC ("NOMBRE (322)") para mostrar una etiqueta legible.
