@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261120f";
+window.APP_BUILD = "20261120g";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -13759,7 +13759,7 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
       });
 
       (wsSrc.model.merges||[]).forEach(function(range){
-        try{wsDest.mergeCells(range);}catch(e){}
+        try{(wsDest.mergeCellsWithoutStyle||wsDest.mergeCells).call(wsDest,range);}catch(e){}   // sin pisar el estilo: se conservan los bordes
       });
 
       wsSrc.getImages().forEach(function(imgRef){
@@ -14320,12 +14320,31 @@ function escribirLargoFMAN010(ws,ref,fila,texto,porLinea){
     row.height=Math.max(row.height||0,lineas*(tam+4.5));
   }
 }
+// Área (F5): la letra baja un poco (11 → 10 → 9) según el largo y el texto se ajusta en renglones dentro de la línea del Área.
+function escribirAreaFMAN010(ws,texto){
+  var t=texto?String(texto):"",c=ws.getCell("F5");
+  c.value=t||null;
+  var tam=t.length<=40?11:(t.length<=88?10:9);
+  var porLinea=tam===11?42:(tam===10?50:57);
+  var lineas=Math.min(3,Math.max(1,Math.ceil(t.length/porLinea)));
+  c.alignment=Object.assign({},c.alignment,{horizontal:"left",vertical:"middle",wrapText:true,shrinkToFit:false});
+  c.font=Object.assign({},c.font,{size:tam});
+  if(lineas>1){var row=ws.getRow(5);row.height=Math.max(row.height||0,lineas*(tam+4)+3);}
+}
+// Consecutivo: el número va centrado y subrayado, para que conserve la línea negra de "Consecutivo:______".
+function escribirConsecutivoFMAN010(ws,consecutivo){
+  var f={name:"Arial",size:12},num=consecutivo?String(consecutivo):"";
+  var relleno=Math.max(2,16-num.length),izq=Math.floor(relleno/2),der=relleno-izq;
+  ws.getCell("D6").value={richText:[
+    {text:"Consecutivo:",font:f},
+    {text:new Array(izq+1).join(" ")+num+new Array(der+1).join(" "),font:Object.assign({underline:true},f)}]};
+}
 function aplicarDatosFMAN010(ws,insp){
-  try{ws.mergeCells("F5:G5");}catch(e){}   // la línea del Área abarca F5 y G5
-  escribirLargoFMAN010(ws,"F5",5,insp.area_nombre,44);
+  try{(ws.mergeCellsWithoutStyle||ws.mergeCells).call(ws,"F5:G5");}catch(e){}   // la línea del Área abarca F5 y G5 (se conserva su estilo)
+  escribirAreaFMAN010(ws,insp.area_nombre);
   escribirLargoFMAN010(ws,"C41",41,insp.esclusa_c41,95);
   escribirLargoFMAN010(ws,"C56",56,insp.esclusa_c56,95);
-  ws.getCell("D6").value="Consecutivo: "+(insp.consecutivo||"");
+  escribirConsecutivoFMAN010(ws,insp.consecutivo);
   var saltos=(ws.rowBreaks||[]).map(function(b){return b.id;});
   [78,159].forEach(function(f){if(saltos.indexOf(f)<0)ws.getRow(f).addPageBreak();});   // el formato son 2 páginas
   ajustarEscalaFMAN010(ws);
@@ -14380,7 +14399,7 @@ async function descargarInspeccionesMesFMAN010(lista,mesLabel,anio){
         if(row.height)destRow.height=row.height;
         destRow.commit();
       });
-      (wsSrc.model.merges||[]).forEach(function(range){try{wsDest.mergeCells(range);}catch(e){}});
+      (wsSrc.model.merges||[]).forEach(function(range){try{(wsDest.mergeCellsWithoutStyle||wsDest.mergeCells).call(wsDest,range);}catch(e){}});   // sin pisar el estilo: así se conservan todos los bordes
       (wsSrc.rowBreaks||[]).forEach(function(b){wsDest.getRow(b.id).addPageBreak();});   // se conservan las 2 páginas de cada hoja
       wsSrc.getImages().forEach(function(imgRef){
         var media=wbSrc.model.media[imgRef.imageId];
