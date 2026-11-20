@@ -412,7 +412,7 @@ function armarMesesExcel() {
 }
 function pintarListaArchivos() {
   const items = [];
-  if (archivos.platino) items.push(['Solicitudes Platino', archivos.platino.nombre, archivos.platino.rows.length + ' filas']);
+  if (archivos.platino && !(ORIGEN_APP && !archivos.platino.rows.length && /\(app\)/.test(archivos.platino.nombre))) items.push(['Solicitudes Platino', archivos.platino.nombre, archivos.platino.rows.length + ' filas']);
   if (archivos.bussie) items.push(['Solicitudes Bussié', archivos.bussie.nombre, archivos.bussie.rows.length + ' filas']);
   (mesesExcel || []).forEach(m => {
     const a = Object.values(archivos.preventivos).find(x => MESES_LARGO[x.mesIdx] === m.mes.toLowerCase());
@@ -1388,8 +1388,7 @@ async function generarInforme() {
 // ── Solicitudes desde la app (solo cuando se abre desde Cumplimiento1) ─────────────────────────────
 // Se leen de Solicitudes de Mantenimiento (solicitudes_mantenimiento) y se entregan al informe con la MISMA forma que las filas de
 // los Excel (Número de Solictud · Técnico Asignado · Estado · F. Solicitud); así todo lo demás funciona exactamente igual.
-// La sede se deduce del código del área: las áreas de la Planta Platino AP llevan código "AP…"; las demás son de Bussié.
-function sedeDeSolicitud(s) { return /^AP/i.test(String(s.area_codigo || '').trim()) ? 'platino' : 'bussie'; }
+// En la app ya no hay sede Platino: todas las solicitudes son de Bussié.
 function fechaDDMMAAAA(v) {
   const d = new Date(v);
   if (!v || isNaN(d.getTime())) return '';
@@ -1398,7 +1397,7 @@ function fechaDDMMAAAA(v) {
 async function cargarSolicitudesApp() {
   const filas = [];
   for (let desde = 0; ; desde += 1000) {
-    const r = await fetch(`${SUPA_URL}/rest/v1/solicitudes_mantenimiento?select=id,consecutivo,estado,asignado_a,enviado_en,area_codigo&anio=eq.${ANIO_APP}&order=id.asc&limit=1000&offset=${desde}`, {
+    const r = await fetch(`${SUPA_URL}/rest/v1/solicitudes_mantenimiento?select=id,consecutivo,estado,asignado_a,enviado_en&anio=eq.${ANIO_APP}&order=id.asc&limit=1000&offset=${desde}`, {
       headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1406,7 +1405,7 @@ async function cargarSolicitudesApp() {
     lote.forEach(s => filas.push(s));
     if (lote.length < 1000) break;
   }
-  const plat = [], buss = [];
+  const buss = [];
   filas.forEach(s => {
     const fila = {
       'Número de Solictud': String(s.consecutivo || '').trim(),
@@ -1414,23 +1413,23 @@ async function cargarSolicitudesApp() {
       'Estado': String(s.estado || '').trim().toUpperCase(),
       'F. Solicitud': fechaDDMMAAAA(s.enviado_en)
     };
-    (sedeDeSolicitud(s) === 'platino' ? plat : buss).push(fila);
+    buss.push(fila);
   });
-  return { plat, buss };
+  return { plat: [], buss };
 }
 async function usarSolicitudesApp() {
   const info = document.getElementById('solAppInfo');
   try {
     const { plat, buss } = await cargarSolicitudesApp();
-    if (!plat.length && !buss.length) {
+    if (!buss.length) {
       info.innerHTML = `⚠️ No hay solicitudes de ${ANIO_APP} en la app (Solicitudes de Mantenimiento). Si las tienes en los Excel de Platino y Bussié, súbelos.`;
       info.style.display = 'block';
       return;
     }
-    archivos.platino = { nombre: 'Solicitudes de Mantenimiento (app) · Platino', rows: plat, hash: await hashContenido(plat) };
+    archivos.platino = { nombre: 'Solicitudes de Mantenimiento (app) · Platino', rows: plat, hash: await hashContenido(plat) };   // vacío: en la app todo es Bussié
     archivos.bussie = { nombre: 'Solicitudes de Mantenimiento (app) · Bussié', rows: buss, hash: await hashContenido(buss) };
     rowsPlatino = plat; rowsBussie = buss;
-    info.innerHTML = `📥 <b>Solicitudes tomadas de la app</b> (Solicitudes de Mantenimiento, ${ANIO_APP}): Platino <b>${plat.length}</b> · Bussié <b>${buss.length}</b>. La sede se deduce del código del área (AP… = Platino).`
+    info.innerHTML = `📥 <b>Solicitudes tomadas de la app</b> (Solicitudes de Mantenimiento, ${ANIO_APP}): <b>${buss.length}</b>, todas de Bussié.`
       + ` <button class="link-btn" type="button" onclick="usarSolicitudesApp()">↻ Volver a leer</button> · Si prefieres usar los Excel, suéltalos aquí y reemplazan a estos.`;
     info.style.display = 'block';
     pintarListaArchivos();
