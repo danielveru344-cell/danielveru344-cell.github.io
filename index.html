@@ -1122,7 +1122,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261119a";
+window.APP_BUILD = "20261119b";
 (function () {
   try {
     fetch(location.pathname + "?build=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (t) {
@@ -13555,14 +13555,25 @@ async function obtenerProgramacionEquiposFMAN008(codigos,desdeAnio){
   }catch(e){}
   return mapa;
 }
+var FMAN008_INTERVALO_MESES={M:1,T:3,S:6,A:12};   // meses entre un mantenimiento y el siguiente según la frecuencia
 function proximoMantenimientoFMAN008(ord,filas){
-  if(!ord||!ord.anio||!ord.mes||!filas)return "";
+  if(!ord||!ord.anio||!ord.mes)return "";
+  // 1) Lo que diga el cronograma: la siguiente orden del equipo (con su mes nuevo si fue reprogramada)
   var ref=ord.anio*12+ord.mes,mejor=null;
-  filas.forEach(function(o){var k=o.anio*12+o.mes;if(k>ref&&(!mejor||k<mejor.k))mejor={k:k,o:o};});
-  if(!mejor)return "";
-  var o=mejor.o;
-  var mes=(o.estado==="reprogramado"&&o.mes_reprogramado)?o.mes_reprogramado:o.mes;   // si esa orden se reprogramó, el mes nuevo
-  return (MTTO_MESES[mes-1]||"")+" "+o.anio;
+  (filas||[]).forEach(function(o){var k=o.anio*12+o.mes;if(k>ref&&(!mejor||k<mejor.k))mejor={k:k,o:o};});
+  if(mejor){
+    var o=mejor.o;
+    var mes=(o.estado==="reprogramado"&&o.mes_reprogramado)?o.mes_reprogramado:o.mes;
+    return (MTTO_MESES[mes-1]||"")+" "+o.anio;
+  }
+  // 2) Si el cronograma ya no tiene siguiente orden (p. ej. aún no se carga el del año que viene),
+  //    se calcula con la frecuencia del equipo: mensual +1, trimestral +3, semestral +6, anual +12 meses.
+  var f=ord.frecuencia;
+  if(!FMAN008_INTERVALO_MESES[f]){Object.keys(MTTO_FREQ).forEach(function(k){if(MTTO_FREQ[k]===f)f=k;});}
+  var paso=FMAN008_INTERVALO_MESES[f];
+  if(!paso)return "";
+  var t=ord.anio*12+(ord.mes-1)+paso;
+  return (MTTO_MESES[t%12]||"")+" "+Math.floor(t/12);
 }
 async function aplicarProximoMantenimientoFMAN008(ws,ord,progCache){
   if(ord.frecuencia==="Correctivo")return;   // el correctivo no tiene "próximo" en el cronograma
@@ -13570,7 +13581,7 @@ async function aplicarProximoMantenimientoFMAN008(ws,ord,progCache){
   if(progCache)filas=progCache[ord.equipo_codigo];
   else{var m=await obtenerProgramacionEquiposFMAN008([ord.equipo_codigo],ord.anio);filas=m[ord.equipo_codigo];}
   var texto=proximoMantenimientoFMAN008(ord,filas);
-  if(!texto)return;   // sin siguiente orden en el cronograma: queda el texto de la plantilla ("Según Programa")
+  if(!texto)return;   // frecuencia desconocida: queda el texto de la plantilla ("Según Programa")
   var celda=ws.getCell("J5");
   celda.value=texto;
   celda.alignment=Object.assign({},celda.alignment,{horizontal:"center",vertical:"middle",wrapText:false,shrinkToFit:true});
