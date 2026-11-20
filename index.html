@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261121f";
+window.APP_BUILD = "20261121g";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -3349,7 +3349,8 @@ function AlmacenApp(_ref4) {
   }();
 
   // ── Equipos CRUD ────────────────────────────────────────────────────────────
-  var addEquipo = /*#__PURE__*/function () {
+  var recargarEquipos=function(){return sb.from("equipos").select("*").order("created_at").then(function(r){if(r.data)setEquipos(r.data.map(function(x){return{id:x.id,name:x.name,code:x.code,location:x.location,description:x.description,icon:x.icon,image:x.image,spares:x.spares||[]};}));});};
+var addEquipo = /*#__PURE__*/function () {
     var _ref21 = _asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee14(f) {
       var _yield$sb$from$insert2, data, error;
       return _regenerator().w(function (_context14) {
@@ -3383,7 +3384,7 @@ function AlmacenApp(_ref4) {
                 id: data.id
               })]);
             });
-            flash("Equipo agregado ✓");
+            flash("Equipo agregado ✓");catEquiposAgregar(f.code,f.name)["catch"](function(){});
             logH("alta_equipo", "Equipo agregado: " + f.name + (f.code ? " [" + f.code + "]" : ""));
           case 3:
             return _context14.a(2);
@@ -3427,7 +3428,7 @@ function AlmacenApp(_ref4) {
                 return e.id === id ? _objectSpread(_objectSpread({}, e), upd) : e;
               });
             });
-            flash("Equipo actualizado ✓");
+            flash("Equipo actualizado ✓");catEquiposRenombrar(equipos.find(function(e){return e.id===id;})||{},upd)["catch"](function(){});
             logH("edicion_equipo", "Equipo editado: " + upd.name + (upd.code ? " [" + upd.code + "]" : ""));
           case 3:
             return _context15.a(2);
@@ -4112,7 +4113,7 @@ function AlmacenApp(_ref4) {
       borderTop: "0.5px solid rgba(60,60,67,0.08)"
     }
   }, filtered.length, " art\xEDculos"))), tab === "historial" && /*#__PURE__*/React.createElement(Historial, null), tab === "equipos" && /*#__PURE__*/React.createElement(EquiposTab, {
-    equipos: equipos,
+    equipos: equipos, onRecargar: recargarEquipos,
     items: items,
     cronograma: cronograma,
     flash: flash,
@@ -12779,7 +12780,7 @@ function EquiposTab(_ref102) {
   })), canImport && /*#__PURE__*/React.createElement(ImportCronogramaButton, {
     flash: flash,
     onImported: onImported
-  })), cronograma.length === 0 && canImport && /*#__PURE__*/React.createElement("div", {
+  })), canImport && /*#__PURE__*/React.createElement(CatalogoEquiposPanel, { equipos: equipos, flash: flash, onRecargar: _ref102.onRecargar }), cronograma.length === 0 && canImport && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -16441,6 +16442,133 @@ function UsuarioAccesosModal(p){
         h("div",{style:{display:"flex",gap:10,marginTop:4}},
           h("button",{type:"button",className:"ios-btn ios-btn-gray",style:{flex:1,color:"#8E8E93"},onClick:p.onClose},"Cancelar"),
           h("button",{type:"button",className:"ios-btn ios-btn-blue",style:{flex:2},disabled:p.guardando,onClick:guardar},p.guardando?"Guardando…":isEdit?"Guardar cambios":"Crear usuario")))));
+}
+
+
+// ── Catálogo común de equipos ─────────────────────────────────────────────────────────────────
+// Es el listado de la Bitácora (clave btk_eq, con "COD - NOMBRE"). Solicitudes de Mantenimiento, Bitácora y Almacén usan los mismos equipos.
+// En el Almacén cada equipo tiene además su ficha (imagen, ubicación, repuestos); se enlaza al catálogo por el código.
+var _catEquipos=null;
+function catClave(c){return String(c||"").toUpperCase().replace(/\s+/g,"");}
+function catNombreClave(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim();}
+function catParse(raw){var s=String(raw||"").trim();var m=s.match(/^(.+?)\s+[-–]\s+(.+)$/);return m?{raw:s,code:m[1].trim(),name:m[2].trim()}:{raw:s,code:"",name:s};}
+async function catEquiposCargar(forzar){
+  if(_catEquipos&&!forzar)return _catEquipos;
+  var v=null;try{v=await btkGet(KS.eq);}catch(e){}
+  var raw=(v&&v.length)?v:lg(KS.eq,AREAS_DEF);
+  if(!raw||!raw.length)raw=AREAS_DEF;
+  _catEquipos=raw.filter(function(x){return typeof x==="string"&&x.trim();});
+  return _catEquipos;
+}
+async function catEquiposGuardar(lista){_catEquipos=lista.slice();ls(KS.eq,lista);await btkSet(KS.eq,lista);}
+// Compara el catálogo con los equipos que ya tiene el Almacén
+function catEquiposPlan(catalogo,equiposAlm){
+  var porCodigo={},sinCodigoPorNombre={},porNombre={};
+  (equiposAlm||[]).forEach(function(e){
+    var ck=catClave(e.code),nk=catNombreClave(e.name);
+    if(ck)porCodigo[ck]=porCodigo[ck]||e;else sinCodigoPorNombre[nk]=sinCodigoPorNombre[nk]||e;
+    porNombre[nk]=porNombre[nk]||e;
+  });
+  var usados={},visto={},nuevos=[],vincular=[],yaEstan=0;
+  (catalogo||[]).forEach(function(raw){
+    var c=catParse(raw),ck=catClave(c.code),nk=catNombreClave(c.name);
+    var clave=ck||("n:"+nk);if(!nk||visto[clave])return;visto[clave]=1;
+    if(ck&&porCodigo[ck]){usados[porCodigo[ck].id]=1;yaEstan++;return;}
+    if(ck&&sinCodigoPorNombre[nk]&&!usados[sinCodigoPorNombre[nk].id]){var e=sinCodigoPorNombre[nk];usados[e.id]=1;vincular.push({id:e.id,code:c.code,name:c.name});return;}
+    if(!ck&&porNombre[nk]){usados[porNombre[nk].id]=1;yaEstan++;return;}
+    nuevos.push(c);
+  });
+  var fuera=(equiposAlm||[]).filter(function(e){return !usados[e.id];});
+  return{nuevos:nuevos,vincular:vincular,yaEstan:yaEstan,fuera:fuera,total:Object.keys(visto).length};
+}
+function catRawDe(e){return e.code?e.code+" - "+e.name:e.name;}
+function catEstaEnLista(lista,e){
+  return lista.some(function(x){var p=catParse(x);return e.code?catClave(p.code)===catClave(e.code):(!p.code&&catNombreClave(p.name)===catNombreClave(e.name));});
+}
+// Aplica el plan: crea lo que falta, enlaza por código y, si se pide, pasa al catálogo lo que solo existía en el Almacén
+async function catEquiposSincronizar(plan,agregarFuera){
+  for(var i=0;i<plan.nuevos.length;i+=100){
+    var lote=plan.nuevos.slice(i,i+100).map(function(c){return{name:c.name,code:c.code||null,location:"",description:"",icon:"🔧",image:null,spares:[]};});
+    var r=await sb.from("equipos").insert(lote);if(r.error)throw r.error;
+  }
+  for(var k=0;k<plan.vincular.length;k++){
+    var r2=await sb.from("equipos").update({code:plan.vincular[k].code}).eq("id",plan.vincular[k].id);if(r2.error)throw r2.error;
+  }
+  if(agregarFuera&&plan.fuera.length){
+    var cat=(await catEquiposCargar()).slice(),agregados=0;
+    plan.fuera.forEach(function(e){if(!catEstaEnLista(cat,e)){cat.push(catRawDe(e));agregados++;}});
+    if(agregados)await catEquiposGuardar(cat);
+  }
+}
+// Un equipo nuevo creado en el Almacén también entra al catálogo común
+async function catEquiposAgregar(code,name){
+  var nombre=String(name||"").trim();if(!nombre)return false;
+  var cat=(await catEquiposCargar()).slice(),e={code:String(code||"").trim(),name:nombre};
+  if(catEstaEnLista(cat,e))return false;
+  cat.push(catRawDe(e));await catEquiposGuardar(cat);return true;
+}
+// Si se cambia el código o el nombre en el Almacén, se cambia también en el catálogo
+async function catEquiposRenombrar(antes,despues){
+  var nuevoRaw=catRawDe({code:String(despues.code||"").trim(),name:String(despues.name||"").trim()});
+  var cat=(await catEquiposCargar()).slice(),hallado=-1;
+  for(var i=0;i<cat.length&&hallado<0;i++){
+    var p=catParse(cat[i]);
+    if(antes.code?catClave(p.code)===catClave(antes.code):(!p.code&&catNombreClave(p.name)===catNombreClave(antes.name)))hallado=i;
+  }
+  if(hallado<0||cat[hallado]===nuevoRaw)return false;
+  cat[hallado]=nuevoRaw;await catEquiposGuardar(cat);return true;
+}
+
+// Panel dentro de la pestaña Equipos del Almacén
+function CatalogoEquiposPanel(p){
+  var h=React.createElement,S=React.useState;
+  var _c=S(null),cat=_c[0],setCat=_c[1];
+  var _m=S(false),modal=_m[0],setModal=_m[1];
+  var _b=S(false),aplicando=_b[0],setAplicando=_b[1];
+  var _a=S(false),agregarFuera=_a[0],setAgregarFuera=_a[1];
+  React.useEffect(function(){var vivo=true;catEquiposCargar().then(function(l){if(vivo)setCat(l);});return function(){vivo=false;};},[]);
+  if(!cat)return null;
+  var plan=catEquiposPlan(cat,p.equipos||[]),pend=plan.nuevos.length+plan.vincular.length,fuera=plan.fuera.length;
+  async function aplicar(){
+    setAplicando(true);
+    try{
+      await catEquiposSincronizar(plan,agregarFuera);
+      registrarHistorial("equipos_sync","Equipos sincronizados con el catálogo común: "+plan.nuevos.length+" nuevos, "+plan.vincular.length+" enlazados"+(agregarFuera?", "+fuera+" agregados al catálogo":""),null);
+      if(p.onRecargar)await p.onRecargar();
+      setCat(await catEquiposCargar(true));setModal(false);
+      p.flash("Equipos sincronizados ✓ ("+plan.nuevos.length+" nuevos"+(plan.vincular.length?", "+plan.vincular.length+" enlazados":"")+")");
+    }catch(e){p.flash("No se pudo sincronizar: "+((e&&e.message)||JSON.stringify(e)),false);}
+    setAplicando(false);
+  }
+  var color=pend>0?"#C45200":"#1D9A50";
+  return h("div",{className:"ios-card",style:{padding:"14px 16px",borderLeft:"4px solid "+color,display:"flex",flexDirection:"column",gap:8}},
+    h("div",{style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}},
+      h("div",{style:{flex:1,minWidth:220}},
+        h("div",{style:{fontWeight:800,fontSize:13.5,color:"var(--navy)"}},"🔗 Catálogo común de equipos"),
+        h("div",{style:{fontSize:12,color:"var(--gray)",fontWeight:600,marginTop:2}},"Son los mismos equipos de la Bitácora y de Solicitudes de Mantenimiento ("+cat.length+")."),
+        h("div",{style:{fontSize:12.5,fontWeight:700,marginTop:6,color:color}},
+          pend>0?((plan.nuevos.length===1?"Falta 1 equipo del catálogo en el Almacén":"Faltan "+plan.nuevos.length+" equipos del catálogo en el Almacén")+(plan.vincular.length?(plan.nuevos.length?" y ":". ")+(plan.vincular.length===1?"1 se enlazará":plan.vincular.length+" se enlazarán")+" por nombre":"")+(plan.nuevos.length||!plan.vincular.length?".":"."))
+                :"✓ El Almacén tiene todos los equipos del catálogo."),
+        fuera>0&&h("div",{style:{fontSize:12,fontWeight:600,color:"var(--gray)",marginTop:3}},(fuera===1?"1 equipo del Almacén no está":fuera+" equipos del Almacén no están")+" en el catálogo común.")),
+      (pend>0||fuera>0)&&h("button",{type:"button",className:"ios-btn ios-btn-blue ios-btn-sm",onClick:function(){setAgregarFuera(false);setModal(true);}},pend>0?"Sincronizar":"Revisar")),
+    modal&&h("div",{className:"overlay",onClick:function(){if(!aplicando)setModal(false);}},
+      h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:520}},
+        h("div",{className:"sheet-handle"}),h("div",{className:"sheet-title"},"Sincronizar equipos"),
+        h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5,maxHeight:"75vh",overflowY:"auto"}},
+          h("div",null,"Se compara el Almacén con el catálogo común. No se borra ni se cambia nada de lo que ya tienes (repuestos, imágenes y ubicaciones se conservan)."),
+          h("div",{style:{background:"var(--lighter)",borderRadius:12,padding:"10px 14px",fontSize:12.5}},
+            h("div",null,"✅ Ya están: ",h("b",null,plan.yaEstan)),
+            h("div",null,"➕ Se crearán en el Almacén: ",h("b",null,plan.nuevos.length)),
+            h("div",null,"🔗 Se enlazarán con el código del catálogo: ",h("b",null,plan.vincular.length),plan.vincular.length>0&&h("span",{style:{color:"var(--gray)"}}," (equipos del Almacén sin código que tienen el mismo nombre)")),
+            h("div",null,"⚠️ Solo en el Almacén: ",h("b",null,fuera))),
+          fuera>0&&h("div",null,
+            h("div",{style:{fontWeight:700,fontSize:12.5,marginBottom:4}},"Equipos que solo existen en el Almacén:"),
+            h("div",{style:{maxHeight:120,overflowY:"auto",background:"#fff",border:"1px solid var(--border)",borderRadius:10,padding:"8px 12px",fontSize:12,color:"var(--gray)",fontWeight:600}},plan.fuera.map(function(e){return h("div",{key:e.id},catRawDe(e));})),
+            h("label",{style:{display:"flex",gap:9,alignItems:"flex-start",marginTop:10,fontSize:12.5,cursor:"pointer"}},
+              h("input",{type:"checkbox",checked:agregarFuera,style:{marginTop:3},onChange:function(ev){setAgregarFuera(ev.target.checked);}}),
+              h("span",null,"Agregarlos también al catálogo común, para que salgan en Solicitudes de Mantenimiento y en la Bitácora."))),
+          h("button",{type:"button",className:"ios-btn ios-btn-blue",disabled:aplicando||(pend===0&&!(agregarFuera&&fuera>0)),onClick:aplicar},aplicando?"Sincronizando…":"Sincronizar"),
+          h("button",{type:"button",className:"ios-btn ios-btn-gray",disabled:aplicando,onClick:function(){setModal(false);}},"Cancelar")))));
 }
 
 function RootApp(){var s=React.useState(null);var mod=s[0];var setMod=s[1];var u=React.useState(null);var rootUser=u[0];var setRootUser=u[1];React.useEffect(function(){if(mod){window.history.pushState({bussie:"module",mod:mod},"");var handler=function handler(e){setMod(null);window.history.pushState({bussie:"suite"},"");};window.addEventListener("popstate",handler);return function(){window.removeEventListener("popstate",handler);};}else{if(!window.history.state||!window.history.state.bussie){window.history.replaceState({bussie:"suite"},"");}}},[mod]);var modOk=!!mod&&accModuloPermitido(rootUser,mod);
