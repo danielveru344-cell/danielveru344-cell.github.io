@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261121h";
+window.APP_BUILD = "20261121i";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -16318,10 +16318,6 @@ function UsuariosAccesosPanel(p){
     if(q&&((u.nombre||"")+" "+(u.username||"")+" "+(u.email||"")+" "+(u.cargo||"")).toLowerCase().indexOf(q)<0)return false;
     return true;
   });
-  var nActivos=usuarios.filter(function(u){return u.activo!==false;}).length;
-  var nTec=usuarios.filter(function(u){return u.activo!==false&&accEsAsignable(u,false);}).length;
-  var nPend=usuarios.filter(function(u){return u.activo!==false&&!u.permisos;}).length;
-  var stat=function(ico,val,lbl,color,k){return h("div",{className:"mto-stat",key:k},h("div",{className:"mto-stat-ico",style:{background:color+"1A"}},ico),h("div",null,h("div",{className:"mto-stat-val",style:{color:color}},val),h("div",{className:"mto-stat-lbl"},lbl)));};
   function chip(u,id){
     var n=accNivel(u,id),c=ACC_COLOR_NIVEL[n];
     return h("span",{key:id,className:"mto-frec",title:u.permisos?"Accesos propios":"Según su rol anterior",style:{background:c.bg,color:c.col,opacity:u.permisos?1:.7,fontSize:10.5,padding:"3px 9px"}},n==="ninguno"?"—":accNombreNivel(n));
@@ -16347,9 +16343,6 @@ function UsuariosAccesosPanel(p){
       h("div",{style:{fontWeight:800,color:"#C0001A",marginBottom:6}},"Falta un paso en Supabase"),
       h("div",{style:{fontSize:13,color:"var(--navy)",marginBottom:8}},"Pega esto en el SQL Editor, dale Run y vuelve a guardar:"),
       h("pre",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:10,padding:"10px 12px",fontSize:12,whiteSpace:"pre-wrap",margin:0,userSelect:"all"}},ACC_SQL)),
-    h("div",{className:"mto-stats"},stat("👥",usuarios.length,"Usuarios","#0D2F5C","a"),stat("✅",nActivos,"Activos","#1D7A3E","b"),stat("🔧",nTec,"Salen en listas de asignación","#2d7dd2","c"),stat("⚙️",nPend,"Con accesos de su rol anterior",nPend?"#C45200":"#8a96a8","d")),
-    nPend>0&&h("div",{className:"mto-resumen",style:{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:12,padding:"10px 14px",fontSize:12.5,color:"#7a5a2e",fontWeight:600,marginBottom:14}},
-      "Los usuarios con color tenue en la tabla siguen con los accesos de su rol anterior (nada cambió para ellos). Cuando edites a alguien, defínele sus accesos propios."),
     h("div",{className:"mto-acciones"},h("button",{type:"button",className:"mto-btn prim",onClick:function(){setModal({usuario:null});}},"+ Nuevo usuario")),
     h("div",{className:"mto-filtros"},
       h("input",{className:"ios-input mto-busca",placeholder:"Buscar por nombre, usuario, correo o cargo…",value:busca,onChange:function(ev){setBusca(ev.target.value);}}),
