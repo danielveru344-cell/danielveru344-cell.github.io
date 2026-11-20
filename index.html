@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261121g";
+window.APP_BUILD = "20261121h";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14372,7 +14372,8 @@ var MTO_CSS=[
 ".mtto-tab-btn.active{background:transparent;color:var(--navy);box-shadow:none;}",
 ".mtto-tab-btn.active::after{content:\"\";position:absolute;left:14px;right:14px;bottom:0;height:3px;border-radius:3px 3px 0 0;background:var(--accent);}",
 ".mto-reg .mto-tabla td{white-space:nowrap;}",
-"@media (max-width:820px){.mto-reg{overflow-x:auto;}.mto-reg .mto-tabla{min-width:900px;}.mto-reg .mto-tabla thead th{position:static;}}",
+"@media (max-width:1400px){.mto-reg{overflow-x:auto;}.mto-reg .mto-tabla thead th{position:static;}.mto-usr .mto-tabla td,.mto-usr .mto-tabla th{padding-left:9px;padding-right:9px;}.mto-usr .mto-tabla td:first-child>div>div:last-child>div:last-child{max-width:190px !important;}.mto-usr .mto-tabla td:last-child,.mto-usr .mto-tabla th:last-child{position:sticky;right:0;background:#fff;box-shadow:-10px 0 10px -10px rgba(13,47,92,.22);z-index:2;}.mto-usr .mto-tabla th:last-child{background:#f3f6fb;}.mto-usr .mto-fila-tabla:hover td:last-child{background:#f6f9ff;}}",
+"@media (max-width:820px){.mto-reg .mto-tabla{min-width:900px;}}",
 "@media (max-width:1100px){.mtto-toolbar>div>div:first-child{display:none;}}",
 "@media (max-width:640px){.mtto-toolbar>div{flex-wrap:wrap !important;padding:8px 12px 0;}.mtto-toolbar>div>div:first-child{display:block;order:0;flex:1;margin-left:0;align-self:center;font-size:11.5px !important;}.mtto-toolbar>div>select{order:1;margin-left:auto;}.mtto-toolbar>div>div.mtto-tabs{order:3;width:100%;flex-basis:100%;}.mtto-tab-btn{height:46px;padding:0 13px;font-size:13px;}}",
 "@media (max-width:640px){.mto-pagina{padding:14px 12px 40px;}.mto-meses{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}.mto-mes{padding:14px 15px;}.mto-mes-total{font-size:28px;}.mto-stat{padding:12px 14px;}.mto-stat-val{font-size:22px;}}"
@@ -16330,14 +16331,14 @@ function UsuariosAccesosPanel(p){
     return h("tr",{key:u.id,className:"mto-fila-tabla",style:{"--acento":u.activo===false?"#C0001A":"#1D9A50",cursor:"default"}},
       h("td",null,h("div",{className:"mto-tec"},h("span",{className:"mto-avatar",style:{background:mtoColorAvatar(u.nombre||u.username),width:34,height:34,fontSize:12}},mtoIniciales(u.nombre||u.username)),
         h("div",null,h("div",{style:{fontWeight:700,color:"var(--navy)"}},u.nombre||u.username,yo&&h("span",{className:"badge badge-blue",style:{marginLeft:6}},"Tú"),u.activo===false&&h("span",{className:"badge badge-red",style:{marginLeft:6}},"Inactivo")),
-          h("div",{style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:1}},"@"+u.username+(u.email?" · "+u.email:""))))),
+          h("div",{title:u.email||"",style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:1,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis"}},"@"+u.username+(u.email?" · "+u.email:""))))),
       h("td",{style:{whiteSpace:"nowrap",color:u.cargo?"var(--navy)":"#9aa6b8",fontWeight:600}},u.cargo||"Sin cargo"),
       ACC_MODULOS.map(function(m){return h("td",{key:m.id},chip(u,m.id));}),
       h("td",{style:{textAlign:"center",fontWeight:800,color:accEsAsignable(u,false)?"#1D7A3E":"#c3cbd8"}},accEsAsignable(u,false)?"✓":"—"),
       h("td",{style:{whiteSpace:"nowrap"}},raiz?h("span",{style:{fontSize:11,color:"#C45200",fontWeight:700}},"🔒 Protegido"):h("div",{style:{display:"flex",gap:6,justifyContent:"flex-end"}},
         h("button",{type:"button",className:"mto-btn",onClick:function(){setModal({usuario:u});}},"Editar"),
-        !yo&&h("button",{type:"button",className:"mto-btn",onClick:function(){alternarActivo(u);}},u.activo===false?"Activar":"Desactivar"),
-        !yo&&h("button",{type:"button",className:"mto-icono-btn",title:"Eliminar",style:{background:"#FDECEE"},onClick:function(){setAEliminar(u);}},"🗑"))));
+        !yo&&h("button",{type:"button",className:"mto-icono-btn",title:u.activo===false?"Activar":"Desactivar","aria-label":u.activo===false?"Activar":"Desactivar",onClick:function(){alternarActivo(u);}},u.activo===false?"✅":"🚫"),
+        !yo&&h("button",{type:"button",className:"mto-icono-btn",title:"Eliminar","aria-label":"Eliminar",style:{background:"#FDECEE"},onClick:function(){setAEliminar(u);}},"🗑"))));
   }
   var cargosFiltro=Array.from(new Set(ACC_CARGOS.concat(usuarios.map(function(u){return u.cargo;}).filter(Boolean))));
   return h("div",null,
@@ -16357,8 +16358,8 @@ function UsuariosAccesosPanel(p){
     errorCarga?h("div",{className:"mto-vacio",style:{color:"#C0001A"}},"No se pudieron cargar los usuarios: "+errorCarga)
       :cargando?h("div",{className:"mto-vacio"},"Cargando…")
       :!lista.length?h("div",{className:"mto-vacio"},usuarios.length?"Sin usuarios que coincidan con el filtro.":"Aún no hay usuarios.")
-      :h("div",{className:"mto-tabla-wrap mto-reg"},h("table",{className:"mto-tabla"},
-        h("thead",null,h("tr",null,["Usuario","Cargo"].concat(ACC_MODULOS.map(function(m){return m.icono+" "+m.label.replace("Solicitudes de Mantenimiento","Solicitudes");})).concat(["Asignación",""]).map(function(t,i){return h("th",{key:i},t);}))),
+      :h("div",{className:"mto-tabla-wrap mto-reg mto-usr"},h("table",{className:"mto-tabla"},
+        h("thead",null,h("tr",null,["Usuario","Cargo"].concat(ACC_MODULOS.map(function(m){return m.icono+" "+m.label.replace("Solicitudes de Mantenimiento","Solicitudes");})).concat(["Asignable",""]).map(function(t,i){return h("th",{key:i},t);}))),
         h("tbody",null,lista.map(fila)))),
     modal&&h(UsuarioAccesosModal,{usuario:modal.usuario,me:me,guardando:guardando,onClose:function(){setModal(null);},onSave:async function(payload){var ok=await guardar(payload,modal.usuario);if(ok)setModal(null);}}),
     aEliminar&&h("div",{className:"overlay",onClick:function(){setAEliminar(null);}},h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:440}},
