@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261119f";
+window.APP_BUILD = "20261119g";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14214,6 +14214,30 @@ async function cumplMarcar(t,hecho,usuarioNombre){
   return cumplMapPreventivo((r.data&&r.data[0])||Object.assign({},o,patch));
 }
 
+// ── Caché en memoria: la ventana abre al instante con lo último que se leyó y se actualiza en silencio ──
+var CUMPL_CACHE={};    // anio -> {tareas, ts}
+var CUMPL_VISTA={};    // anio -> {mes, tec}: lo último que se estaba viendo
+var CUMPL_ENCURSO={};  // anio -> promesa de la carga en curso (evita pedir dos veces lo mismo)
+var CUMPL_CAMBIOS=0;   // cuántas tareas se han marcado desde esta ventana (una lectura anterior a un marcado ya es vieja)
+function cumplFirma(ts){return ts.map(function(t){return t.key+(t.hecho?"1":"0")+t.resp+t.mes;}).join("|");}
+function cumplObtener(anio){
+  if(CUMPL_ENCURSO[anio])return CUMPL_ENCURSO[anio];
+  var fallos=[],cambios0=CUMPL_CAMBIOS;
+  var p=Promise.all([
+    cumplCargarPreventivos(anio)["catch"](function(e){fallos.push("preventivos: "+((e&&e.message)||e));return [];}),
+    cumplCargarOrdenes(anio)["catch"](function(e){fallos.push("órdenes de trabajo: "+((e&&e.message)||e));return [];})
+  ]).then(function(res){
+    var tareas=res[0].concat(res[1]);
+    if(!fallos.length&&CUMPL_CAMBIOS===cambios0)CUMPL_CACHE[anio]={tareas:tareas,ts:Date.now()};
+    delete CUMPL_ENCURSO[anio];
+    return {tareas:tareas,fallos:fallos};
+  });
+  CUMPL_ENCURSO[anio]=p;
+  return p;
+}
+// Se llama apenas se abre Mantenimientos, para que al entrar a Cumplimiento1 los datos ya estén listos.
+function cumplPrecargar(anio){cumplObtener(anio)["catch"](function(){});}
+
 var CUMPL_CSS="\n"+
 ".ci-wrap{margin:-6px -8px 0;}\n"+
 ".ci-bar{background:#0D2F5C;border-radius:12px 12px 0 0;display:flex;align-items:stretch;overflow-x:auto;padding:0 8px;}\n"+
@@ -14252,25 +14276,32 @@ function CumplimientoInterno(props){
   var anio=props.anio,usuario=props.currentUser,onCambio=props.onCambio;
   var puede=!!(usuario&&["admin","almacenista"].indexOf(usuario.role)>=0);
   var S=React.useState,h=React.createElement;
-  var _t=S([]),tareas=_t[0],setTareas=_t[1];
-  var _c=S(true),cargando=_c[0],setCargando=_c[1];
-  var _m=S(0),mesSel=_m[0],setMesSel=_m[1];
-  var _r=S(""),tecSel=_r[0],setTecSel=_r[1];
+  var cache0=CUMPL_CACHE[anio],vista0=CUMPL_VISTA[anio]||{mes:0,tec:""};
+  var _t=S(cache0?cache0.tareas:[]),tareas=_t[0],setTareas=_t[1];
+  var _c=S(!cache0),cargando=_c[0],setCargando=_c[1];
+  var _m=S(vista0.mes),mesSel=_m[0],setMesSel=_m[1];
+  var _r=S(vista0.tec),tecSel=_r[0],setTecSel=_r[1];
   var _g=S({}),guardando=_g[0],setGuardando=_g[1];
   var _a=S(null),aviso=_a[0],setAviso=_a[1];
 
-  async function cargar(){
-    setCargando(true);setAviso(null);
-    var fallos=[];
-    var res=await Promise.all([
-      cumplCargarPreventivos(anio)["catch"](function(e){fallos.push("preventivos: "+((e&&e.message)||e));return [];}),
-      cumplCargarOrdenes(anio)["catch"](function(e){fallos.push("órdenes de trabajo: "+((e&&e.message)||e));return [];})
-    ]);
-    setTareas(res[0].concat(res[1]));
-    if(fallos.length)setAviso({ok:false,text:"No se pudo cargar "+fallos.join(" · ")});
+  async function cargar(silencioso){
+    var cambiosAntes=CUMPL_CAMBIOS;
+    if(!silencioso)setCargando(true);
+    setAviso(null);
+    var r=await cumplObtener(anio);
+    if(CUMPL_CAMBIOS===cambiosAntes){   // si mientras tanto se marcó algo, esa lectura ya es vieja
+      setTareas(function(prev){return cumplFirma(prev)===cumplFirma(r.tareas)?prev:r.tareas;});
+    }
+    if(r.fallos.length)setAviso({ok:false,text:"No se pudo cargar "+r.fallos.join(" · ")});
     setCargando(false);
   }
-  React.useEffect(function(){setMesSel(0);setTecSel("");cargar();},[anio]);
+  React.useEffect(function(){
+    var c=CUMPL_CACHE[anio],v=CUMPL_VISTA[anio]||{mes:0,tec:""};
+    setTareas(c?c.tareas:[]);setMesSel(v.mes);setTecSel(v.tec);
+    cargar(!!c);   // con caché se actualiza en silencio
+  },[anio]);
+  // Lo último visto y lo último leído quedan guardados para la próxima vez que se abra la ventana
+  React.useEffect(function(){if(tareas.length&&!cargando)CUMPL_CACHE[anio]={tareas:tareas,ts:Date.now()};},[tareas]);
 
   async function alternar(t){
     if(!puede||t.fuente!=="preventivo"||guardando[t.key])return;
@@ -14278,6 +14309,7 @@ function CumplimientoInterno(props){
     setGuardando(function(g){var n=Object.assign({},g);n[t.key]=true;return n;});
     try{
       var nueva=await cumplMarcar(t,!t.hecho,usuario&&(usuario.nombre||usuario.username)||"");
+      CUMPL_CAMBIOS++;
       setTareas(function(prev){return prev.map(function(x){return x.key===t.key?nueva:x;});});
       if(t.fuente==="preventivo"&&onCambio)onCambio();
     }catch(e){setAviso({ok:false,text:"No se pudo guardar el cambio: "+((e&&e.message)||e)});}
@@ -14332,7 +14364,7 @@ function CumplimientoInterno(props){
         ["__todos__"].concat(tecs).map(function(n){
           var l=n==="__todos__"?delMes:delMes.filter(function(t){return t.resp===n;});
           var ok=l.filter(function(t){return t.hecho;}).length;
-          return h("div",{key:n,className:"ci-tec"+(n===tec?" on":""),onClick:function(){setTecSel(n);}},
+          return h("div",{key:n,className:"ci-tec"+(n===tec?" on":""),onClick:function(){setTecSel(n);CUMPL_VISTA[anio]={mes:mes,tec:n};}},
             n==="__todos__"?"Todos":n,
             h("span",{className:"ci-b ci-ok"},ok),h("span",{className:"ci-b ci-pe"},l.length-ok));})),
       h("div",{className:"ci-panel"},
@@ -14353,9 +14385,9 @@ function CumplimientoInterno(props){
     h("style",null,CUMPL_CSS),
     h("div",{className:"ci-bar"},
       meses.map(function(m){
-        return h("div",{key:m,className:"ci-mes"+(m===mes?" on":""),onClick:function(){setMesSel(m);setTecSel("");}},
+        return h("div",{key:m,className:"ci-mes"+(m===mes?" on":""),onClick:function(){setMesSel(m);setTecSel("");CUMPL_VISTA[anio]={mes:m,tec:""};}},
           MTTO_MESES[m-1].toUpperCase(),h("small",null,pct(porMes[m])+"%"));}),
-      h("button",{type:"button",className:"ci-refresh",title:"Actualizar",onClick:cargar},"↻")),
+      h("button",{type:"button",className:"ci-refresh",title:"Actualizar",onClick:function(){cargar(false);}},"↻")),
     aviso&&h("div",{className:"ci-aviso",style:{background:aviso.ok?"#dcfce7":"#fee2e2",color:aviso.ok?"#166534":"#991b1b",margin:"10px 4px 0"}},aviso.text),
     !puede&&!cargando&&meses.length>0&&h("div",{style:{fontSize:11,color:"#94a3b8",margin:"8px 4px 0"}},"Solo lectura: marcar tareas está habilitado para administrador y almacenista."),
     cuerpo,
@@ -14363,7 +14395,7 @@ function CumplimientoInterno(props){
   );
 }
 
-function MantenimientosApp(_ref29){var onBack=_ref29.onBack,initialUser=_ref29.initialUser;var t=React.useState("calendario");var tab=t[0],setTab=t[1];var y=React.useState(new Date().getFullYear());var anio=y[0],setAnio=y[1];var mo=React.useState(new Date().getMonth()+1);var mes=mo[0],setMes=mo[1];var d=React.useState([]);var ordenes=d[0],setOrdenes=d[1];var ld=React.useState(true);var loading=ld[0],setLoading=ld[1];var q=React.useState("");var busca=q[0],setBusca=q[1];var sel=React.useState(null);var selOrd=sel[0],setSelOrd=sel[1];var im=React.useState(false);var importing=im[0],setImporting=im[1];var fl=React.useState(null);var flashMsg=fl[0],setFlashMsg=fl[1];var us=React.useState([]);var usuarios=us[0],setUsuarios=us[1];var ft=React.useState("");var filtroTec=ft[0],setFiltroTec=ft[1];var dl=React.useState(false);var descargandoLote=dl[0],setDescargandoLote=dl[1];var rb=React.useState("");var regBusca=rb[0],setRegBusca=rb[1];var re=React.useState("");var regEstado=re[0],setRegEstado=re[1];var rm=React.useState("");var regMes=rm[0],setRegMes=rm[1];var fileRef=React.useRef(null);var ifr=React.useRef(null);var gp=React.useState(false);var generandoPptx=gp[0],setGenerandoPptx=gp[1];var canImport=initialUser&&initialUser.role==="admin";var hoyMes=new Date().getMonth()+1;var hoyAnio=new Date().getFullYear();function flash(msg,ok){setFlashMsg({msg:msg,ok:ok!==false});setTimeout(function(){setFlashMsg(null);},3500);}function load(){return _load.apply(this,arguments);}function _load(){_load=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee1(){var r;return _regenerator().w(function(_context1){while(1)switch(_context1.n){case 0:setLoading(true);_context1.n=1;return sb.from("mtto_ordenes").select("*").eq("anio",anio).order("seccion").order("equipo_codigo").order("mes");case 1:r=_context1.v;if(!r.error){_context1.n=2;break;}flash("Error cargando: "+r.error.message,false);setLoading(false);return _context1.a(2);case 2:setOrdenes(r.data||[]);setLoading(false);case 3:return _context1.a(2);}},_callee1);}));return _load.apply(this,arguments);}React.useEffect(function(){load();},[anio]);React.useEffect(function(){sb.from("usuarios").select("id,username,nombre,role").eq("activo",true).order("nombre").then(function(r){if(!r.error)setUsuarios(r.data||[]);});},[]);// ── Import F-MAN-012 ──
+function MantenimientosApp(_ref29){var onBack=_ref29.onBack,initialUser=_ref29.initialUser;var t=React.useState("calendario");var tab=t[0],setTab=t[1];var y=React.useState(new Date().getFullYear());var anio=y[0],setAnio=y[1];var mo=React.useState(new Date().getMonth()+1);var mes=mo[0],setMes=mo[1];var d=React.useState([]);var ordenes=d[0],setOrdenes=d[1];var ld=React.useState(true);var loading=ld[0],setLoading=ld[1];var q=React.useState("");var busca=q[0],setBusca=q[1];var sel=React.useState(null);var selOrd=sel[0],setSelOrd=sel[1];var im=React.useState(false);var importing=im[0],setImporting=im[1];var fl=React.useState(null);var flashMsg=fl[0],setFlashMsg=fl[1];var us=React.useState([]);var usuarios=us[0],setUsuarios=us[1];var ft=React.useState("");var filtroTec=ft[0],setFiltroTec=ft[1];var dl=React.useState(false);var descargandoLote=dl[0],setDescargandoLote=dl[1];var rb=React.useState("");var regBusca=rb[0],setRegBusca=rb[1];var re=React.useState("");var regEstado=re[0],setRegEstado=re[1];var rm=React.useState("");var regMes=rm[0],setRegMes=rm[1];var fileRef=React.useRef(null);var ifr=React.useRef(null);var gp=React.useState(false);var generandoPptx=gp[0],setGenerandoPptx=gp[1];var canImport=initialUser&&initialUser.role==="admin";var hoyMes=new Date().getMonth()+1;var hoyAnio=new Date().getFullYear();function flash(msg,ok){setFlashMsg({msg:msg,ok:ok!==false});setTimeout(function(){setFlashMsg(null);},3500);}function load(){return _load.apply(this,arguments);}function _load(){_load=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee1(){var r;return _regenerator().w(function(_context1){while(1)switch(_context1.n){case 0:setLoading(true);_context1.n=1;return sb.from("mtto_ordenes").select("*").eq("anio",anio).order("seccion").order("equipo_codigo").order("mes");case 1:r=_context1.v;if(!r.error){_context1.n=2;break;}flash("Error cargando: "+r.error.message,false);setLoading(false);return _context1.a(2);case 2:setOrdenes(r.data||[]);setLoading(false);case 3:return _context1.a(2);}},_callee1);}));return _load.apply(this,arguments);}React.useEffect(function(){load();cumplPrecargar(anio);},[anio]);React.useEffect(function(){sb.from("usuarios").select("id,username,nombre,role").eq("activo",true).order("nombre").then(function(r){if(!r.error)setUsuarios(r.data||[]);});},[]);// ── Import F-MAN-012 ──
 function handleImport(_x7){var _a=arguments,_t=this;return asegurarLibs(["XLSX"]).then(function(){return _handleImport.apply(_t,_a);});}function _handleImport(){_handleImport=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee10(ev){var file,buf,parsed,ex,mkey,existentes,nuevas,base,i,ins,_t5;return _regenerator().w(function(_context10){while(1)switch(_context10.p=_context10.n){case 0:file=ev.target.files&&ev.target.files[0];ev.target.value="";if(file){_context10.n=1;break;}return _context10.a(2);case 1:setImporting(true);_context10.p=2;_context10.n=3;return file.arrayBuffer();case 3:buf=_context10.v;parsed=parseFMAN012(buf);if(!(parsed.actividades.length===0)){_context10.n=4;break;}flash("No se encontraron actividades en el archivo.",false);setImporting(false);return _context10.a(2);case 4:_context10.n=5;return sb.from("mtto_ordenes").select("equipo_codigo,equipo_desc,mes").eq("anio",parsed.anio);case 5:ex=_context10.v;if(!ex.error){_context10.n=6;break;}throw ex.error;case 6:mkey=function mkey(o){return o.equipo_codigo+"|"+(o.equipo_desc||"")+"|"+o.mes;};existentes={};(ex.data||[]).forEach(function(o){existentes[mkey(o)]=true;});nuevas=[];parsed.actividades.forEach(function(a){var k=mkey(a);if(existentes[k])return;existentes[k]=true;// dedupe también dentro del mismo archivo
 nuevas.push(a);});// Consecutivos
 base=(ex.data||[]).length;nuevas.forEach(function(a,i){a.consecutivo=String(base+i+1).padStart(3,"0")+"-"+String(parsed.anio%100).padStart(2,"0");});if(!(nuevas.length===0)){_context10.n=7;break;}flash("Cronograma "+parsed.anio+" ya estaba importado ("+parsed.actividades.length+" actividades). Sin cambios.");_context10.n=12;break;case 7:i=0;case 8:if(!(i<nuevas.length)){_context10.n=11;break;}_context10.n=9;return sb.from("mtto_ordenes").insert(nuevas.slice(i,i+200));case 9:ins=_context10.v;if(!ins.error){_context10.n=10;break;}throw ins.error;case 10:i+=200;_context10.n=8;break;case 11:flash("Importadas "+nuevas.length+" actividades del cronograma "+parsed.anio+" ✓");registrarHistorial("mtto_import","Import F-MAN-012 "+parsed.anio+" ("+nuevas.length+" órdenes)",initialUser&&(initialUser.nombre||initialUser.username));case 12:if(parsed.anio!==anio)setAnio(parsed.anio);else load();_context10.n=14;break;case 13:_context10.p=13;_t5=_context10.v;flash("Error al importar: "+(_t5.message||JSON.stringify(_t5)),false);case 14:setImporting(false);case 15:return _context10.a(2);}},_callee10,null,[[2,13]]);}));return _handleImport.apply(this,arguments);}function updateOrden(_x8,_x9){return _updateOrden.apply(this,arguments);}// ── Derivados ──
