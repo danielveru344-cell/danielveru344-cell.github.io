@@ -1123,7 +1123,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261119d";
+window.APP_BUILD = "20261119e";
 (function () {
   try {
     fetch(location.pathname + "?build=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (t) {
@@ -14126,7 +14126,7 @@ function cumplMapPreventivo(o){
     reprog:!!o.mes_reprogramado,raw:o
   };
 }
-// Órdenes de trabajo = solicitudes de mantenimiento ya asignadas a un técnico (cerrada = hecha).
+// Órdenes de trabajo = solicitudes de mantenimiento ya asignadas a un técnico (cerrada = hecha). Solo se leen: se cierran en su módulo.
 function cumplMapOrden(s){
   var hecho=s.estado==="cerrada";
   var f=new Date(s.asignado_en);
@@ -14164,23 +14164,18 @@ async function cumplCargarOrdenes(anio){
   }
   return filas.map(cumplMapOrden);
 }
-// Marca o desmarca una tarea con un click. Hace lo mismo que ya hace la app al ejecutar una orden o cerrar una solicitud.
+// Marca o desmarca un preventivo con un click. Hace lo mismo que ya hacía la app al ejecutar una orden.
+// Las órdenes de trabajo (solicitudes) NO se cierran desde aquí: se cierran en su propio módulo y esta ventana solo refleja su estado.
 async function cumplMarcar(t,hecho,usuarioNombre){
-  if(t.fuente==="preventivo"){
-    var o=t.raw;
-    var patch=hecho
-      ?{estado:"ejecutado",fecha_ejecucion:cumplHoyISO(),ejecutor:o.asignado_a||usuarioNombre||null}
-      :{estado:o.mes_reprogramado?"reprogramado":"programado",fecha_ejecucion:null,ejecutor:null};
-    var r=await sb.from("mtto_ordenes").update(patch).eq("id",o.id).select();
-    if(r.error)throw r.error;
-    if(hecho)registrarHistorial("mtto_ejecutada",(o.equipo_codigo||"")+" "+(o.equipo_desc||"")+" ("+(MTTO_MESES[(o.mes||1)-1]||"")+")",patch.ejecutor);
-    return cumplMapPreventivo((r.data&&r.data[0])||Object.assign({},o,patch));
-  }
-  var s=t.raw;
-  var patch2=hecho?{estado:"cerrada",cerrado_en:new Date().toISOString()}:{estado:"asignada",cerrado_en:null};
-  var r2=await sb.from("solicitudes_mantenimiento").update(patch2).eq("id",s.id).select();
-  if(r2.error)throw r2.error;
-  return cumplMapOrden((r2.data&&r2.data[0])||Object.assign({},s,patch2));
+  if(t.fuente!=="preventivo")throw new Error("Esta tarea se cierra desde su propio módulo.");
+  var o=t.raw;
+  var patch=hecho
+    ?{estado:"ejecutado",fecha_ejecucion:cumplHoyISO(),ejecutor:o.asignado_a||usuarioNombre||null}
+    :{estado:o.mes_reprogramado?"reprogramado":"programado",fecha_ejecucion:null,ejecutor:null};
+  var r=await sb.from("mtto_ordenes").update(patch).eq("id",o.id).select();
+  if(r.error)throw r.error;
+  if(hecho)registrarHistorial("mtto_ejecutada",(o.equipo_codigo||"")+" "+(o.equipo_desc||"")+" ("+(MTTO_MESES[(o.mes||1)-1]||"")+")",patch.ejecutor);
+  return cumplMapPreventivo((r.data&&r.data[0])||Object.assign({},o,patch));
 }
 
 var CUMPL_CSS="\n"+
@@ -14242,7 +14237,7 @@ function CumplimientoInterno(props){
   React.useEffect(function(){setMesSel(0);setTecSel("");cargar();},[anio]);
 
   async function alternar(t){
-    if(!puede||guardando[t.key])return;
+    if(!puede||t.fuente!=="preventivo"||guardando[t.key])return;
     setAviso(null);
     setGuardando(function(g){var n=Object.assign({},g);n[t.key]=true;return n;});
     try{
@@ -14269,8 +14264,9 @@ function CumplimientoInterno(props){
 
   function tarjeta(t){
     var cat=CUMPL_CATEGORIAS[t.cat]||{label:t.cat,color:"#475569",bg:"#f1f5f9"};
+    var clic=puede&&t.fuente==="preventivo";
     return h("div",{key:t.key,className:"ci-card"+(t.hecho?" done":""),style:guardando[t.key]?{opacity:.6}:null},
-      h("div",{className:"ci-row"+(puede?" click":""),onClick:function(){alternar(t);}},
+      h("div",{className:"ci-row"+(clic?" click":""),title:t.fuente==="orden"?"Se cierra desde Solicitudes de Mantenimiento":null,onClick:function(){alternar(t);}},
         h("div",{className:"ci-check"+(t.hecho?" on":"")},t.hecho?"✓":""),
         h("div",{className:"ci-info"},
           h("div",{className:"ci-name"},t.titulo),
@@ -14278,7 +14274,8 @@ function CumplimientoInterno(props){
         h("div",{className:"ci-meta"},
           h("span",{className:"ci-chip",style:{color:cat.color,background:cat.bg}},cat.label),
           t.reprog&&h("span",{className:"ci-chip",style:{color:"#C45200",background:"#FFF0D9"}},"↻ Reprogramada"),
-          t.fecha&&h("span",{className:"ci-date"},"📅 "+t.fecha))));
+          t.fecha&&h("span",{className:"ci-date"},"📅 "+t.fecha),
+          t.fuente==="orden"&&!t.hecho&&h("span",{className:"ci-date",style:{fontStyle:"italic"}},"se cierra en Solicitudes"))));
   }
 
   var cuerpo;
