@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261121a";
+window.APP_BUILD = "20261121b";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14467,6 +14467,42 @@ var MTO_CSS=[
 ".mto-card-titulo{font-size:13.5px;font-weight:700;color:var(--navy);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;}",
 ".mto-card-sub{font-size:11.5px;color:var(--gray);font-weight:600;margin-top:2px;}",
 ".mto-card-asig{font-size:11px;color:var(--accent);font-weight:700;margin-top:3px;}",
+".mto-cab{background:#fff;border:1px solid var(--border);border-radius:18px;padding:16px 20px;margin-bottom:14px;box-shadow:0 1px 10px rgba(13,47,92,.05);}",
+".mto-cab-fila{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}",
+".mto-cab-titulo{display:flex;align-items:center;gap:8px;font-family:Montserrat,sans-serif;font-weight:800;font-size:21px;color:var(--navy);letter-spacing:-.3px;}",
+".mto-paso{border:1px solid var(--border);background:#fff;border-radius:9px;width:32px;height:32px;cursor:pointer;font-size:17px;line-height:1;color:var(--navy);}",
+".mto-paso:disabled{opacity:.35;cursor:default;}",
+".mto-cab-acc{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}",
+".mto-cab-sub{font-size:12.5px;color:var(--gray);font-weight:700;margin-top:8px;}",
+".mto-filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}",
+".mto-filtros .ios-input{width:auto;padding:10px 13px;font-size:13px;}",
+".mto-filtros .mto-busca{flex:1;min-width:240px;max-width:520px;}",
+".mto-filtros .mto-chips{margin:0;}",
+".mto-vista{margin-left:auto;display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;}",
+".mto-vista button{border:none;background:#fff;padding:9px 14px;font-family:Montserrat,sans-serif;font-weight:700;font-size:12px;cursor:pointer;color:var(--gray);}",
+".mto-vista button.on{background:var(--navy);color:#fff;}",
+".mto-tabla-wrap{background:#fff;border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 10px rgba(13,47,92,.05);}",
+"table.mto-tabla{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}",
+".mto-tabla thead th{background:#f3f6fb;color:var(--gray);text-transform:uppercase;font-size:10.5px;letter-spacing:.7px;font-family:Montserrat,sans-serif;font-weight:800;text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);position:sticky;top:112px;z-index:3;white-space:nowrap;}",
+".mto-tabla thead th:first-child{border-top-left-radius:15px;}",
+".mto-tabla thead th:last-child{border-top-right-radius:15px;}",
+".mto-tabla thead th.ord{cursor:pointer;user-select:none;}",
+".mto-tabla thead th.ord:hover{color:var(--navy);}",
+".mto-tabla td{padding:11px 14px;border-bottom:1px solid #eef2f8;vertical-align:middle;}",
+".mto-fila-tabla{cursor:pointer;transition:background .1s;}",
+".mto-fila-tabla:hover{background:#f6f9ff;}",
+".mto-fila-tabla.marcada{background:#eaf2ff;}",
+".mto-fila-tabla td:first-child{border-left:4px solid var(--acento,#2d7dd2);}",
+".mto-fila-tabla.sel td:first-child{padding-left:10px;}",
+".mto-grupo-fila td{background:#f8fafd;font-family:Montserrat,sans-serif;font-weight:800;font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:.9px;padding:10px 14px;border-bottom:1px solid var(--border);border-left:4px solid transparent;}",
+".mto-cod{font-family:Montserrat,sans-serif;font-weight:700;font-size:12px;color:var(--navy);white-space:nowrap;}",
+".mto-cod.sin{color:#9aa6b8;font-weight:600;}",
+".mto-frec{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;}",
+".mto-tec{display:flex;align-items:center;gap:9px;white-space:nowrap;font-weight:600;color:var(--navy);}",
+".mto-tec.sin{color:#9aa6b8;font-weight:600;}",
+".mto-avatar{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;}",
+".mto-icono-btn{border:none;background:var(--light);border-radius:9px;width:34px;height:34px;cursor:pointer;font-size:15px;}",
+".mto-icono-btn:hover{filter:brightness(.94);}",
 ".mto-vacio{text-align:center;padding:56px 20px;color:var(--gray);font-size:13px;font-weight:600;line-height:1.6;}",
 ".mto-vacio b{display:block;color:var(--navy);font-size:16px;margin-bottom:6px;}",
 ".mto-admin{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(520px,100%),1fr));gap:18px;align-items:start;}",
@@ -14487,6 +14523,13 @@ function mtoMesInicial(items,anio){
   var sig=meses.filter(function(x){return x>=base;})[0];
   return sig||meses[meses.length-1];
 }
+
+// Vista preferida de las listas (tabla o tarjetas), guardada en este equipo
+function mtoLeerVista(){try{return localStorage.getItem("mto_vista")==="tarjetas"?"tarjetas":"tabla";}catch(e){return "tabla";}}
+function mtoGuardarVista(v){try{localStorage.setItem("mto_vista",v);}catch(e){}}
+var MTO_COLORES_AVATAR=["#2d7dd2","#1D9A50","#8E2A9B","#C45200","#0B7A75","#B0306B","#4A3ACF","#5B6B82"];
+function mtoColorAvatar(nombre){var h=0,t=String(nombre||"");for(var i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))%997;return MTO_COLORES_AVATAR[h%MTO_COLORES_AVATAR.length];}
+function mtoIniciales(nombre){var p=String(nombre||"").trim().split(/\s+/).filter(Boolean);return ((p[0]||"?").charAt(0)+(p.length>1?p[p.length-1].charAt(0):"")).toUpperCase();}
 
 // Confirmación de borrado, igual para Órdenes e Inspecciones
 function MtoBorrarModal(props){
@@ -14526,6 +14569,10 @@ function MtoModulo(props){
   var _s=S(false),modoSel=_s[0],setModoSel=_s[1];
   var _c=S({}),marcadas=_c[0],setMarcadas=_c[1];
   var _l=S(""),tecLote=_l[0],setTecLote=_l[1];
+  var _vm=S(mtoLeerVista()),modoVista=_vm[0],setModoVista=_vm[1];
+  var _w=S(typeof window!=="undefined"&&window.innerWidth?window.innerWidth:1200),ancho=_w[0],setAncho=_w[1];
+  var _o=S({k:"",dir:1}),orden=_o[0],setOrden=_o[1];
+  React.useEffect(function(){var f=function(){setAncho(window.innerWidth);};window.addEventListener("resize",f);return function(){window.removeEventListener("resize",f);};},[]);
   var ajustado=React.useRef(items.length>0);
   React.useEffect(function(){if(!ajustado.current&&items.length){ajustado.current=true;setMes(mtoMesInicial(items,anio));}},[items.length]);
   React.useEffect(function(){setVista("meses");setModoSel(false);setMarcadas({});},[anio]);
@@ -14622,39 +14669,91 @@ function MtoModulo(props){
 
   // ── vista: lista del mes
   var chips=[["","Todas",delMesBase.length],["programado","Programadas",cEst.programado],["ejecutado","Ejecutadas",cEst.ejecutado],["vencida","Vencidas",cEst.vencida],["reprogramado","Reprogramadas",cEst.reprogramado]];
+  var usarTabla=modoVista==="tabla"&&ancho>=820;
+  var ORDEN_ESTADO={vencida:0,programado:1,reprogramado:2,ejecutado:3};
+  var claves={
+    codigo:function(o){return String(campos.codigo?(campos.codigo(o)||""):"");},
+    titulo:function(o){return String(campos.titulo(o)||"").toLowerCase();},
+    tecnico:function(o){return (o.asignado_a||"~~~").toLowerCase();},
+    estado:function(o){return ORDEN_ESTADO[estadoDe(o)];}
+  };
+  var delMesOrd=delMes;
+  if(orden.k&&claves[orden.k]){delMesOrd=delMes.slice().sort(function(a,b){var x=claves[orden.k](a),y=claves[orden.k](b);return (x>y?1:x<y?-1:0)*orden.dir;});}
   var grupos=null;
   if(campos.grupo){
     grupos=[];var mapa={};
-    delMes.forEach(function(o){var g=campos.grupo(o);if(!mapa[g]){mapa[g]={nombre:g,items:[]};grupos.push(mapa[g]);}mapa[g].items.push(o);});
+    delMesOrd.forEach(function(o){var g=campos.grupo(o);if(!mapa[g]){mapa[g]={nombre:g,items:[]};grupos.push(mapa[g]);}mapa[g].items.push(o);});
   }
+  function ordenarPor(k){setOrden(function(p){return p.k===k?{k:k,dir:-p.dir}:{k:k,dir:1};});}
+  function cambiarVista(v){setModoVista(v);mtoGuardarVista(v);}
+  function celdaTecnico(o){
+    return o.asignado_a
+      ?h("div",{className:"mto-tec"},h("span",{className:"mto-avatar",style:{background:mtoColorAvatar(o.asignado_a)}},mtoIniciales(o.asignado_a)),o.asignado_a)
+      :h("div",{className:"mto-tec sin"},"Sin asignar");
+  }
+  function filaTabla(o){
+    var est=estadoDe(o),info=MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado,fq=campos.estiloLetra(o)||{bg:"var(--light)",col:"var(--navy)"};
+    var cod=campos.codigo?campos.codigo(o):"",det=campos.detalle?campos.detalle(o):"";
+    var frec=campos.frecuenciaTexto?campos.frecuenciaTexto(o):String(campos.letra(o)||"");
+    return h("tr",{key:o.id,className:"mto-fila-tabla"+(marcadas[o.id]?" marcada":"")+(modoSel?" sel":""),style:{"--acento":MTO_ACENTO[est]||MTO_ACENTO.programado},
+        onClick:function(){if(modoSel)alternarMarca(o);else props.onAbrir(o);}},
+      modoSel&&h("td",{style:{width:36,paddingRight:0}},h("input",{type:"checkbox",checked:!!marcadas[o.id],style:{width:17,height:17},onClick:function(ev){ev.stopPropagation();},onChange:function(){alternarMarca(o);}})),
+      h("td",null,h("span",{className:"mto-cod"+(cod?"":" sin")},cod||"sin consecutivo")),
+      h("td",{style:{width:"100%"}},h("div",{className:"mto-card-titulo"},campos.titulo(o)),det&&h("div",{className:"mto-card-sub"},det)),
+      h("td",null,h("span",{className:"mto-frec",style:{background:fq.bg,color:fq.col}},frec)),
+      h("td",null,celdaTecnico(o)),
+      h("td",null,h("span",{className:"badge "+(est==="vencida"?"badge-red":info.cls)},est==="vencida"?"Vencida":info.label)),
+      props.onImprimirUno&&h("td",{style:{width:52,textAlign:"right"}},h("button",{type:"button",className:"mto-icono-btn",title:"Imprimir esta "+(tx.singular||"hoja"),onClick:function(ev){ev.stopPropagation();props.onImprimirUno(o);}},"🖨️")));
+  }
+  function th(k,texto,extra){
+    var activo=orden.k===k;
+    return h("th",{key:texto||k,className:k?"ord":"",style:extra,onClick:k?function(){ordenarPor(k);}:null},texto,k&&activo?(orden.dir>0?" ▲":" ▼"):"");
+  }
+  var ncols=(modoSel?1:0)+(props.onImprimirUno?6:5);
   var contenidoLista;
   if(!delMes.length)contenidoLista=h("div",{className:"mto-vacio"},"Sin "+(tx.plural||"registros")+" "+((busca||filtroTec||filtroEst)?"que coincidan con el filtro":"programados en "+nombreMes)+".");
+  else if(usarTabla){
+    var filas=[];
+    if(grupos)grupos.forEach(function(g){filas.push(h("tr",{key:"g-"+g.nombre,className:"mto-grupo-fila"},h("td",{colSpan:ncols},g.nombre+" · "+g.items.length)));g.items.forEach(function(o){filas.push(filaTabla(o));});});
+    else delMesOrd.forEach(function(o){filas.push(filaTabla(o));});
+    contenidoLista=h("div",{className:"mto-tabla-wrap"},h("table",{className:"mto-tabla"},
+      h("thead",null,h("tr",null,modoSel&&h("th",{style:{width:36}}),th("codigo","Consecutivo"),th("titulo",tx.columna||"Descripción"),th("","Frecuencia"),th("tecnico","Técnico"),th("estado","Estado"),props.onImprimirUno&&h("th",{style:{width:52}}))),
+      h("tbody",null,filas)));
+  }
   else if(grupos)contenidoLista=h("div",{className:"mto-grupos"},grupos.map(function(g){return h("div",{key:g.nombre},h("div",{className:"mto-seccion"},g.nombre+" · "+g.items.length),h("div",{className:"mto-grupo-items"},g.items.map(tarjeta)));}));
-  else contenidoLista=h("div",{className:"mto-lista"},delMes.map(tarjeta));
+  else contenidoLista=h("div",{className:"mto-lista"},delMesOrd.map(tarjeta));
   var accL=props.renderAccionesLista?props.renderAccionesLista(ctx):null;
+  var nEjecMes=delMesBase.filter(function(o){return o.estado==="ejecutado";}).length;
   var vistaLista=h("div",null,
-    h("div",{style:{marginBottom:14,display:"flex",gap:8,justifyContent:"space-between",flexWrap:"wrap"}},
-      h("button",{type:"button",className:"mto-btn",onClick:volver},"← Meses"),
-      accL),
-    h("div",{className:"mto-barra"},
-      h("select",{className:"ios-input",value:mes,style:{fontWeight:700},onChange:function(ev){abrirMes(parseInt(ev.target.value,10));}},
-        MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",porMes[i].total,")");})),
-      h("input",{className:"ios-input mto-busca",placeholder:tx.buscar||"Buscar…",value:busca,onChange:function(ev){setBusca(ev.target.value);}}),
-      h("select",{className:"ios-input",value:filtroTec,style:{maxWidth:200,fontWeight:600},onChange:function(ev){setFiltroTec(ev.target.value);}},
-        h("option",{value:""},"👤 Todos"),
-        usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
-      canEdit&&props.asignarLote&&delMesBase.length>0&&h("button",{type:"button",className:"mto-btn"+(modoSel?" prim":""),onClick:function(){setModoSel(!modoSel);setMarcadas({});}},modoSel?"✕ Salir de la selección":"☑ Asignar en lote"),
-      h("button",{type:"button",className:"mto-btn prim",disabled:delMes.length===0||descargando||!props.onImprimir,
-        onClick:function(){setDescargando(true);Promise.resolve(props.onImprimir(delMes,nombreMes)).finally(function(){setDescargando(false);});}},
-        descargando?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")")),
+    h("div",{className:"mto-cab"},
+      h("div",{className:"mto-cab-fila"},
+        h("button",{type:"button",className:"mto-btn",onClick:volver},"← Meses"),
+        h("div",{className:"mto-cab-titulo"},
+          h("button",{type:"button",className:"mto-paso",disabled:mes<=1,title:"Mes anterior",onClick:function(){abrirMes(mes-1);}},"‹"),
+          h("span",null,nombreMes+" "+anio),
+          h("button",{type:"button",className:"mto-paso",disabled:mes>=12,title:"Mes siguiente",onClick:function(){abrirMes(mes+1);}},"›")),
+        h("div",{className:"mto-cab-acc"},
+          canEdit&&props.asignarLote&&delMesBase.length>0&&h("button",{type:"button",className:"mto-btn"+(modoSel?" prim":""),onClick:function(){setModoSel(!modoSel);setMarcadas({});}},modoSel?"✕ Salir de la selección":"☑ Asignar en lote"),
+          h("button",{type:"button",className:"mto-btn prim",disabled:delMes.length===0||descargando||!props.onImprimir,
+            onClick:function(){setDescargando(true);Promise.resolve(props.onImprimir(delMes,nombreMes)).finally(function(){setDescargando(false);});}},
+            descargando?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")"),
+          accL)),
+      h("div",{className:"mto-cab-sub"},delMesBase.length+" "+(tx.plural||"registros")+" · "+nEjecMes+" ejecutadas"+(cEst.vencida?" · "+cEst.vencida+" vencidas":"")+(cEst.reprogramado?" · "+cEst.reprogramado+" reprogramadas":""))),
     modoSel&&h("div",{className:"mto-barra"},
       h("button",{type:"button",className:"mto-btn",onClick:function(){var n={};sinAsignar.forEach(function(o){n[o.id]=true;});setMarcadas(n);}},"Seleccionar sin asignar ("+sinAsignar.length+")"),
       h("select",{className:"ios-input",value:tecLote,style:{maxWidth:220,fontWeight:600},onChange:function(ev){setTecLote(ev.target.value);}},
         h("option",{value:""},"Asignar a…"),usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
       h("button",{type:"button",className:"mto-btn prim",disabled:!nMarcadas||!tecLote,onClick:asignarLote},"Asignar ("+nMarcadas+")")),
-    h("div",{className:"mto-chips"},chips.map(function(c){
-      return h("button",{type:"button",key:c[0]||"todas",className:"mto-chip"+(filtroEst===c[0]?" on":""),onClick:function(){setFiltroEst(c[0]);}},c[1],h("small",null,c[2]));})),
-    h("div",{className:"mto-resumen"},delMes.length+" "+(tx.plural||"registros")+" · "+delMes.filter(function(o){return o.estado==="ejecutado";}).length+" ejecutadas"+(cEst.vencida?" · "+cEst.vencida+" vencidas":"")),
+    h("div",{className:"mto-filtros"},
+      h("input",{className:"ios-input mto-busca",placeholder:tx.buscar||"Buscar…",value:busca,onChange:function(ev){setBusca(ev.target.value);}}),
+      h("select",{className:"ios-input",value:filtroTec,style:{maxWidth:210,fontWeight:600},onChange:function(ev){setFiltroTec(ev.target.value);}},
+        h("option",{value:""},"👤 Todos los técnicos"),
+        usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
+      h("div",{className:"mto-chips"},chips.map(function(c){
+        return h("button",{type:"button",key:c[0]||"todas",className:"mto-chip"+(filtroEst===c[0]?" on":""),onClick:function(){setFiltroEst(c[0]);}},c[1],h("small",null,c[2]));})),
+      ancho>=820&&h("div",{className:"mto-vista"},
+        h("button",{type:"button",className:modoVista==="tabla"?"on":"",onClick:function(){cambiarVista("tabla");}},"☰ Lista"),
+        h("button",{type:"button",className:modoVista==="tarjetas"?"on":"",onClick:function(){cambiarVista("tarjetas");}},"▦ Tarjetas"))),
     contenidoLista);
 
   return vista==="meses"?vistaMeses:vistaLista;
@@ -14669,6 +14768,9 @@ function OrdenesTab(p){
   var campos={
     titulo:function(o){return o.equipo_desc||o.equipo_codigo||"—";},
     subtitulo:function(o){return [o.equipo_codigo,o.consecutivo].filter(Boolean).join(" · ");},
+    codigo:function(o){return o.consecutivo||"";},
+    detalle:function(o){return o.equipo_codigo||"";},
+    frecuenciaTexto:function(o){return MTTO_FREQ[o.frecuencia]||o.frecuencia||"";},
     letra:function(o){return o.frecuencia;},
     estiloLetra:function(o){return MTTO_FREQ_STYLE[o.frecuencia]||MTTO_FREQ_STYLE.T;},
     grupo:function(o){return o.seccion||"SIN SECCIÓN";},
@@ -14704,8 +14806,8 @@ function OrdenesTab(p){
   var vacio=h("div",{className:"mto-vacio"},h("b",null,"Sin cronograma para "+anio),canImport?"Importa el archivo F-MAN-012 para cargar las actividades programadas.":"Aún no se ha importado el cronograma de este año.");
   return h(React.Fragment,null,
     h(MtoModulo,{anio:anio,items:ordenes,usuarios:p.usuarios,currentUser:p.currentUser,cargando:p.loading,vacio:vacio,
-      textos:{plural:"órdenes",programadas:"Programadas",buscar:"Buscar equipo, código o sección…"},campos:campos,
-      onAbrir:p.onAbrir,asignarLote:asignarLote,
+      textos:{plural:"órdenes",singular:"orden",columna:"Equipo",programadas:"Programadas",buscar:"Buscar equipo, código o sección…"},campos:campos,
+      onAbrir:p.onAbrir,asignarLote:asignarLote,onImprimirUno:function(ord){printFMAN008(ord);},
       onImprimir:function(l,mesNombre){return descargarOrdenesMesFMAN008(l,mesNombre,anio);},
       renderAccionesMeses:function(ctx){
         if(!canImport||p.loading)return null;
@@ -14943,6 +15045,12 @@ function InspeccionesTab(props){
       var extra=[];if(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre)extra.push("esclusa de personal");if(o.esclusa_c56)extra.push("esclusa de materiales");
       return (o.consecutivo||"sin consecutivo")+(extra.length?" · + "+extra.join(" y "):"");
     },
+    codigo:function(o){return o.consecutivo||"";},
+    detalle:function(o){
+      var extra=[];if(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre)extra.push("esclusa de personal");if(o.esclusa_c56)extra.push("esclusa de materiales");
+      return extra.length?"+ "+extra.join(" y "):"";
+    },
+    frecuenciaTexto:function(o){return INSP_FREQ[o.frecuencia]||o.frecuencia||"";},
     letra:function(o){return o.frecuencia;},
     estiloLetra:function(o){return INSP_FREQ_STYLE[o.frecuencia]||INSP_FREQ_STYLE.T;},
     busqueda:function(o){return (o.area_nombre||"")+" "+(o.consecutivo||"")+" "+(o.esclusa_c41||"")+" "+(o.esclusa_c56||"");}
@@ -14961,8 +15069,8 @@ function InspeccionesTab(props){
     msg&&h("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:msg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 18px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},msg.texto),
     h("input",{ref:fileRef,type:"file",accept:".xlsx,.xlsm",style:{display:"none"},onChange:leerArchivo}),
     h(MtoModulo,{api:api,anio:anio,items:lista,usuarios:usuarios,currentUser:currentUser,cargando:cargando,errorNode:errorNode,vacio:vacio,
-      textos:{plural:"inspecciones",programadas:"Programadas",buscar:"Buscar área, esclusa o consecutivo…"},campos:campos,
-      onAbrir:setSel,asignarLote:asignarLote,
+      textos:{plural:"inspecciones",singular:"inspección",columna:"Área",programadas:"Programadas",buscar:"Buscar área, esclusa o consecutivo…"},campos:campos,
+      onAbrir:setSel,asignarLote:asignarLote,onImprimirUno:function(insp){printFMAN010(insp);},
       onImprimir:function(l,mesNombre){return descargarInspeccionesMesFMAN010(l,mesNombre,anio);},
       renderAccionesMeses:function(ctx){
         if(!canImport||cargando||errorCarga)return null;
