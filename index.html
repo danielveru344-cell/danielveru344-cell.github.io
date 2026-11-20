@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261120d";
+window.APP_BUILD = "20261120e";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14527,6 +14527,9 @@ function InspeccionesTab(props){
   var _f=S(null),msg=_f[0],setMsg=_f[1];
   var _d=S(false),descargando=_d[0],setDescargando=_d[1];
   var _v=S("meses"),vista=_v[0],setVista=_v[1];     // "meses" = cuadritos de cada mes · "lista" = inspecciones del mes elegido
+  var _bo=S(null),borrar=_bo[0],setBorrar=_bo[1];    // confirmación de borrado: {alcance:"mes"|"anio"}
+  var _bt=S(""),textoBorrar=_bt[0],setTextoBorrar=_bt[1];
+  var _bd=S(false),borrando=_bd[0],setBorrando=_bd[1];
   var _p=S(null),previa=_p[0],setPrevia=_p[1];       // vista previa de la importación
   var _i=S(false),importando=_i[0],setImportando=_i[1];
   var _dm=S(12),desdeMes=_dm[0],setDesdeMes=_dm[1];
@@ -14574,6 +14577,26 @@ function InspeccionesTab(props){
     flash(ids.length+" inspecciones asignadas a "+tecLote+" ✓");
     setMarcadas({});setModoSel(false);setTecLote("");
   }
+  // Filas que alcanzaría el borrado elegido (según lo que se ve en pantalla)
+  function filasABorrar(b){return lista.filter(function(o){return b&&(b.alcance==="anio"||o.mes===mes);});}
+  async function confirmarBorrado(){
+    var b=borrar;if(!b)return;
+    setBorrando(true);
+    try{
+      var filas=filasABorrar(b);
+      var q=sb.from("mtto_inspecciones").delete({count:"exact"}).eq("anio",anio);
+      if(b.alcance==="mes")q=q.eq("mes",mes);
+      var r=await q;
+      if(r.error)throw r.error;
+      var n=(r.count!=null)?r.count:filas.length;
+      registrarHistorial("insp_borrar","Borradas "+n+" inspecciones de "+(b.alcance==="mes"?MTTO_MESES[mes-1]+" ":"todo el cronograma ")+anio,currentUser&&(currentUser.nombre||currentUser.username));
+      if(typeof CUMPL_CACHE!=="undefined")delete CUMPL_CACHE[anio];   // Cumplimiento1 vuelve a leer
+      setBorrar(null);setTextoBorrar("");setMarcadas({});setModoSel(false);setVista("meses");
+      await cargar(true);
+      flash(n+" inspecciones borradas ✓");
+    }catch(e){flash("No se pudo borrar: "+((e&&e.message)||JSON.stringify(e)),false);}
+    setBorrando(false);
+  }
   async function leerArchivo(ev){
     var file=ev.target.files&&ev.target.files[0];ev.target.value="";
     if(!file)return;
@@ -14619,6 +14642,7 @@ function InspeccionesTab(props){
   var nEjec=delMes.filter(function(o){return o.estado==="ejecutado";}).length,nVenc=delMes.filter(vencida).length;
   var nMarcadas=Object.keys(marcadas).filter(function(k){return marcadas[k];}).length;
   var btnNavy={background:"var(--navy)",color:"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap"};
+  var btnPeligro={background:"#FDECEE",color:"#C0001A",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap"};
   var btnClaro={background:"var(--light)",color:"var(--navy)",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap"};
 
   var cuerpo;
@@ -14668,7 +14692,9 @@ function InspeccionesTab(props){
       statCard("✅",totEjec,"Ejecutadas","#1D7A3E"),
       statCard("⚠️",totVenc,"Vencidas",totVenc>0?"#C0001A":"#8a96a8")),
     (canImport&&!errorCarga&&!cargando)&&h("div",{style:{marginBottom:14}},
-      h("button",{type:"button",onClick:function(){fileRef.current&&fileRef.current.click();},style:lista.length?btnClaro:btnNavy},"⬆ Importar F-MAN-009")),
+      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+        h("button",{type:"button",onClick:function(){fileRef.current&&fileRef.current.click();},style:lista.length?btnClaro:btnNavy},"⬆ Importar F-MAN-009"),
+        lista.length>0&&h("button",{type:"button",onClick:function(){setTextoBorrar("");setBorrar({alcance:"anio"});},style:btnPeligro},"🗑 Borrar cronograma "+anio))),
     errorCarga==="tabla"?cuerpo:errorCarga?cuerpo:cargando?cuerpo:!lista.length?cuerpo:
     h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}},
       porMesDet.map(function(pm){
@@ -14689,7 +14715,9 @@ function InspeccionesTab(props){
       })));
   // Lista del mes elegido: imprimir todo el mes o abrir una inspección
   var vistaLista=h("div",null,
-    h("div",{style:{marginBottom:12}},h("button",{type:"button",onClick:function(){setVista("meses");setMarcadas({});setModoSel(false);},style:btnClaro},"← Meses")),
+    h("div",{style:{marginBottom:12,display:"flex",gap:8,justifyContent:"space-between",flexWrap:"wrap"}},
+      h("button",{type:"button",onClick:function(){setVista("meses");setMarcadas({});setModoSel(false);},style:btnClaro},"← Meses"),
+      canImport&&lista.some(function(o){return o.mes===mes;})&&h("button",{type:"button",onClick:function(){setTextoBorrar("");setBorrar({alcance:"mes"});},style:btnPeligro},"🗑 Borrar "+MTTO_MESES[mes-1])),
     h("div",{style:{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}},
       h("select",{className:"ios-input",value:mes,style:{width:"auto",padding:"9px 12px",fontWeight:700,fontSize:13},onChange:function(ev){setMes(parseInt(ev.target.value,10));setMarcadas({});}},
         MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",porMes[i],")");})),
@@ -14729,7 +14757,29 @@ function InspeccionesTab(props){
             h("summary",{style:{cursor:"pointer",fontWeight:700,fontSize:12.5}},"Ver las "+previa.sueltas.length+" esclusas que quedan solas en algún mes"),
             h("div",{style:{maxHeight:180,overflowY:"auto",marginTop:6,fontSize:12,color:"var(--gray)",lineHeight:1.6}},
               previa.sueltas.map(function(s){return h("div",{key:s.fila},s.nombre," · sola en ",s.meses.map(function(m){return MTTO_MESES_C[m-1];}).join(", "));}))),
-          h("button",{className:"ios-btn ios-btn-blue",disabled:importando,onClick:confirmarImport,style:{padding:"13px",fontSize:14}},importando?"Importando…":"Importar inspecciones")))));
+          h("button",{className:"ios-btn ios-btn-blue",disabled:importando,onClick:confirmarImport,style:{padding:"13px",fontSize:14}},importando?"Importando…":"Importar inspecciones"),
+          h("button",{type:"button",disabled:importando,onClick:function(){setPrevia(null);},style:{background:"transparent",border:"none",color:"var(--gray)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",padding:"6px"}},"Cancelar, no importar")))),
+    borrar&&(function(){
+      var filas=filasABorrar(borrar),ej=filas.filter(function(o){return o.estado==="ejecutado";}).length,asg=filas.filter(function(o){return o.asignado_a;}).length;
+      var nums=filas.map(function(o){return parseInt(String(o.consecutivo||"").replace(/\D/g,""),10);}).filter(function(n){return !isNaN(n);});
+      var rango=nums.length?"L"+Math.min.apply(null,nums)+" a L"+Math.max.apply(null,nums):null;
+      var exigeTexto=borrar.alcance==="anio"||ej>0;
+      var habilitado=!borrando&&(!exigeTexto||textoBorrar.trim().toUpperCase()==="BORRAR");
+      return h("div",{className:"overlay",onClick:function(){if(!borrando)setBorrar(null);}},
+        h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:480}},
+          h("div",{className:"sheet-handle"}),
+          h("div",{className:"sheet-title"},"Borrar inspecciones"),
+          h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5}},
+            h("div",null,"Se van a borrar ",h("b",null,filas.length+" inspecciones")," de ",h("b",null,borrar.alcance==="mes"?MTTO_MESES[mes-1]+" "+anio:"todo el cronograma "+anio),"."),
+            ej>0&&h("div",{style:{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:10,padding:"9px 12px",fontSize:12.5}},"⚠ ",h("b",null,ej+" ya están ejecutadas"),"; se borra también su registro."),
+            asg>0&&h("div",{style:{fontSize:12.5,color:"var(--gray)"}},asg+" tienen técnico asignado."),
+            rango&&h("div",{style:{fontSize:12.5,color:"var(--gray)"}},"Sus consecutivos ("+rango+") quedan libres y se volverán a usar en la próxima importación."),
+            h("div",{style:{fontSize:12.5,color:"#C0001A",fontWeight:700}},"Esto no se puede deshacer."),
+            exigeTexto&&h("div",null,h("div",{className:"ios-input-label"},"Escribe BORRAR para confirmar"),
+              h("input",{className:"ios-input",value:textoBorrar,placeholder:"BORRAR",autoFocus:true,onChange:function(ev){setTextoBorrar(ev.target.value);}})),
+            h("button",{type:"button",disabled:!habilitado,onClick:confirmarBorrado,style:{background:habilitado?"#C0001A":"var(--light)",color:habilitado?"#fff":"var(--gray)",border:"none",borderRadius:10,padding:"13px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:14,cursor:habilitado?"pointer":"default"}},borrando?"Borrando…":"Borrar definitivamente"),
+            h("button",{type:"button",disabled:borrando,onClick:function(){setBorrar(null);},style:{background:"transparent",border:"none",color:"var(--gray)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",padding:"6px"}},"Cancelar"))));
+    })());
 }
 
 // ── Administrador: plantilla del F-MAN-010 (igual que la del F-MAN-008) ──
