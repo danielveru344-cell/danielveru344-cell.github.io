@@ -94,7 +94,7 @@
     </div>
     <input type="file" id="inputAll" accept=".xlsx,.xls" multiple>
     <div class="file-list" id="fileList"></div>
-    <label class="confirm-row" id="usarAppRow" style="display:none;font-weight:400"><input type="checkbox" id="usarPrevApp"> No subí los Informe_Mtto: usar los preventivos guardados en Cumplimiento (mtto_meses)</label>
+    <label class="confirm-row" id="usarAppRow" style="display:none;font-weight:400"><input type="checkbox" id="usarPrevApp"> <span id="usarPrevAppTxt">No subí los Informe_Mtto: usar los preventivos guardados en Cumplimiento (mtto_meses)</span></label>
     <div id="statusMsg"></div>
   </div>
 
@@ -129,6 +129,13 @@ const RPT = {
   GREEN: '16A34A', AMBER: 'CA8A04', RED_SOFT: 'DC2626', GREY_MED: 'A3AAB4',
   BLUE: '2563EB', LIGHT_BG: 'F5F5F5', NAVY: '0D2F5C'
 };
+
+// ── Origen del informe ──────────────────────────────────────────────────────────────────────────
+// Abierto desde Cumplimiento1 (?origen=cumplimiento1&anio=AAAA) los preventivos se toman de las órdenes de la app (mtto_ordenes)
+// en lugar de mtto_meses. Las diapositivas y todo lo demás son exactamente los mismos.
+const PARAMS_URL = new URLSearchParams(location.search);
+const ORIGEN_APP = PARAMS_URL.get('origen') === 'cumplimiento1';
+const ANIO_APP = parseInt(PARAMS_URL.get('anio'), 10) || new Date().getFullYear();
 
 let rowsPlatino = null, rowsBussie = null;
 let prevSnapshot = null; // {fecha, data:[{numero,tecnico,estado,plant,fecha}]}
@@ -245,6 +252,10 @@ async function cargarUltimoSnapshot() {
   if (combinedNow) renderPreview();
 }
 cargarUltimoSnapshot();
+if (ORIGEN_APP) {   // desde Cumplimiento1 la casilla de preventivos de la app viene marcada
+  const t = document.getElementById('usarPrevAppTxt'); if (t) t.textContent = 'No subí los Informe_Mtto: usar los preventivos de Cumplimiento1 (órdenes de la app, ' + ANIO_APP + ')';
+  const c = document.getElementById('usarPrevApp'); if (c) c.checked = true;
+}
 
 // ── Base inicial desde el JSON (Base_comparacion_AAAA-MM-DD.json) ──
 // solicitudes ya viene en formato snapshot; preventivos_meses trae tasks[{id,resp}] y done{id:true}.
@@ -531,7 +542,7 @@ function renderPreview() {
   } else if (!usarApp) {
     alertas.push(['err', 'No subiste los Informe_Mtto de preventivos. Súbelos o marca la opción de usar los preventivos de Cumplimiento.']);
   } else {
-    h += '<div class="alerta warn" style="margin-top:4px">Preventivos: se usarán los datos guardados en Cumplimiento (mtto_meses).</div>';
+    h += '<div class="alerta warn" style="margin-top:4px">Preventivos: se usarán los datos guardados en ' + (ORIGEN_APP ? 'Cumplimiento1 (órdenes de la app)' : 'Cumplimiento (mtto_meses)') + '.</div>';
   }
   if (!prevSnapshot) alertas.push(['warn', 'No hay base de solicitudes: el informe saldrá sin comparación.']);
   if (!prevSnapshotPreventivos) alertas.push(['warn', 'No hay base de preventivos: no saldrán las diapositivas de pendientes y cierres de preventivos.']);
@@ -614,7 +625,37 @@ function calcularDiff() {
 // ══════════════════════════════════════════════════
 //  PREVENTIVOS: leer datos de Cumplimiento (mtto_meses)
 // ══════════════════════════════════════════════════
+// Preventivos de Cumplimiento1: órdenes preventivas de mtto_ordenes, con la misma forma que mtto_meses:
+// [{id, mes, tasks:[{id,resp}], done:{id:true}}]. Cada orden cuenta en su mes efectivo (mes reprogramado si lo tiene);
+// van desde mayo (primer mes del seguimiento) hasta el mes de la fecha de corte.
+async function cargarPreventivosApp() {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/mtto_ordenes?select=id,anio,mes,estado,asignado_a,mes_reprogramado&anio=eq.${ANIO_APP}&order=id.asc`, {
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
+    });
+    if (!r.ok) return null;
+    const ordenes = (await r.json()).sort((a, b) => a.id - b.id);
+    const corte = fechaCorte();
+    const mesCorte = corte.getFullYear() === ANIO_APP ? corte.getMonth() : 11;
+    const porMes = {};
+    ordenes.forEach(o => {
+      const mi = (o.mes_reprogramado || o.mes) - 1;
+      if (mi < 4 || mi > mesCorte) return;
+      (porMes[mi] = porMes[mi] || []).push(o);
+    });
+    return Object.keys(porMes).map(Number).sort((a, b) => a - b).map(mi => {
+      const tasks = [], done = {};
+      porMes[mi].forEach(o => {
+        const tid = 't' + o.id;
+        tasks.push({ id: tid, resp: String(o.asignado_a || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim() });
+        if (o.estado === 'ejecutado') done[tid] = true;
+      });
+      return { id: idMes(ANIO_APP, mi), mes: MESES_LARGO[mi].charAt(0).toUpperCase() + MESES_LARGO[mi].slice(1), tasks, done, notes: {} };
+    });
+  } catch (e) { return null; }
+}
 async function cargarPreventivos() {
+  if (ORIGEN_APP) return cargarPreventivosApp();
   try {
     const r = await fetch(`${SUPA_URL}/rest/v1/mtto_meses?select=id,mes,tasks,done,notes&order=id.asc`, {
       headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
@@ -807,6 +848,23 @@ async function corregirIdsYDescargar(pres, fileName) {
   a.href = url; a.download = fileName;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return fixedBlob;
+}
+
+// Historial: cada informe generado queda guardado (uno por fecha de corte; si se genera otra vez el mismo día, reemplaza al anterior)
+async function archivarInformeSemanal(blob, fecha, nombre) {
+  const base64 = await new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1]);
+    fr.onerror = () => rej(fr.error);
+    fr.readAsDataURL(blob);
+  });
+  const r = await fetch(`${SUPA_URL}/rest/v1/informes_semanales?on_conflict=fecha`, {
+    method: 'POST',
+    headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ fecha, nombre, tamano: blob.size, origen: ORIGEN_APP ? 'cumplimiento1' : 'cumplimiento', contenido: base64 })
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
 }
 
 function buildTablaRows(headerLabels, dataRows, colW, fontSize) {
@@ -1306,14 +1364,17 @@ async function generarInforme() {
     }
 
     const fechaArchivo = fechaLocalISO(fechaHoy);
-    await corregirIdsYDescargar(pres, `Informe_Semanal_${fechaArchivo}.pptx`);
+    const pptxFinal = await corregirIdsYDescargar(pres, `Informe_Semanal_${fechaArchivo}.pptx`);
+ let archivadoMsg = '';
+ try { await archivarInformeSemanal(pptxFinal, fechaArchivo, `Informe_Semanal_${fechaArchivo}.pptx`); archivadoMsg = ' 🗂 Guardado en el historial de informes.'; }
+ catch (e) { archivadoMsg = ' ⚠️ No se pudo guardar en el historial (' + e.message + '): falta crear la tabla informes_semanales en Supabase.'; }
 
     // La base de la próxima semana se guarda aparte, con el botón "Guardar como base de la próxima semana"
     const archivosSnap = [];
     ['platino', 'bussie'].forEach(p => archivosSnap.push({ tipo: p, mes: '', nombre: archivos[p].nombre, hash: archivos[p].hash, filas: archivos[p].rows.length, ultimaFecha: fmtF(contarSol(combinedNow, p).ultima) }));
     Object.values(archivos.preventivos).forEach(a => archivosSnap.push({ tipo: 'preventivos', mes: MESES_LARGO[a.mesIdx].charAt(0).toUpperCase() + MESES_LARGO[a.mesIdx].slice(1), nombre: a.nombre, hash: a.hash, filas: a.rows.length, ultimaFecha: '' }));
     generado = { fecha: fechaArchivo, solicitudes: combinedNow, preventivos: nowSnapPreventivos, archivos: archivosSnap };
-    showStatus('✅ Informe generado y descargado. Si está bien, guárdalo como base de la próxima semana.', 'ok');
+    showStatus('✅ Informe generado y descargado. Si está bien, guárdalo como base de la próxima semana.' + archivadoMsg, 'ok');
 
   } catch (e) {
     alert('No se pudo generar el informe: ' + e.message);
