@@ -437,6 +437,7 @@ function resetAll() {
   document.getElementById('dropAll').classList.remove('ok');
   document.getElementById('usarAppRow').style.display = 'none';
   actualizarBotones();
+  if (ORIGEN_APP && typeof usarSolicitudesApp === 'function') usarSolicitudesApp();
 }
 (function () {
   const drop = document.getElementById('dropAll');
@@ -1382,6 +1383,72 @@ async function generarInforme() {
   } finally {
     btn.textContent = original; actualizarBotones();
   }
+}
+
+// ── Solicitudes desde la app (solo cuando se abre desde Cumplimiento1) ─────────────────────────────
+// Se leen de Solicitudes de Mantenimiento (solicitudes_mantenimiento) y se entregan al informe con la MISMA forma que las filas de
+// los Excel (Número de Solictud · Técnico Asignado · Estado · F. Solicitud); así todo lo demás funciona exactamente igual.
+// La sede se deduce del código del área: las áreas de la Planta Platino AP llevan código "AP…"; las demás son de Bussié.
+function sedeDeSolicitud(s) { return /^AP/i.test(String(s.area_codigo || '').trim()) ? 'platino' : 'bussie'; }
+function fechaDDMMAAAA(v) {
+  const d = new Date(v);
+  if (!v || isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+}
+async function cargarSolicitudesApp() {
+  const filas = [];
+  for (let desde = 0; ; desde += 1000) {
+    const r = await fetch(`${SUPA_URL}/rest/v1/solicitudes_mantenimiento?select=id,consecutivo,estado,asignado_a,enviado_en,area_codigo&anio=eq.${ANIO_APP}&order=id.asc&limit=1000&offset=${desde}`, {
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const lote = await r.json();
+    lote.forEach(s => filas.push(s));
+    if (lote.length < 1000) break;
+  }
+  const plat = [], buss = [];
+  filas.forEach(s => {
+    const fila = {
+      'Número de Solictud': String(s.consecutivo || '').trim(),
+      'Técnico Asignado': String(s.asignado_a || '').trim(),
+      'Estado': String(s.estado || '').trim().toUpperCase(),
+      'F. Solicitud': fechaDDMMAAAA(s.enviado_en)
+    };
+    (sedeDeSolicitud(s) === 'platino' ? plat : buss).push(fila);
+  });
+  return { plat, buss };
+}
+async function usarSolicitudesApp() {
+  const info = document.getElementById('solAppInfo');
+  try {
+    const { plat, buss } = await cargarSolicitudesApp();
+    if (!plat.length && !buss.length) {
+      info.innerHTML = `⚠️ No hay solicitudes de ${ANIO_APP} en la app (Solicitudes de Mantenimiento). Si las tienes en los Excel de Platino y Bussié, súbelos.`;
+      info.style.display = 'block';
+      return;
+    }
+    archivos.platino = { nombre: 'Solicitudes de Mantenimiento (app) · Platino', rows: plat, hash: await hashContenido(plat) };
+    archivos.bussie = { nombre: 'Solicitudes de Mantenimiento (app) · Bussié', rows: buss, hash: await hashContenido(buss) };
+    rowsPlatino = plat; rowsBussie = buss;
+    info.innerHTML = `📥 <b>Solicitudes tomadas de la app</b> (Solicitudes de Mantenimiento, ${ANIO_APP}): Platino <b>${plat.length}</b> · Bussié <b>${buss.length}</b>. La sede se deduce del código del área (AP… = Platino).`
+      + ` <button class="link-btn" type="button" onclick="usarSolicitudesApp()">↻ Volver a leer</button> · Si prefieres usar los Excel, suéltalos aquí y reemplazan a estos.`;
+    info.style.display = 'block';
+    pintarListaArchivos();
+    checkReady();
+  } catch (e) {
+    info.innerHTML = `⚠️ No se pudieron leer las solicitudes de la app (${e.message}). Puedes subir los Excel de Platino y Bussié.`;
+    info.style.display = 'block';
+  }
+}
+if (ORIGEN_APP) {
+  const lista = document.getElementById('fileList');
+  const info = document.createElement('div');
+  info.id = 'solAppInfo'; info.className = 'snap-info'; info.style.display = 'none'; info.style.marginTop = '10px';
+  lista.parentNode.insertBefore(info, lista.nextSibling);
+  const h2 = document.querySelector('#dropAll h2'), pp = document.querySelector('#dropAll p');
+  if (h2) h2.textContent = 'Las solicitudes y los preventivos ya vienen de la app';
+  if (pp) pp.innerHTML = 'No necesitas subir nada. Si quieres reemplazar alguno, suelta aquí el Excel (Solicitudes Platino, Solicitudes Bussié o Informe_Mtto) y se usa ese.';
+  usarSolicitudesApp();
 }
 </script>
 </body>
