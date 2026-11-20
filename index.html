@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261120c";
+window.APP_BUILD = "20261120d";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14148,6 +14148,11 @@ function inspTipoEsclusa(b){
   if(/\bMATERIAL(ES)?\b|MATERIAS? PRIMAS?/.test(b))return "material";
   return "otra";
 }
+function inspNombreAreaDeEsclusa(nombre){
+  var x=String(nombre).replace(/\s*\([^)]*\)\s*$/,"").trim();
+  x=x.replace(/^ESCLUSA\s+/i,"").replace(/^(DE\s+)?(PERSONAL(ES)?|MATERIAL(ES)?)\s+/i,"");
+  return x.trim()||String(nombre);
+}
 // "MUESTREO 1 (117)" -> nombre completo, código y nota que haya quedado escrita después del paréntesis
 function inspPartirNombre(texto){
   var t=String(texto).trim();
@@ -14196,44 +14201,75 @@ function parseFMAN009(arrayBuffer){
     (porBase[a.base]=porBase[a.base]||[]).push(a);
     var t=inspTokens(a.base);(porTokens[t]=porTokens[t]||[]).push(a);
   });
-  var hijas={};   // fila del área -> {c41, c56}
-  var sueltas=[],conflictos=[],agrupadas=0;
+  // Se decide mes por mes:
+  //  1) una esclusa va dentro de la hoja de su área en los meses en que el área también se inspecciona;
+  //  2) si ese mes no le toca al área pero sí a las dos esclusas (personal y materiales), las dos van juntas en una hoja;
+  //  3) si no, la esclusa va sola.
+  var asig={},usada={},comb={},conflictos=[];
   esclusas.forEach(function(e){
-    var tipo=inspTipoEsclusa(e.base);
+    e.tipo=inspTipoEsclusa(e.base);
     var padre=null;
-    if(tipo!=="otra"){
-      var exacto=(porBase[inspQuitarEsclusa(e.base)]||[]).filter(function(a){return a.clave===e.clave;});
+    if(e.tipo!=="otra"){
+      var exacto=porBase[inspQuitarEsclusa(e.base)]||[];
       if(exacto.length===1)padre=exacto[0];
-      else if(exacto.length===0){
-        var porT=(porTokens[inspTokens(e.base)]||[]).filter(function(a){return a.clave===e.clave;});
-        if(porT.length===1)padre=porT[0];
-      }
+      else if(exacto.length===0){var porT=porTokens[inspTokens(e.base)]||[];if(porT.length===1)padre=porT[0];}
     }
-    if(!padre){sueltas.push(e);return;}
-    var h=hijas[padre.fila]=hijas[padre.fila]||{};
-    var slot=tipo==="personal"?"c41":"c56";
-    if(h[slot]){conflictos.push({esclusa:e.nombre,area:padre.nombre});sueltas.push(e);return;}
-    h[slot]=e;e.padre=padre;agrupadas++;
+    e.padre=padre;
+    if(e.tipo==="otra")return;
+    var slot=e.tipo==="personal"?"c41":"c56";
+    e.marcas.forEach(function(mk){
+      if(padre&&padre.marcas.some(function(m){return m.mes===mk.mes;})){
+        var k=padre.fila+"|"+mk.mes;var h=asig[k]=asig[k]||{};
+        if(!h[slot]){h[slot]=e;usada[e.fila+"|"+mk.mes]=true;return;}
+        conflictos.push({esclusa:e.nombre,area:padre.nombre,mes:mk.mes});return;
+      }
+      var kb=inspTokens(e.base)+"|"+mk.mes;
+      var g=comb[kb]=comb[kb]||{personal:[],material:[]};
+      g[e.tipo].push({e:e,mk:mk});
+    });
+  });
+  var combinadas=[];
+  Object.keys(comb).forEach(function(kb){
+    var g=comb[kb];
+    if(g.personal.length===1&&g.material.length===1){
+      var p=g.personal[0],m=g.material[0];
+      usada[p.e.fila+"|"+p.mk.mes]=true;usada[m.e.fila+"|"+m.mk.mes]=true;
+      combinadas.push({p:p,m:m,padre:p.e.padre||m.e.padre});
+    }
   });
   var hojas=[];
   filas.forEach(function(f){
-    if(f.esEsclusa&&f.padre)return;   // ya va dentro de la hoja de su área
-    var h=hijas[f.fila]||{};
     f.marcas.forEach(function(mk){
-      var esSola=f.esEsclusa;
-      hojas.push({
-        anio:anio,mes:mk.mes,frecuencia:mk.frecuencia,orden:f.fila,
-        area_codigo:f.codigo||null,area_nombre:f.nombre,
-        esclusa_c41:esSola?f.nombre:(h.c41?h.c41.nombre:null),   // una esclusa sola se imprime en C41 (y su nombre también va en Área)
-        esclusa_c56:h.c56?h.c56.nombre:null,
-        filas_cronograma:1+(h.c41?1:0)+(h.c56?1:0)
-      });
+      if(!f.esEsclusa){
+        var h=asig[f.fila+"|"+mk.mes]||{};
+        hojas.push({anio:anio,mes:mk.mes,frecuencia:mk.frecuencia,orden:f.fila,
+          area_codigo:f.codigo||null,area_nombre:f.nombre,
+          esclusa_c41:h.c41?h.c41.nombre:null,esclusa_c56:h.c56?h.c56.nombre:null,
+          filas_cronograma:1+(h.c41?1:0)+(h.c56?1:0)});
+      }else if(!usada[f.fila+"|"+mk.mes]){
+        hojas.push({anio:anio,mes:mk.mes,frecuencia:mk.frecuencia,orden:f.fila,
+          area_codigo:f.codigo||null,area_nombre:f.nombre,   // una esclusa sola se imprime en C41 (y su nombre también va en Área)
+          esclusa_c41:f.nombre,esclusa_c56:null,filas_cronograma:1});
+      }
     });
   });
+  combinadas.forEach(function(c){
+    var padre=c.padre;
+    hojas.push({anio:anio,mes:c.p.mk.mes,frecuencia:c.p.mk.frecuencia,orden:Math.min(c.p.e.fila,c.m.e.fila),
+      area_codigo:padre?(padre.codigo||null):null,
+      area_nombre:padre?padre.nombre:inspNombreAreaDeEsclusa(c.p.e.nombre),   // el área aunque ese mes no le toque
+      esclusa_c41:c.p.e.nombre,esclusa_c56:c.m.e.nombre,filas_cronograma:2});
+  });
   hojas.sort(function(a,b){return a.mes-b.mes||a.orden-b.orden;});
+  var agrupadas=0,sueltas=[];
+  esclusas.forEach(function(e){
+    var solas=[],juntas=0;
+    e.marcas.forEach(function(mk){if(usada[e.fila+"|"+mk.mes])juntas++;else solas.push(mk.mes);});
+    if(juntas>0)agrupadas++;
+    if(solas.length)sueltas.push({nombre:e.nombre,fila:e.fila,meses:solas});
+  });
   return{anio:anio,version:version,filas:filas.length,areas:areas.length,esclusas:esclusas.length,
-         agrupadas:agrupadas,sueltas:sueltas.map(function(s){return{nombre:s.nombre,fila:s.fila,meses:s.marcas.map(function(x){return x.mes;})};}),
-         conflictos:conflictos,hojas:hojas};
+         agrupadas:agrupadas,combinadas:combinadas.length,sueltas:sueltas,conflictos:conflictos,hojas:hojas};
 }
 
 // Consecutivos automáticos "L2054": siguen una sola serie, en el orden mes → fila del cronograma.
@@ -14684,15 +14720,15 @@ function InspeccionesTab(props){
         h("div",{className:"sheet-title"},"Importar cronograma F-MAN-009 · "+previa.anio),
         h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5}},
           h("div",null,"El archivo trae ",h("b",null,previa.filas+" filas")," (",previa.areas," áreas y ",previa.esclusas," esclusas). Quedan ",h("b",null,previa.hojas.length+" inspecciones")," en el año: ",
-            previa.agrupadas," esclusas se imprimen dentro de la hoja de su área y ",previa.sueltas.length," van solas."),
+            previa.agrupadas," esclusas se imprimen dentro de la hoja de su área (o junto a la otra esclusa de esa área cuando caen el mismo mes) y ",previa.sueltas.length," van solas en algún mes."),
           h("div",null,h("div",{className:"ios-input-label"},"Importar desde el mes"),
             h("select",{className:"ios-input",value:desdeMes,onChange:function(ev){setDesdeMes(parseInt(ev.target.value,10));}},
               MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",previa.hojas.filter(function(x){return x.mes===i+1;}).length," inspecciones)");}))),
           h("div",{style:{background:"var(--lighter)",borderRadius:10,padding:"9px 12px",fontSize:12.5}},"Se importan ",h("b",null,previa.hojas.filter(function(x){return x.mes>=desdeMes;}).length)," inspecciones, con consecutivo automático desde ",h("b",null,"L2054")," (o el siguiente disponible). Lo que ya esté importado no se repite."),
           previa.sueltas.length>0&&h("details",null,
-            h("summary",{style:{cursor:"pointer",fontWeight:700,fontSize:12.5}},"Ver las "+previa.sueltas.length+" esclusas que quedan solas"),
+            h("summary",{style:{cursor:"pointer",fontWeight:700,fontSize:12.5}},"Ver las "+previa.sueltas.length+" esclusas que quedan solas en algún mes"),
             h("div",{style:{maxHeight:180,overflowY:"auto",marginTop:6,fontSize:12,color:"var(--gray)",lineHeight:1.6}},
-              previa.sueltas.map(function(s){return h("div",{key:s.fila},s.nombre," · meses ",s.meses.join(", "));}))),
+              previa.sueltas.map(function(s){return h("div",{key:s.fila},s.nombre," · sola en ",s.meses.map(function(m){return MTTO_MESES_C[m-1];}).join(", "));}))),
           h("button",{className:"ios-btn ios-btn-blue",disabled:importando,onClick:confirmarImport,style:{padding:"13px",fontSize:14}},importando?"Importando…":"Importar inspecciones")))));
 }
 
