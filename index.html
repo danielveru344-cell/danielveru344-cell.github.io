@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261120b";
+window.APP_BUILD = "20261120c";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14490,6 +14490,7 @@ function InspeccionesTab(props){
   var _s=S(null),sel=_s[0],setSel=_s[1];
   var _f=S(null),msg=_f[0],setMsg=_f[1];
   var _d=S(false),descargando=_d[0],setDescargando=_d[1];
+  var _v=S("meses"),vista=_v[0],setVista=_v[1];     // "meses" = cuadritos de cada mes · "lista" = inspecciones del mes elegido
   var _p=S(null),previa=_p[0],setPrevia=_p[1];       // vista previa de la importación
   var _i=S(false),importando=_i[0],setImportando=_i[1];
   var _dm=S(12),desdeMes=_dm[0],setDesdeMes=_dm[1];
@@ -14558,7 +14559,7 @@ function InspeccionesTab(props){
         registrarHistorial("insp_import","Import F-MAN-009 "+previa.anio+" desde "+MTTO_MESES[desdeMes-1]+" ("+r.insertadas+" inspecciones)",currentUser&&(currentUser.nombre||currentUser.username));
       }
       var anioImp=previa.anio;setPrevia(null);
-      if(anioImp===anio){setMes(desdeMes);mesAjustado.current=true;await cargar(true);}
+      if(anioImp===anio){setMes(desdeMes);mesAjustado.current=true;setVista("meses");await cargar(true);}
       else if(props.onCambiarAnio)props.onCambiarAnio(anioImp);
     }catch(e){flash("Error al importar: "+((e&&e.message)||JSON.stringify(e)),false);}
     setImportando(false);
@@ -14566,6 +14567,12 @@ function InspeccionesTab(props){
 
   var vencida=function(o){return o.estado==="programado"&&(o.anio<hoyAnio||(o.anio===hoyAnio&&o.mes<hoyMes));};
   var porMes=[];for(var m=1;m<=12;m++){porMes.push(lista.filter(function(o){return o.mes===m;}).length);}
+  var porMesDet=[];
+  for(var mm=1;mm<=12;mm++){
+    var osm=lista.filter(function(o){return o.mes===mm;});
+    porMesDet.push({mes:mm,total:osm.length,ejec:osm.filter(function(o){return o.estado==="ejecutado";}).length,venc:osm.filter(vencida).length,repr:osm.filter(function(o){return o.estado==="reprogramado";}).length});
+  }
+  var totAnio=lista.length,totEjec=lista.filter(function(o){return o.estado==="ejecutado";}).length,totVenc=lista.filter(vencida).length;
   var q=busca.trim().toLowerCase();
   var delMes=lista.filter(function(o){
     if(o.mes!==mes)return false;
@@ -14611,9 +14618,42 @@ function InspeccionesTab(props){
       }));
   }
 
-  return h("div",null,
-    msg&&h("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:msg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 18px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},msg.texto),
-    h("input",{ref:fileRef,type:"file",accept:".xlsx,.xlsm",style:{display:"none"},onChange:leerArchivo}),
+  var statCard=function(icono,valor,etiqueta,color){
+    return h("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},
+      h("div",{style:{width:30,height:30,borderRadius:9,background:color+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},icono),
+      h("div",{style:{minWidth:0}},
+        h("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:color}},valor),
+        h("div",{style:{fontSize:9.5,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3,fontFamily:"Montserrat,sans-serif",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},etiqueta)));
+  };
+  // Cuadritos de cada mes, igual que el Calendario de Órdenes: al tocar uno se abre su lista.
+  var vistaMeses=h("div",null,
+    lista.length>0&&!cargando&&!errorCarga&&h("div",{style:{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}},
+      statCard("📅",totAnio,"Programadas "+anio,"#0D2F5C"),
+      statCard("✅",totEjec,"Ejecutadas","#1D7A3E"),
+      statCard("⚠️",totVenc,"Vencidas",totVenc>0?"#C0001A":"#8a96a8")),
+    (canImport&&!errorCarga&&!cargando)&&h("div",{style:{marginBottom:14}},
+      h("button",{type:"button",onClick:function(){fileRef.current&&fileRef.current.click();},style:lista.length?btnClaro:btnNavy},"⬆ Importar F-MAN-009")),
+    errorCarga==="tabla"?cuerpo:errorCarga?cuerpo:cargando?cuerpo:!lista.length?cuerpo:
+    h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}},
+      porMesDet.map(function(pm){
+        var actual=pm.mes===hoyMes&&anio===hoyAnio;
+        var pct=pm.total>0?Math.round(pm.ejec/pm.total*100):null;
+        return h("button",{key:pm.mes,onClick:function(){setMes(pm.mes);setMarcadas({});setModoSel(false);setVista("lista");},className:"stat-card",
+          style:{cursor:"pointer",textAlign:"left",border:actual?"2px solid var(--accent)":"1px solid var(--border)",background:"#fff",padding:"13px 14px"}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+            h("span",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:"var(--navy)",textTransform:"uppercase"}},MTTO_MESES_C[pm.mes-1]),
+            actual&&h("span",{style:{fontSize:9,fontWeight:800,color:"var(--accent)",letterSpacing:0.8}},"HOY")),
+          h("div",{style:{fontSize:22,fontWeight:800,color:"var(--navy)",marginTop:4}},pm.total),
+          h("div",{style:{display:"flex",gap:8,marginTop:5,fontSize:11,fontWeight:700}},
+            h("span",{style:{color:"#1D7A3E"}},"✓ ",pm.ejec),
+            pm.venc>0&&h("span",{style:{color:"#C0001A"}},"⚠ ",pm.venc),
+            pm.repr>0&&h("span",{style:{color:"#C45200"}},"↻ ",pm.repr)),
+          pct!==null&&h("div",{style:{height:5,background:"var(--light)",borderRadius:3,marginTop:8,overflow:"hidden"}},
+            h("div",{style:{height:"100%",width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)",borderRadius:3}})));
+      })));
+  // Lista del mes elegido: imprimir todo el mes o abrir una inspección
+  var vistaLista=h("div",null,
+    h("div",{style:{marginBottom:12}},h("button",{type:"button",onClick:function(){setVista("meses");setMarcadas({});setModoSel(false);},style:btnClaro},"← Meses")),
     h("div",{style:{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}},
       h("select",{className:"ios-input",value:mes,style:{width:"auto",padding:"9px 12px",fontWeight:700,fontSize:13},onChange:function(ev){setMes(parseInt(ev.target.value,10));setMarcadas({});}},
         MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",porMes[i],")");})),
@@ -14624,16 +14664,19 @@ function InspeccionesTab(props){
       h("button",{type:"button",disabled:delMes.length===0||descargando,
         onClick:function(){setDescargando(true);descargarInspeccionesMesFMAN010(delMes,MTTO_MESES[mes-1],anio).finally(function(){setDescargando(false);});},
         style:Object.assign({},btnNavy,delMes.length===0?{background:"var(--light)",color:"var(--gray)",cursor:"default"}:null)},descargando?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")")),
-    (canEdit||canImport)&&lista.length>0&&h("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}},
-      canImport&&h("button",{type:"button",onClick:function(){fileRef.current&&fileRef.current.click();},style:btnClaro},"⬆ Importar F-MAN-009"),
+    canEdit&&lista.length>0&&h("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}},
       canEdit&&h("button",{type:"button",onClick:function(){setModoSel(!modoSel);setMarcadas({});},style:modoSel?btnNavy:btnClaro},modoSel?"✕ Salir de la selección":"☑ Asignar en lote"),
       modoSel&&h("button",{type:"button",style:btnClaro,onClick:function(){var n={};delMes.forEach(function(o){if(o.estado!=="ejecutado"&&!o.asignado_a)n[o.id]=true;});setMarcadas(n);}},"Seleccionar sin asignar ("+delMes.filter(function(o){return o.estado!=="ejecutado"&&!o.asignado_a;}).length+")"),
       modoSel&&h("select",{className:"ios-input",value:tecLote,style:{width:"auto",maxWidth:200,padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function(ev){setTecLote(ev.target.value);}},
         h("option",{value:""},"Asignar a…"),usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
       modoSel&&h("button",{type:"button",disabled:!nMarcadas||!tecLote,onClick:asignarLote,style:Object.assign({},btnNavy,(!nMarcadas||!tecLote)?{opacity:0.5,cursor:"default"}:null)},"Asignar ("+nMarcadas+")")),
-    !lista.length&&canImport&&!cargando&&!errorCarga&&h("div",{style:{marginBottom:12}},h("button",{type:"button",onClick:function(){fileRef.current&&fileRef.current.click();},style:btnNavy},"⬆ Importar F-MAN-009")),
     lista.length>0&&!cargando&&h("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,marginBottom:8}},delMes.length+" inspecciones · "+nEjec+" ejecutadas"+(nVenc?" · "+nVenc+" vencidas":"")),
     cuerpo,
+    null);
+  return h("div",null,
+    msg&&h("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:msg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 18px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},msg.texto),
+    h("input",{ref:fileRef,type:"file",accept:".xlsx,.xlsm",style:{display:"none"},onChange:leerArchivo}),
+    vista==="meses"?vistaMeses:vistaLista,
     sel&&h(InspeccionSheet,{insp:sel,currentUser:currentUser,usuarios:usuarios,onClose:function(){setSel(null);},onUpdate:function(patch){return actualizar(sel,patch);}}),
     previa&&h("div",{className:"overlay",onClick:function(){if(!importando)setPrevia(null);}},
       h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:520}},
