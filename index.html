@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261119i";
+window.APP_BUILD = "20261120a";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14239,7 +14239,7 @@ function cumplObtener(anio){
 function cumplPrecargar(anio){cumplObtener(anio)["catch"](function(){});}
 
 var CUMPL_CSS="\n"+
-".ci-wrap{margin:-6px -8px 0;}\n"+
+".ci-wrap{max-width:1760px;margin:0 auto;padding:0 18px 30px;}\n"+
 ".ci-bar{background:#0D2F5C;border-radius:12px 12px 0 0;display:flex;align-items:stretch;overflow-x:auto;padding:0 8px;}\n"+
 ".ci-mes{padding:11px 13px;font-size:12px;font-weight:700;color:rgba(255,255,255,.45);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:6px;}\n"+
 ".ci-mes.on{color:#fff;border-color:#2d7dd2;}\n"+
@@ -14273,6 +14273,22 @@ var CUMPL_CSS="\n"+
 ".ci-date{font-size:10.5px;color:#64748b;white-space:nowrap;}\n"+
 ".ci-vacio{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:40px 20px;text-align:center;color:#64748b;font-size:13px;}\n"+
 ".ci-nota{font-size:11px;color:#94a3b8;text-align:center;margin-top:18px;line-height:1.5;}\n"+
+".ci-cols{display:block;}\n"+
+".ci-col-vacia{font-size:12px;color:#94a3b8;padding:14px 4px;}\n"+
+"@media (min-width:1000px){\n"+
+".ci-body{display:grid;grid-template-columns:320px minmax(0,1fr);gap:18px;margin-top:14px;align-items:start;}\n"+
+".ci-side{display:flex;flex-direction:column;gap:12px;}\n"+
+".ci-glob{border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;gap:14px 22px;}\n"+
+".ci-prog{max-width:none;flex-basis:100%;}\n"+
+".ci-tecs{flex-direction:column;overflow:visible;padding:8px;border:1px solid #e2e8f0;border-radius:12px;}\n"+
+".ci-tec{border-bottom:none;border-left:3px solid transparent;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;}\n"+
+".ci-tec:hover{background:#f8fafc;}\n"+
+".ci-tec.on{background:#eef4fd;border-left-color:#2d7dd2;}\n"+
+".ci-tec .ci-nb{display:flex;gap:2px;flex-shrink:0;}\n"+
+".ci-panel{padding:0 0 10px;}\n"+
+".ci-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;}\n"+
+".ci-name{font-size:13.5px;}\n"+
+"}\n"+
 ".ci-aviso{font-size:12.5px;font-weight:600;padding:9px 12px;border-radius:8px;margin-bottom:10px;}\n";
 
 function CumplimientoInterno(props){
@@ -14383,33 +14399,36 @@ function CumplimientoInterno(props){
   }else if(!meses.length){
     cuerpo=h("div",{className:"ci-vacio"},"No hay órdenes preventivas ni órdenes de trabajo asignadas en "+anio+".");
   }else{
-    cuerpo=h(React.Fragment,null,
-      h("div",{className:"ci-glob"},
-        h("div",{className:"ci-gs"},h("div",{className:"ci-gn",style:{color:"#0D2F5C"}},delMes.length),h("div",{className:"ci-gl"},"Total")),
-        h("div",{className:"ci-gs"},h("div",{className:"ci-gn",style:{color:"#16a34a"}},delMes.filter(function(t){return t.hecho;}).length),h("div",{className:"ci-gl"},"Realizados")),
-        h("div",{className:"ci-gs"},h("div",{className:"ci-gn",style:{color:"#ca8a04"}},delMes.filter(function(t){return !t.hecho;}).length),h("div",{className:"ci-gl"},"Pendientes")),
-        h("div",{className:"ci-prog"},
-          h("div",{style:{display:"flex",justifyContent:"space-between"}},h("span",{style:{fontSize:11,color:"#64748b"}},"Avance del mes"),h("span",{style:{fontSize:13,fontWeight:700,color:cumplPctColor(pctMes)}},pctMes+"%")),
-          h("div",{className:"ci-pbar"},h("div",{className:"ci-pfill",style:{width:pctMes+"%",background:cumplPctColor(pctMes)}})))),
-      h("div",{className:"ci-tecs"},
-        ["__todos__"].concat(tecs).map(function(n){
-          var l=n==="__todos__"?delMes:delMes.filter(function(t){return t.resp===n;});
-          var ok=l.filter(function(t){return t.hecho;}).length;
-          return h("div",{key:n,className:"ci-tec"+(n===tec?" on":""),onClick:function(){setTecSel(n);CUMPL_VISTA[anio]={mes:mes,tec:n};}},
-            n==="__todos__"?"Todos":n,
-            h("span",{className:"ci-b ci-ok"},ok),h("span",{className:"ci-b ci-pe"},l.length-ok));})),
-      h("div",{className:"ci-panel"},
-        h("div",{className:"ci-head"},
-          h("div",{className:"ci-hn"},tec==="__todos__"?"Todos los técnicos":tec),
-          h("div",{className:"ci-hs"},h("div",{className:"ci-hv",style:{color:cumplPctColor(pctMias)}},pctMias+"%"),h("div",{className:"ci-hl"},"cumplimiento")),
-          h("div",{className:"ci-hs"},h("div",{className:"ci-hv",style:{color:"#16a34a"}},hechas.length),h("div",{className:"ci-hl"},"realizados")),
-          h("div",{className:"ci-hs"},h("div",{className:"ci-hv",style:{color:"#ca8a04"}},pend.length),h("div",{className:"ci-hl"},"pendientes")),
-          h("div",null,h("div",{className:"ci-hbar"},h("div",{className:"ci-hfill",style:{width:pctMias+"%",background:cumplPctColor(pctMias)}})),
-            h("div",{style:{fontSize:10,color:"#94a3b8",marginTop:3}},mias.length+" actividades"))),
-        pend.length>0&&h("div",{className:"ci-sec"},"⏳ Pendientes ("+pend.length+")"),
-        pend.map(tarjeta),
-        hechas.length>0&&h("div",{className:"ci-sec"},"✅ Realizados ("+hechas.length+")"),
-        hechas.map(tarjeta)));
+    var glob=h("div",{className:"ci-glob"},
+      h("div",{className:"ci-gs"},h("div",{className:"ci-gn",style:{color:"#0D2F5C"}},delMes.length),h("div",{className:"ci-gl"},"Total")),
+      h("div",{className:"ci-gs"},h("div",{className:"ci-gn",style:{color:"#16a34a"}},delMes.filter(function(t){return t.hecho;}).length),h("div",{className:"ci-gl"},"Realizados")),
+      h("div",{className:"ci-gs"},h("div",{className:"ci-gn",style:{color:"#ca8a04"}},delMes.filter(function(t){return !t.hecho;}).length),h("div",{className:"ci-gl"},"Pendientes")),
+      h("div",{className:"ci-prog"},
+        h("div",{style:{display:"flex",justifyContent:"space-between"}},h("span",{style:{fontSize:11,color:"#64748b"}},"Avance del mes"),h("span",{style:{fontSize:13,fontWeight:700,color:cumplPctColor(pctMes)}},pctMes+"%")),
+        h("div",{className:"ci-pbar"},h("div",{className:"ci-pfill",style:{width:pctMes+"%",background:cumplPctColor(pctMes)}}))));
+    var navTecs=h("div",{className:"ci-tecs"},
+      ["__todos__"].concat(tecs).map(function(n){
+        var l=n==="__todos__"?delMes:delMes.filter(function(t){return t.resp===n;});
+        var ok=l.filter(function(t){return t.hecho;}).length;
+        return h("div",{key:n,className:"ci-tec"+(n===tec?" on":""),onClick:function(){setTecSel(n);CUMPL_VISTA[anio]={mes:mes,tec:n};}},
+          h("span",null,n==="__todos__"?"Todos":n),
+          h("span",{className:"ci-nb"},h("span",{className:"ci-b ci-ok"},ok),h("span",{className:"ci-b ci-pe"},l.length-ok)));}));
+    var panel=h("div",{className:"ci-panel"},
+      h("div",{className:"ci-head"},
+        h("div",{className:"ci-hn"},tec==="__todos__"?"Todos los técnicos":tec),
+        h("div",{className:"ci-hs"},h("div",{className:"ci-hv",style:{color:cumplPctColor(pctMias)}},pctMias+"%"),h("div",{className:"ci-hl"},"cumplimiento")),
+        h("div",{className:"ci-hs"},h("div",{className:"ci-hv",style:{color:"#16a34a"}},hechas.length),h("div",{className:"ci-hl"},"realizados")),
+        h("div",{className:"ci-hs"},h("div",{className:"ci-hv",style:{color:"#ca8a04"}},pend.length),h("div",{className:"ci-hl"},"pendientes")),
+        h("div",null,h("div",{className:"ci-hbar"},h("div",{className:"ci-hfill",style:{width:pctMias+"%",background:cumplPctColor(pctMias)}})),
+          h("div",{style:{fontSize:10,color:"#94a3b8",marginTop:3}},mias.length+" actividades"))),
+      h("div",{className:"ci-cols"},
+        h("div",{className:"ci-col"},
+          h("div",{className:"ci-sec"},"⏳ Pendientes ("+pend.length+")"),
+          pend.length?pend.map(tarjeta):h("div",{className:"ci-col-vacia"},"No hay pendientes 🎉")),
+        h("div",{className:"ci-col"},
+          h("div",{className:"ci-sec"},"✅ Realizados ("+hechas.length+")"),
+          hechas.length?hechas.map(tarjeta):h("div",{className:"ci-col-vacia"},"Aún no hay realizados"))));
+    cuerpo=h("div",{className:"ci-body"},h("div",{className:"ci-side"},glob,navTecs),h("div",{className:"ci-main"},panel));
   }
 
   return h("div",{className:"ci-wrap"},
@@ -14478,7 +14497,7 @@ function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator
     )
   )
 ),
-tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="cumplimiento1"&&React.createElement(CumplimientoInterno,{anio:anio,currentUser:initialUser,onCambio:load}),tab==="admin"&&canImport&&React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:16}},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminInstructivosPanel,null)))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
+tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="cumplimiento1"&&React.createElement("div",{style:{width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement(CumplimientoInterno,{anio:anio,currentUser:initialUser,onCambio:load})),tab==="admin"&&canImport&&React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:16}},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminInstructivosPanel,null)))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
 // Los equipos de producción vienen como "COD-ÁREA-N - NOMBRE" (ej: "EP-322-1 - ENVASADORA PPR").
 // El código de área es todo antes del último "-N". Con ese número final buscamos el
 // nombre real del área en AREAS_LOC ("NOMBRE (322)") para mostrar una etiqueta legible.
