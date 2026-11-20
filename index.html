@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261120a";
+window.APP_BUILD = "20261120b";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14128,15 +14128,585 @@ function AdminFMAN008Panel(){
     )
   );
 }
+// ── Inspecciones locativas (F-MAN-009 cronograma · F-MAN-010 ruta) ────────────────────────────
+var INSP_CONSEC_BASE=2053;   // el primer consecutivo automático es L2054
+var INSP_MARCAS=["M","B","T","S","A","BN"];
+var INSP_FREQ={M:"Mensual",B:"Bimestral",T:"Trimestral",S:"Semestral",A:"Anual",BN:"Bienal"};
+var INSP_FREQ_STYLE={M:{bg:"#E5E0FF",col:"#4A3ACF"},B:{bg:"#E0F4F4",col:"#0B7A75"},T:{bg:"#D6EBFF",col:"#0A66C2"},S:{bg:"#FFF0D9",col:"#C45200"},A:{bg:"#D1F2E0",col:"#1D7A3E"},BN:{bg:"#F3E1F5",col:"#8E2A9B"}};
+var INSP_STOP={ESCLUSA:1,PERSONAL:1,PERSONALES:1,MATERIAL:1,MATERIALES:1,MATERIAS:1,PRIMA:1,PRIMAS:1,INGRESO:1,ENTRADA:1,SALIDA:1,DE:1,DEL:1,LA:1,EL:1,AREA:1,Y:1};
+
+function inspNorm(s){return String(s==null?"":s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/\s+/g," ").trim();}
+function inspTokens(b){return b.split(/[^A-Z0-9]+/).filter(function(t){return t&&!INSP_STOP[t];}).sort().join(" ");}
+function inspQuitarEsclusa(b){
+  var x=b.replace(/^ESCLUSA\s+/,"");
+  x=x.replace(/^(DE\s+)?(PERSONAL(ES)?|MATERIAL(ES)?|MATERIAS PRIMAS?|INGRESO MATERIALES|ENTRADA MATERIAS PRIMA|INGRESO|ENTRADA|SALIDA)\s+/,"");
+  x=x.replace(/^(DE\s+)?(PERSONAL(ES)?|MATERIAL(ES)?)\s+/,"");
+  return x.trim();
+}
+function inspTipoEsclusa(b){
+  if(/\bPERSONAL(ES)?\b/.test(b))return "personal";
+  if(/\bMATERIAL(ES)?\b|MATERIAS? PRIMAS?/.test(b))return "material";
+  return "otra";
+}
+// "MUESTREO 1 (117)" -> nombre completo, código y nota que haya quedado escrita después del paréntesis
+function inspPartirNombre(texto){
+  var t=String(texto).trim();
+  var m=t.match(/^(.*?\(\s*([A-Za-z]{0,4}\s?\d+[A-Za-z]?)\s*\))\s*(.*)$/);
+  if(m)return{nombre:m[1].replace(/\s+\(/," ("),codigo:m[2].trim(),nota:m[3].trim(),
+              base:inspNorm(m[1].replace(/\(\s*[^)]*\)\s*$/,""))};
+  return{nombre:t,codigo:"",nota:"",base:inspNorm(t)};
+}
+
+// Lee el cronograma F-MAN-009 y arma las hojas (una hoja = una inspección que se imprime en un F-MAN-010).
+// Una esclusa se pega a su área si su nombre apunta a ella y caen en los mismos meses; si no, va sola.
+function parseFMAN009(arrayBuffer){
+  var wb=XLSX.read(arrayBuffer,{type:"array"});
+  var nombreHoja=wb.SheetNames.indexOf("F-MAN-009")>=0?"F-MAN-009":wb.SheetNames[0];
+  var ws=wb.Sheets[nombreHoja];
+  var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  var c0=ws["!ref"]?XLSX.utils.decode_range(ws["!ref"]).s.c:0;
+  var cN=1-c0;   // columna B (nombre del área)
+  var anio=new Date().getFullYear(),version="";
+  for(var i=0;i<8;i++){
+    var texto=(rows[i]||[]).map(function(c){return c==null?"":String(c);}).join(" ");
+    var m=texto.match(/A[ÑN]O:\s*(\d{4})/i);if(m)anio=parseInt(m[1],10);
+    var v=texto.match(/VERSI[ÓO]N:\s*(\d+)/i);if(v)version=v[1];
+  }
+  var filas=[];
+  for(var r=5;r<rows.length;r++){
+    var row=rows[r]||[];var bruto=row[cN];
+    if(bruto==null)continue;
+    var nombre=String(bruto).trim();
+    if(!nombre||/EJECUTADOS|PORCENTAJE|FORMATOS A UTILIZAR|ELABORADO POR|REVISADO POR|APROBADO POR/i.test(nombre))continue;
+    var marcas=[];
+    for(var c=0;c<12;c++){
+      var val=row[cN+1+c];var mk=val==null?"":String(val).trim().toUpperCase();
+      if(INSP_MARCAS.indexOf(mk)>=0)marcas.push({mes:c+1,frecuencia:mk});
+    }
+    if(!marcas.length)continue;
+    var p=inspPartirNombre(nombre);
+    filas.push({fila:r+1,nombre:p.nombre,codigo:p.codigo,nota:p.nota,base:p.base,marcas:marcas,
+                clave:marcas.map(function(x){return x.mes+x.frecuencia;}).join(","),
+                esEsclusa:/^ESCLUSA\b/.test(p.base)});
+  }
+  var areas=filas.filter(function(f){return !f.esEsclusa;});
+  var esclusas=filas.filter(function(f){return f.esEsclusa;});
+  var porBase={},porTokens={};
+  areas.forEach(function(a){
+    (porBase[a.base]=porBase[a.base]||[]).push(a);
+    var t=inspTokens(a.base);(porTokens[t]=porTokens[t]||[]).push(a);
+  });
+  var hijas={};   // fila del área -> {c41, c56}
+  var sueltas=[],conflictos=[],agrupadas=0;
+  esclusas.forEach(function(e){
+    var tipo=inspTipoEsclusa(e.base);
+    var padre=null;
+    if(tipo!=="otra"){
+      var exacto=(porBase[inspQuitarEsclusa(e.base)]||[]).filter(function(a){return a.clave===e.clave;});
+      if(exacto.length===1)padre=exacto[0];
+      else if(exacto.length===0){
+        var porT=(porTokens[inspTokens(e.base)]||[]).filter(function(a){return a.clave===e.clave;});
+        if(porT.length===1)padre=porT[0];
+      }
+    }
+    if(!padre){sueltas.push(e);return;}
+    var h=hijas[padre.fila]=hijas[padre.fila]||{};
+    var slot=tipo==="personal"?"c41":"c56";
+    if(h[slot]){conflictos.push({esclusa:e.nombre,area:padre.nombre});sueltas.push(e);return;}
+    h[slot]=e;e.padre=padre;agrupadas++;
+  });
+  var hojas=[];
+  filas.forEach(function(f){
+    if(f.esEsclusa&&f.padre)return;   // ya va dentro de la hoja de su área
+    var h=hijas[f.fila]||{};
+    f.marcas.forEach(function(mk){
+      var esSola=f.esEsclusa;
+      hojas.push({
+        anio:anio,mes:mk.mes,frecuencia:mk.frecuencia,orden:f.fila,
+        area_codigo:f.codigo||null,area_nombre:f.nombre,
+        esclusa_c41:esSola?f.nombre:(h.c41?h.c41.nombre:null),   // una esclusa sola se imprime en C41 (y su nombre también va en Área)
+        esclusa_c56:h.c56?h.c56.nombre:null,
+        filas_cronograma:1+(h.c41?1:0)+(h.c56?1:0)
+      });
+    });
+  });
+  hojas.sort(function(a,b){return a.mes-b.mes||a.orden-b.orden;});
+  return{anio:anio,version:version,filas:filas.length,areas:areas.length,esclusas:esclusas.length,
+         agrupadas:agrupadas,sueltas:sueltas.map(function(s){return{nombre:s.nombre,fila:s.fila,meses:s.marcas.map(function(x){return x.mes;})};}),
+         conflictos:conflictos,hojas:hojas};
+}
+
+// Consecutivos automáticos "L2054": siguen una sola serie, en el orden mes → fila del cronograma.
+function inspAsignarConsecutivos(hojas,ultimoNumero){
+  var n=Math.max(INSP_CONSEC_BASE,parseInt(ultimoNumero,10)||0);
+  return hojas.slice().sort(function(a,b){return (a.anio-b.anio)||(a.mes-b.mes)||(a.orden-b.orden);}).map(function(h){
+    n++;return Object.assign({},h,{consecutivo:"L"+n});
+  });
+}
+
+// ── Impresión del F-MAN-010 (Ruta de mantenimiento locativo) ──────────────────────────────────
+async function obtenerPlantillaFMAN010(){
+  try{
+    var r=await sb.from("app_archivos").select("contenido_base64").eq("clave","fman010_template").maybeSingle();
+    if(!r.error&&r.data&&r.data.contenido_base64)return base64ToArrayBuffer(r.data.contenido_base64);
+  }catch(e){ /* sigue al formato por defecto */ }
+  return await fetch("/assets/fman010_template.xlsx").then(function(r){return r.arrayBuffer();});
+}
+// Llena solo lo que ya se conoce: Área (F5), esclusas (C41 y C56) y consecutivo. Inspector, Fecha y Cargo se llenan a mano.
+function altoFilasFMAN010(ws,a,b){
+  var def=(ws.properties&&ws.properties.defaultRowHeight)||15,t=0;
+  for(var r=a;r<=b;r++)t+=ws.getRow(r).height||def;
+  return t;
+}
+// El formato son 2 páginas (filas 1-78 y 79-159). Se ajusta la escala para que cada una quepa entera,
+// sin pasar nunca de la escala que traiga la plantilla.
+function ajustarEscalaFMAN010(ws){
+  var ps=ws.pageSetup||{},mg=ps.margins||{};
+  var mt=mg.top!=null?mg.top:0.75,mb=mg.bottom!=null?mg.bottom:0.75;
+  var disponible=(11-mt-mb)*72;
+  var alto=Math.max(altoFilasFMAN010(ws,1,78),altoFilasFMAN010(ws,79,159));
+  var escala=Math.floor(disponible/alto*100*0.97);
+  var base=ps.scale>0?ps.scale:100;
+  ps.fitToPage=false;
+  ps.scale=Math.max(40,Math.min(base,escala));
+}
+// Un nombre largo no puede salirse del ancho de la hoja: se parte en renglones y la fila crece lo necesario.
+function escribirLargoFMAN010(ws,ref,fila,texto,porLinea){
+  var c=ws.getCell(ref);
+  var t=texto?String(texto):"";
+  c.value=t||null;
+  var lineas=Math.min(3,Math.max(1,Math.ceil(t.length/porLinea)));
+  var tam=t.length>porLinea*2?10:12;
+  c.alignment=Object.assign({},c.alignment,{horizontal:"left",vertical:"middle",wrapText:lineas>1,shrinkToFit:false});
+  if(lineas>1){
+    c.font=Object.assign({},c.font,{size:tam});
+    var row=ws.getRow(fila);
+    row.height=Math.max(row.height||0,lineas*(tam+4.5));
+  }
+}
+function aplicarDatosFMAN010(ws,insp){
+  try{ws.mergeCells("F5:G5");}catch(e){}   // la línea del Área abarca F5 y G5
+  escribirLargoFMAN010(ws,"F5",5,insp.area_nombre,44);
+  escribirLargoFMAN010(ws,"C41",41,insp.esclusa_c41,95);
+  escribirLargoFMAN010(ws,"C56",56,insp.esclusa_c56,95);
+  ws.getCell("D6").value="Consecutivo: "+(insp.consecutivo||"");
+  var saltos=(ws.rowBreaks||[]).map(function(b){return b.id;});
+  [78,159].forEach(function(f){if(saltos.indexOf(f)<0)ws.getRow(f).addPageBreak();});   // el formato son 2 páginas
+  ajustarEscalaFMAN010(ws);
+}
+async function generarBufferFMAN010(insp,templateBuf){
+  await asegurarLibs(["ExcelJS"]);
+  var wb=new ExcelJS.Workbook();
+  await wb.xlsx.load(templateBuf);
+  aplicarDatosFMAN010(wb.worksheets[0],insp);
+  return wb.xlsx.writeBuffer();
+}
+async function printFMAN010(insp){
+  try{
+    var buf=await obtenerPlantillaFMAN010();
+    var out=await generarBufferFMAN010(insp,buf);
+    descargarBuffer(out,"F-MAN-010_"+(insp.consecutivo||"inspeccion")+".xlsx");
+    if(insp&&insp.id){
+      sb.from("mtto_inspecciones").update({fecha_emision:new Date().toISOString()}).eq("id",insp.id).is("fecha_emision",null).then(function(r){if(r&&r.error)console.warn("No se pudo registrar fecha_emision",r.error);});
+    }
+  }catch(err){
+    console.error("No se pudo generar el F-MAN-010",err);
+    alert("No se pudo generar el formato F-MAN-010. Intentá de nuevo.");
+  }
+}
+// Todas las inspecciones de una lista en un solo Excel: una hoja por inspección
+async function descargarInspeccionesMesFMAN010(lista,mesLabel,anio){
+  if(!lista||lista.length===0){alert("No hay inspecciones para descargar.");return;}
+  try{
+    await asegurarLibs(["ExcelJS"]);
+    var templateBuf=await obtenerPlantillaFMAN010();
+    var wbDestino=new ExcelJS.Workbook();
+    var usados={};
+    for(var i=0;i<lista.length;i++){
+      var insp=lista[i];
+      var wbSrc=new ExcelJS.Workbook();
+      await wbSrc.xlsx.load(templateBuf.slice(0));
+      var wsSrc=wbSrc.worksheets[0];
+      aplicarDatosFMAN010(wsSrc,insp);
+      var base=String(insp.consecutivo||("Inspeccion"+(i+1))).replace(/[\[\]\*\?\/\\:]/g,"-").slice(0,28);
+      var nombreHoja=base,n=1;
+      while(usados[nombreHoja]){n++;nombreHoja=base.slice(0,25)+"_"+n;}
+      usados[nombreHoja]=true;
+      var wsDest=wbDestino.addWorksheet(nombreHoja,{properties:wsSrc.properties,pageSetup:wsSrc.pageSetup,views:wsSrc.views});
+      wsDest.columns=wsSrc.columns.map(function(c){return{width:c.width};});
+      wsSrc.eachRow({includeEmpty:true},function(row,rowNumber){
+        var destRow=wsDest.getRow(rowNumber);
+        row.eachCell({includeEmpty:true},function(cell,colNumber){
+          var destCell=destRow.getCell(colNumber);
+          destCell.value=cell.value;
+          destCell.style=cell.style;
+        });
+        if(row.height)destRow.height=row.height;
+        destRow.commit();
+      });
+      (wsSrc.model.merges||[]).forEach(function(range){try{wsDest.mergeCells(range);}catch(e){}});
+      (wsSrc.rowBreaks||[]).forEach(function(b){wsDest.getRow(b.id).addPageBreak();});   // se conservan las 2 páginas de cada hoja
+      wsSrc.getImages().forEach(function(imgRef){
+        var media=wbSrc.model.media[imgRef.imageId];
+        if(media){var newId=wbDestino.addImage({buffer:media.buffer,extension:media.extension});wsDest.addImage(newId,imgRef.range);}
+      });
+    }
+    var out=await wbDestino.xlsx.writeBuffer();
+    descargarBuffer(out,"F-MAN-010_Inspecciones_"+(mesLabel||"mes")+"_"+(anio||"")+".xlsx");
+    var ids=lista.filter(function(o){return o&&o.id;}).map(function(o){return o.id;});
+    if(ids.length>0){
+      sb.from("mtto_inspecciones").update({fecha_emision:new Date().toISOString()}).in("id",ids).is("fecha_emision",null).then(function(r){if(r&&r.error)console.warn("No se pudo registrar fecha_emision del lote",r.error);});
+    }
+  }catch(err){
+    console.error("No se pudo generar el archivo con las inspecciones",err);
+    alert("No se pudo generar el archivo con las inspecciones. Intentá de nuevo.");
+  }
+}
+
+// ── Inspecciones locativas: datos, importación del F-MAN-009 y pantallas ─────────────────────
+var INSP_CACHE={};   // anio -> inspecciones leídas (para abrir al instante)
+async function inspCargarAnio(anio){
+  var filas=[],desde=0;
+  while(true){   // el servidor entrega máximo 1000 filas por consulta
+    var r=await sb.from("mtto_inspecciones").select("*").eq("anio",anio).order("mes",{ascending:true}).order("orden",{ascending:true}).range(desde,desde+999);
+    if(r.error)throw r.error;
+    filas=filas.concat(r.data||[]);
+    if(!r.data||r.data.length<1000)break;
+    desde+=1000;
+  }
+  return filas;
+}
+function inspEsErrorTablaFaltante(e){var m=String((e&&e.message)||e||"");return /mtto_inspecciones/.test(m)&&/(does not exist|schema cache|Could not find|no existe)/i.test(m)||(e&&(e.code==="42P01"||e.code==="PGRST205"));}
+function inspMesEfectivo(o){return o.mes_reprogramado||o.mes;}
+
+// Importa las hojas del cronograma desde el mes elegido. No repite lo que ya existe y numera desde L2054.
+async function inspImportar(parsed,desdeMes){
+  var hojas=parsed.hojas.filter(function(h){return h.mes>=desdeMes;});
+  var existentes={},desde=0;
+  while(true){
+    var r=await sb.from("mtto_inspecciones").select("mes,area_nombre").eq("anio",parsed.anio).order("id",{ascending:true}).range(desde,desde+999);
+    if(r.error)throw r.error;
+    (r.data||[]).forEach(function(o){existentes[o.mes+"|"+o.area_nombre]=true;});
+    if(!r.data||r.data.length<1000)break;
+    desde+=1000;
+  }
+  var nuevas=hojas.filter(function(h){return !existentes[h.mes+"|"+h.area_nombre];});
+  if(!nuevas.length)return{insertadas:0,total:hojas.length,primero:null,ultimo:null};
+  var u=await sb.from("mtto_inspecciones").select("consecutivo").like("consecutivo","L%").order("id",{ascending:false}).limit(200);
+  if(u.error)throw u.error;
+  var ultimoNum=0;
+  (u.data||[]).forEach(function(o){var n=parseInt(String(o.consecutivo||"").replace(/\D/g,""),10);if(n>ultimoNum)ultimoNum=n;});
+  var conCons=inspAsignarConsecutivos(nuevas,ultimoNum);
+  for(var i=0;i<conCons.length;i+=200){
+    var lote=conCons.slice(i,i+200).map(function(h){return{
+      consecutivo:h.consecutivo,anio:h.anio,mes:h.mes,frecuencia:h.frecuencia,orden:h.orden,
+      area_codigo:h.area_codigo,area_nombre:h.area_nombre,esclusa_c41:h.esclusa_c41,esclusa_c56:h.esclusa_c56,
+      filas_cronograma:h.filas_cronograma,estado:"programado"};});
+    var ins=await sb.from("mtto_inspecciones").insert(lote);
+    if(ins.error)throw ins.error;
+  }
+  return{insertadas:conCons.length,total:hojas.length,primero:conCons[0].consecutivo,ultimo:conCons[conCons.length-1].consecutivo};
+}
+
+// Mes con el que abre la pestaña: el de hoy; si no tiene inspecciones, el más cercano que sí tenga.
+function inspMesInicial(filas,anio){
+  var hoy=new Date(),base=anio===hoy.getFullYear()?hoy.getMonth()+1:1;
+  var meses=Array.from(new Set((filas||[]).map(function(o){return o.mes;}))).sort(function(a,b){return a-b;});
+  if(!meses.length||meses.indexOf(base)>=0)return base;
+  var sig=meses.filter(function(x){return x>=base;})[0];
+  return sig||meses[meses.length-1];
+}
+
+// ── Detalle de una inspección ──
+function InspeccionSheet(props){
+  var insp=props.insp,currentUser=props.currentUser,usuarios=props.usuarios,onClose=props.onClose,onUpdate=props.onUpdate;
+  var h=React.createElement,S=React.useState;
+  var _m=S(null),modal=_m[0],setModal=_m[1];
+  var _a=S(insp.asignado_a||""),asig=_a[0],setAsig=_a[1];
+  var _s=S(false),guardando=_s[0],setGuardando=_s[1];
+  React.useEffect(function(){setAsig(insp.asignado_a||"");},[insp.id,insp.asignado_a]);
+  var canEdit=currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0;
+  var fq=INSP_FREQ_STYLE[insp.frecuencia]||INSP_FREQ_STYLE.T;
+  var est=MTTO_ESTADO[insp.estado]||MTTO_ESTADO.programado;
+  var hoy=new Date();
+  var vencida=insp.estado==="programado"&&(insp.anio<hoy.getFullYear()||(insp.anio===hoy.getFullYear()&&insp.mes<hoy.getMonth()+1));
+  async function asignar(){
+    setGuardando(true);
+    await onUpdate({asignado_a:asig||null,asignado_por:currentUser&&(currentUser.nombre||currentUser.username)||null,fecha_asignacion:asig?new Date().toISOString():null});
+    if(asig)pushNotificacion("🧱 Inspección asignada",insp.consecutivo+" · "+insp.area_nombre+" ("+MTTO_MESES[insp.mes-1]+") → "+asig);
+    setGuardando(false);
+  }
+  var fila=function(etq,val){return val?h("div",{style:{fontSize:13,color:"var(--navy)",lineHeight:1.45}},h("b",null,etq),val):null;};
+  return h("div",{className:"overlay",onClick:onClose},
+    h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:480}},
+      h("div",{className:"sheet-handle"}),
+      h("div",{className:"sheet-title",style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}},insp.consecutivo,
+        h("span",{className:"badge "+(vencida?"badge-red":est.cls),style:{textTransform:"none"}},vencida?"Vencida":est.label)),
+      h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:14}},
+        h("div",null,
+          h("div",{style:{fontSize:15,fontWeight:700,color:"var(--navy)"}},insp.area_nombre),
+          h("div",{style:{fontSize:12,color:"var(--gray)",marginTop:3,fontWeight:600}},"Ruta de mantenimiento locativo · F-MAN-010")),
+        h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+          h("span",{className:"badge",style:{background:fq.bg,color:fq.col}},INSP_FREQ[insp.frecuencia]||insp.frecuencia),
+          h("span",{className:"badge badge-blue"},MTTO_MESES[insp.mes-1]," ",insp.anio),
+          insp.filas_cronograma>1&&h("span",{className:"badge",style:{background:"var(--light)",color:"var(--navy)"}},insp.filas_cronograma+" filas del cronograma")),
+        (insp.esclusa_c41||insp.esclusa_c56)&&h("div",{style:{background:"var(--lighter)",borderRadius:12,padding:"10px 14px",display:"flex",flexDirection:"column",gap:4}},
+          fila("Esclusa de personal (C41): ",insp.esclusa_c41),
+          fila("Esclusa de materiales (C56): ",insp.esclusa_c56)),
+        canEdit&&insp.estado!=="ejecutado"?h("div",{style:{display:"flex",gap:8,alignItems:"center"}},
+          h("select",{className:"ios-input",value:asig,style:{flex:1,padding:"10px 12px",fontSize:13,fontWeight:600},onChange:function(ev){setAsig(ev.target.value);}},
+            h("option",{value:""},"— Sin asignar —"),
+            (usuarios||[]).map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
+          asig!==(insp.asignado_a||"")&&h("button",{className:"ios-btn ios-btn-blue",disabled:guardando,style:{padding:"10px 14px",fontSize:12,flexShrink:0},onClick:asignar},guardando?"…":"Asignar"))
+        :insp.asignado_a?h("div",{style:{fontSize:13,fontWeight:700,color:"var(--accent)"}},"👤 Asignada a ",insp.asignado_a,insp.asignado_por&&h("span",{style:{color:"var(--gray)",fontWeight:600}}," · por ",insp.asignado_por)):null,
+        insp.estado==="ejecutado"&&h("div",{style:{background:"#F2FBF6",border:"1px solid #C6EBD6",borderRadius:12,padding:"11px 14px",fontSize:13}},
+          h("div",null,h("b",null,"Ejecutada:")," ",insp.fecha_ejecucion||"—"),
+          h("div",null,h("b",null,"Por:")," ",insp.ejecutor||"—"),
+          insp.observaciones&&h("div",{style:{marginTop:4,color:"#3c5a49"}},insp.observaciones)),
+        insp.estado==="reprogramado"&&h("div",{style:{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:12,padding:"11px 14px",fontSize:13}},
+          h("div",null,h("b",null,"Nuevo mes:")," ",insp.mes_reprogramado?MTTO_MESES[insp.mes_reprogramado-1]:"—"),
+          insp.observaciones&&h("div",{style:{marginTop:4,color:"#7a5a2e"}},insp.observaciones)),
+        h("div",{style:{display:"flex",flexDirection:"column",gap:9}},
+          canEdit&&insp.estado==="programado"&&h("button",{className:"ios-btn",style:{padding:"13px",fontSize:14,background:"var(--light)",color:"var(--navy)"},onClick:function(){setModal("reprogramar");}},"↻ Reprogramar"),
+          h("button",{className:"ios-btn",style:{padding:"13px",fontSize:14,background:"var(--navy-deep)",color:"#fff"},onClick:function(){printFMAN010(insp);}},"🖨️ Imprimir F-MAN-010"),
+          canEdit&&insp.estado==="ejecutado"&&h("button",{className:"ios-btn",style:{padding:"11px",fontSize:13,background:"transparent",color:"#C0001A"},
+            onClick:function(){onUpdate({estado:insp.mes_reprogramado?"reprogramado":"programado",fecha_ejecucion:null,ejecutor:null});}},"Revertir a programada"))),
+      modal==="reprogramar"&&h(MttoReprogramarModal,{ord:{mes:insp.mes,equipo_codigo:insp.consecutivo,equipo_desc:insp.area_nombre},onClose:function(){setModal(null);},
+        onSave:async function(patch){await onUpdate(patch);setModal(null);}})));
+}
+
+// ── Pestaña "Inspecciones" ──
+function InspeccionesTab(props){
+  var anio=props.anio,usuarios=props.usuarios||[],currentUser=props.currentUser,canImport=props.canImport;
+  var h=React.createElement,S=React.useState;
+  var cache0=INSP_CACHE[anio];
+  var hoy=new Date(),hoyMes=hoy.getMonth()+1,hoyAnio=hoy.getFullYear();
+  var _l=S(cache0||[]),lista=_l[0],setLista=_l[1];
+  var _c=S(!cache0),cargando=_c[0],setCargando=_c[1];
+  var _e=S(null),errorCarga=_e[0],setErrorCarga=_e[1];
+  var _m=S(inspMesInicial(cache0,anio)),mes=_m[0],setMes=_m[1];
+  var _b=S(""),busca=_b[0],setBusca=_b[1];
+  var _t=S(""),filtroTec=_t[0],setFiltroTec=_t[1];
+  var _s=S(null),sel=_s[0],setSel=_s[1];
+  var _f=S(null),msg=_f[0],setMsg=_f[1];
+  var _d=S(false),descargando=_d[0],setDescargando=_d[1];
+  var _p=S(null),previa=_p[0],setPrevia=_p[1];       // vista previa de la importación
+  var _i=S(false),importando=_i[0],setImportando=_i[1];
+  var _dm=S(12),desdeMes=_dm[0],setDesdeMes=_dm[1];
+  var _ms=S(false),modoSel=_ms[0],setModoSel=_ms[1];   // selección para asignar en lote
+  var _ch=S({}),marcadas=_ch[0],setMarcadas=_ch[1];
+  var _lt=S(""),tecLote=_lt[0],setTecLote=_lt[1];
+  var fileRef=React.useRef(null),mesAjustado=React.useRef(!!cache0);
+  var canEdit=!!(currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0);
+
+  function flash(texto,ok){setMsg({texto:texto,ok:ok!==false});setTimeout(function(){setMsg(null);},4500);}
+  async function cargar(silencioso){
+    if(!silencioso)setCargando(true);
+    try{
+      var filas=await inspCargarAnio(anio);
+      INSP_CACHE[anio]=filas;setLista(filas);setErrorCarga(null);
+      if(!mesAjustado.current&&filas.length){   // la primera vez, abre en el mes más cercano que tenga inspecciones
+        mesAjustado.current=true;
+        setMes(inspMesInicial(filas,anio));
+      }
+    }catch(e){
+      setErrorCarga(inspEsErrorTablaFaltante(e)?"tabla":((e&&e.message)||String(e)));
+    }
+    setCargando(false);
+  }
+  React.useEffect(function(){var c=INSP_CACHE[anio];setLista(c||[]);cargar(!!c);},[anio]);
+
+  async function actualizar(insp,patch){
+    var r=await sb.from("mtto_inspecciones").update(patch).eq("id",insp.id).select();
+    if(r.error){flash("Error: "+r.error.message,false);return;}
+    var upd=(r.data&&r.data[0])||Object.assign({},insp,patch);
+    setLista(function(prev){var n=prev.map(function(o){return o.id===insp.id?upd:o;});INSP_CACHE[anio]=n;return n;});
+    setSel(upd);
+    if(patch.estado==="reprogramado")flash("Inspección reprogramada ↻");
+  }
+  async function asignarLote(){
+    var ids=Object.keys(marcadas).filter(function(k){return marcadas[k];}).map(Number);
+    if(!ids.length||!tecLote)return;
+    var quien=currentUser&&(currentUser.nombre||currentUser.username)||null;
+    var patch={asignado_a:tecLote,asignado_por:quien,fecha_asignacion:new Date().toISOString()};
+    var r=await sb.from("mtto_inspecciones").update(patch).in("id",ids).select();
+    if(r.error){flash("Error al asignar: "+r.error.message,false);return;}
+    var porId={};(r.data||[]).forEach(function(o){porId[o.id]=o;});
+    setLista(function(prev){var n=prev.map(function(o){return porId[o.id]||(ids.indexOf(o.id)>=0?Object.assign({},o,patch):o);});INSP_CACHE[anio]=n;return n;});
+    pushNotificacion("🧱 Inspecciones asignadas",ids.length+" inspecciones de "+MTTO_MESES[mes-1]+" → "+tecLote);
+    flash(ids.length+" inspecciones asignadas a "+tecLote+" ✓");
+    setMarcadas({});setModoSel(false);setTecLote("");
+  }
+  async function leerArchivo(ev){
+    var file=ev.target.files&&ev.target.files[0];ev.target.value="";
+    if(!file)return;
+    try{
+      await asegurarLibs(["XLSX"]);
+      var parsed=parseFMAN009(await file.arrayBuffer());
+      if(!parsed.hojas.length){flash("No se encontraron inspecciones en el archivo.",false);return;}
+      var def=parsed.anio>hoyAnio?1:(parsed.anio===hoyAnio?Math.min(12,hoyMes+1):1);   // por defecto desde el mes que viene
+      setDesdeMes(def);setPrevia(parsed);
+    }catch(e){flash("No se pudo leer el archivo: "+((e&&e.message)||e),false);}
+  }
+  async function confirmarImport(){
+    setImportando(true);
+    try{
+      var r=await inspImportar(previa,desdeMes);
+      if(r.insertadas===0)flash("Ese cronograma ya estaba importado desde "+MTTO_MESES[desdeMes-1]+". Sin cambios.");
+      else{
+        flash("Importadas "+r.insertadas+" inspecciones ("+r.primero+" a "+r.ultimo+") ✓");
+        registrarHistorial("insp_import","Import F-MAN-009 "+previa.anio+" desde "+MTTO_MESES[desdeMes-1]+" ("+r.insertadas+" inspecciones)",currentUser&&(currentUser.nombre||currentUser.username));
+      }
+      var anioImp=previa.anio;setPrevia(null);
+      if(anioImp===anio){setMes(desdeMes);mesAjustado.current=true;await cargar(true);}
+      else if(props.onCambiarAnio)props.onCambiarAnio(anioImp);
+    }catch(e){flash("Error al importar: "+((e&&e.message)||JSON.stringify(e)),false);}
+    setImportando(false);
+  }
+
+  var vencida=function(o){return o.estado==="programado"&&(o.anio<hoyAnio||(o.anio===hoyAnio&&o.mes<hoyMes));};
+  var porMes=[];for(var m=1;m<=12;m++){porMes.push(lista.filter(function(o){return o.mes===m;}).length);}
+  var q=busca.trim().toLowerCase();
+  var delMes=lista.filter(function(o){
+    if(o.mes!==mes)return false;
+    if(filtroTec&&o.asignado_a!==filtroTec)return false;
+    if(q&&((o.area_nombre||"")+" "+(o.consecutivo||"")+" "+(o.esclusa_c41||"")+" "+(o.esclusa_c56||"")).toLowerCase().indexOf(q)<0)return false;
+    return true;
+  });
+  var nEjec=delMes.filter(function(o){return o.estado==="ejecutado";}).length,nVenc=delMes.filter(vencida).length;
+  var nMarcadas=Object.keys(marcadas).filter(function(k){return marcadas[k];}).length;
+  var btnNavy={background:"var(--navy)",color:"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap"};
+  var btnClaro={background:"var(--light)",color:"var(--navy)",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap"};
+
+  var cuerpo;
+  if(errorCarga==="tabla"){
+    cuerpo=h("div",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:14,padding:"26px 22px",fontSize:13,color:"var(--navy)",lineHeight:1.55}},
+      h("div",{style:{fontWeight:800,marginBottom:6}},"Falta crear la tabla de inspecciones"),
+      "Ejecuta el archivo ",h("b",null,"inspecciones_fman009.sql")," en Supabase (SQL Editor) y luego toca Reintentar.",
+      h("div",{style:{marginTop:12}},h("button",{type:"button",onClick:function(){cargar(false);},style:btnNavy},"↻ Reintentar")));
+  }else if(errorCarga){
+    cuerpo=h("div",{style:{padding:30,textAlign:"center",color:"#C0001A",fontSize:13,fontWeight:600}},"No se pudieron cargar las inspecciones: "+errorCarga);
+  }else if(cargando){
+    cuerpo=h("div",{style:{textAlign:"center",padding:60,color:"var(--gray)",fontSize:13,fontWeight:600}},"Cargando inspecciones…");
+  }else if(!lista.length){
+    cuerpo=h("div",{style:{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600,lineHeight:1.6}},
+      "Aún no hay inspecciones en "+anio+".",canImport?h("div",null,"Sube el cronograma F-MAN-009 con el botón “Importar F-MAN-009”."):null);
+  }else if(!delMes.length){
+    cuerpo=h("div",{style:{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600}},"Sin inspecciones "+(busca||filtroTec?"que coincidan con el filtro":"programadas en "+MTTO_MESES[mes-1])+".");
+  }else{
+    cuerpo=h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+      delMes.map(function(o){
+        var fq=INSP_FREQ_STYLE[o.frecuencia]||INSP_FREQ_STYLE.T,venc=vencida(o),est=MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado;
+        var extra=[];if(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre)extra.push("esclusa de personal");if(o.esclusa_c56)extra.push("esclusa de materiales");
+        return h("div",{key:o.id,style:{display:"flex",alignItems:"center",gap:8}},
+          modoSel&&h("input",{type:"checkbox",checked:!!marcadas[o.id],style:{width:18,height:18,flexShrink:0},onChange:function(ev){var c=ev.target.checked;setMarcadas(function(p){var n=Object.assign({},p);if(c)n[o.id]=true;else delete n[o.id];return n;});}}),
+          h("button",{onClick:function(){if(modoSel)setMarcadas(function(p){var n=Object.assign({},p);if(n[o.id])delete n[o.id];else n[o.id]=true;return n;});else setSel(o);},
+            style:{flex:1,minWidth:0,background:"#fff",border:"1px solid var(--border)",borderRadius:14,padding:"12px 14px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:12,boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},
+            h("div",{style:{width:42,height:42,borderRadius:11,background:fq.bg,color:fq.col,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:o.frecuencia==="BN"?13:15,flexShrink:0}},o.frecuencia),
+            h("div",{style:{flex:1,minWidth:0}},
+              h("div",{style:{fontSize:13.5,fontWeight:700,color:"var(--navy)",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:1.25}},o.area_nombre),
+              h("div",{style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}},o.consecutivo,extra.length?" · + "+extra.join(" y "):""),
+              o.asignado_a&&h("div",{style:{fontSize:11,color:"var(--accent)",fontWeight:700,marginTop:3}},"👤 ",o.asignado_a)),
+            h("span",{className:"badge "+(venc?"badge-red":est.cls),style:{flexShrink:0}},venc?"Vencida":est.label)));
+      }));
+  }
+
+  return h("div",null,
+    msg&&h("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:msg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 18px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},msg.texto),
+    h("input",{ref:fileRef,type:"file",accept:".xlsx,.xlsm",style:{display:"none"},onChange:leerArchivo}),
+    h("div",{style:{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}},
+      h("select",{className:"ios-input",value:mes,style:{width:"auto",padding:"9px 12px",fontWeight:700,fontSize:13},onChange:function(ev){setMes(parseInt(ev.target.value,10));setMarcadas({});}},
+        MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",porMes[i],")");})),
+      h("input",{className:"ios-input",placeholder:"Buscar área, esclusa o consecutivo…",value:busca,onChange:function(ev){setBusca(ev.target.value);},style:{flex:1,minWidth:180,padding:"9px 12px",fontSize:13}}),
+      h("select",{className:"ios-input",value:filtroTec,style:{width:"auto",maxWidth:180,padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function(ev){setFiltroTec(ev.target.value);}},
+        h("option",{value:""},"👤 Todos"),
+        usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
+      h("button",{type:"button",disabled:delMes.length===0||descargando,
+        onClick:function(){setDescargando(true);descargarInspeccionesMesFMAN010(delMes,MTTO_MESES[mes-1],anio).finally(function(){setDescargando(false);});},
+        style:Object.assign({},btnNavy,delMes.length===0?{background:"var(--light)",color:"var(--gray)",cursor:"default"}:null)},descargando?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")")),
+    (canEdit||canImport)&&lista.length>0&&h("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}},
+      canImport&&h("button",{type:"button",onClick:function(){fileRef.current&&fileRef.current.click();},style:btnClaro},"⬆ Importar F-MAN-009"),
+      canEdit&&h("button",{type:"button",onClick:function(){setModoSel(!modoSel);setMarcadas({});},style:modoSel?btnNavy:btnClaro},modoSel?"✕ Salir de la selección":"☑ Asignar en lote"),
+      modoSel&&h("button",{type:"button",style:btnClaro,onClick:function(){var n={};delMes.forEach(function(o){if(o.estado!=="ejecutado"&&!o.asignado_a)n[o.id]=true;});setMarcadas(n);}},"Seleccionar sin asignar ("+delMes.filter(function(o){return o.estado!=="ejecutado"&&!o.asignado_a;}).length+")"),
+      modoSel&&h("select",{className:"ios-input",value:tecLote,style:{width:"auto",maxWidth:200,padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function(ev){setTecLote(ev.target.value);}},
+        h("option",{value:""},"Asignar a…"),usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
+      modoSel&&h("button",{type:"button",disabled:!nMarcadas||!tecLote,onClick:asignarLote,style:Object.assign({},btnNavy,(!nMarcadas||!tecLote)?{opacity:0.5,cursor:"default"}:null)},"Asignar ("+nMarcadas+")")),
+    !lista.length&&canImport&&!cargando&&!errorCarga&&h("div",{style:{marginBottom:12}},h("button",{type:"button",onClick:function(){fileRef.current&&fileRef.current.click();},style:btnNavy},"⬆ Importar F-MAN-009")),
+    lista.length>0&&!cargando&&h("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,marginBottom:8}},delMes.length+" inspecciones · "+nEjec+" ejecutadas"+(nVenc?" · "+nVenc+" vencidas":"")),
+    cuerpo,
+    sel&&h(InspeccionSheet,{insp:sel,currentUser:currentUser,usuarios:usuarios,onClose:function(){setSel(null);},onUpdate:function(patch){return actualizar(sel,patch);}}),
+    previa&&h("div",{className:"overlay",onClick:function(){if(!importando)setPrevia(null);}},
+      h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:520}},
+        h("div",{className:"sheet-handle"}),
+        h("div",{className:"sheet-title"},"Importar cronograma F-MAN-009 · "+previa.anio),
+        h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5}},
+          h("div",null,"El archivo trae ",h("b",null,previa.filas+" filas")," (",previa.areas," áreas y ",previa.esclusas," esclusas). Quedan ",h("b",null,previa.hojas.length+" inspecciones")," en el año: ",
+            previa.agrupadas," esclusas se imprimen dentro de la hoja de su área y ",previa.sueltas.length," van solas."),
+          h("div",null,h("div",{className:"ios-input-label"},"Importar desde el mes"),
+            h("select",{className:"ios-input",value:desdeMes,onChange:function(ev){setDesdeMes(parseInt(ev.target.value,10));}},
+              MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",previa.hojas.filter(function(x){return x.mes===i+1;}).length," inspecciones)");}))),
+          h("div",{style:{background:"var(--lighter)",borderRadius:10,padding:"9px 12px",fontSize:12.5}},"Se importan ",h("b",null,previa.hojas.filter(function(x){return x.mes>=desdeMes;}).length)," inspecciones, con consecutivo automático desde ",h("b",null,"L2054")," (o el siguiente disponible). Lo que ya esté importado no se repite."),
+          previa.sueltas.length>0&&h("details",null,
+            h("summary",{style:{cursor:"pointer",fontWeight:700,fontSize:12.5}},"Ver las "+previa.sueltas.length+" esclusas que quedan solas"),
+            h("div",{style:{maxHeight:180,overflowY:"auto",marginTop:6,fontSize:12,color:"var(--gray)",lineHeight:1.6}},
+              previa.sueltas.map(function(s){return h("div",{key:s.fila},s.nombre," · meses ",s.meses.join(", "));}))),
+          h("button",{className:"ios-btn ios-btn-blue",disabled:importando,onClick:confirmarImport,style:{padding:"13px",fontSize:14}},importando?"Importando…":"Importar inspecciones")))));
+}
+
+// ── Administrador: plantilla del F-MAN-010 (igual que la del F-MAN-008) ──
+function AdminFMAN010Panel(){
+  var h=React.createElement,S=React.useState;
+  var _i=S(null),info=_i[0],setInfo=_i[1];
+  var _l=S(true),loadingInfo=_l[0],setLoadingInfo=_l[1];
+  var _u=S(false),uploading=_u[0],setUploading=_u[1];
+  var _m=S(null),msg=_m[0],setMsg=_m[1];
+  var fileRef=React.useRef(null);
+  function cargarInfo(){
+    sb.from("app_archivos").select("actualizado_en,actualizado_por").eq("clave","fman010_template").then(function(r){
+      setLoadingInfo(false);if(!r.error&&r.data&&r.data[0])setInfo(r.data[0]);});
+  }
+  React.useEffect(function(){cargarInfo();},[]);
+  function handleFile(ev){
+    var file=ev.target.files&&ev.target.files[0];
+    if(!file)return;
+    if(!/\.xlsx$/i.test(file.name)){setMsg({ok:false,text:"El archivo debe ser .xlsx"});return;}
+    setUploading(true);setMsg(null);
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var bytes=new Uint8Array(e.target.result),binary="";
+      for(var i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);
+      var quien=(window.__currentUser&&(window.__currentUser.nombre||window.__currentUser.username))||"admin";
+      sb.from("app_archivos").upsert({clave:"fman010_template",contenido_base64:btoa(binary),actualizado_en:new Date().toISOString(),actualizado_por:quien}).then(function(r){
+        setUploading(false);
+        if(r.error){setMsg({ok:false,text:"Error: "+r.error.message});return;}
+        setMsg({ok:true,text:"✅ Nuevo formato F-MAN-010 guardado. Desde ahora se usará este al imprimir."});
+        cargarInfo();if(fileRef.current)fileRef.current.value="";
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  return h("div",{style:{maxWidth:620,margin:"0 auto"}},
+    h("div",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:16,padding:"22px 20px",boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},
+      h("div",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:15,color:"var(--navy)",marginBottom:6}},"🧱 Formato F-MAN-010 (Ruta de mantenimiento locativo)"),
+      h("div",{style:{fontSize:13,color:"var(--gray)",marginBottom:16,lineHeight:1.5}},"Sube aquí el Excel de plantilla para reemplazar el formato que se usa al imprimir las inspecciones locativas (individual o por mes). Se llenan el Área (F5), las esclusas (C41 y C56) y el consecutivo."),
+      loadingInfo?h("div",{style:{fontSize:12,color:"var(--gray)"}},"Consultando formato actual…"):
+      info?h("div",{style:{background:"var(--lighter)",borderRadius:10,padding:"10px 14px",fontSize:12.5,color:"var(--navy)",marginBottom:16}},"📄 Formato personalizado activo — actualizado el ",new Date(info.actualizado_en).toLocaleString("es-CO"),info.actualizado_por?" por "+info.actualizado_por:""):
+      h("div",{style:{background:"var(--lighter)",borderRadius:10,padding:"10px 14px",fontSize:12.5,color:"var(--gray)",marginBottom:16}},"📄 Usando el formato por defecto del sistema (aún no se ha subido ninguno personalizado)."),
+      h("input",{ref:fileRef,type:"file",accept:".xlsx",style:{display:"none"},onChange:handleFile}),
+      h("button",{type:"button",disabled:uploading,onClick:function(){fileRef.current&&fileRef.current.click();},style:{background:"var(--navy)",color:"#fff",border:"none",borderRadius:10,padding:"11px 18px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:uploading?"default":"pointer",opacity:uploading?0.7:1}},uploading?"⏳ Subiendo…":"⬆ Subir nuevo formato (.xlsx)"),
+      msg&&h("div",{style:{marginTop:14,fontSize:12.5,fontWeight:600,color:msg.ok?"#1D7A3E":"#C0001A"}},msg.text)));
+}
+
 // ── Cumplimiento interno: lo hecho y lo pendiente sale de los datos de la app ─────────────────
 // Cada fuente devuelve tareas con la misma forma. Para sumar categorías nuevas en la próxima etapa
 // (Apoyo crítico, Inspección de áreas, Calibraciones internas y externas) basta con agregar su
 // categoría en CUMPL_CATEGORIAS y una fuente que cargue sus tareas y sepa marcarlas.
 var CUMPL_CATEGORIAS={
   equipos:{label:"Equipo",color:"#0D2F5C",bg:"#e8f0fb"},
-  ordenes:{label:"Orden de trabajo",color:"#6B3FA0",bg:"#F0E8FA"}
+  ordenes:{label:"Orden de trabajo",color:"#6B3FA0",bg:"#F0E8FA"},
+  inspecciones:{label:"Inspección",color:"#0B7A75",bg:"#E0F4F4"}
 };
-var CUMPL_PROXIMAS="Apoyo crítico · Inspección de áreas · Calibraciones internas y externas";
+var CUMPL_PROXIMAS="Apoyo crítico · Calibraciones internas y externas";
 
 function cumplHoyISO(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function cumplFecha(v){
@@ -14177,6 +14747,36 @@ function cumplMapOrden(s){
     reprog:false,raw:s
   };
 }
+// Inspecciones locativas (mtto_inspecciones): una hoja del F-MAN-010 = una tarea.
+function cumplMapInspeccion(i){
+  var hecho=i.estado==="ejecutado";
+  var extra=[];
+  if(i.esclusa_c41&&i.esclusa_c41!==i.area_nombre)extra.push("esclusa de personal");
+  if(i.esclusa_c56)extra.push("esclusa de materiales");
+  return {
+    key:"i"+i.id,fuente:"inspeccion",cat:"inspecciones",
+    mes:i.mes_reprogramado||i.mes,
+    titulo:i.area_nombre,codigo:i.consecutivo||"",
+    detalle:[(typeof INSP_FREQ!=="undefined"&&INSP_FREQ[i.frecuencia])||i.frecuencia||"",extra.length?"+ "+extra.join(" y "):""].filter(Boolean).join(" · "),
+    resp:i.asignado_a||"Sin asignar",hecho:hecho,
+    fecha:hecho?cumplFecha(i.fecha_ejecucion):"",
+    reprog:!!i.mes_reprogramado,raw:i
+  };
+}
+async function cumplCargarInspecciones(anio){
+  var filas=[],desde=0;
+  while(true){
+    var r=await sb.from("mtto_inspecciones").select("*").eq("anio",anio).order("id",{ascending:true}).range(desde,desde+999);
+    if(r.error){
+      if(typeof inspEsErrorTablaFaltante==="function"&&inspEsErrorTablaFaltante(r.error))return [];   // la tabla aún no existe: no hay inspecciones que mostrar
+      throw r.error;
+    }
+    filas=filas.concat(r.data||[]);
+    if(!r.data||r.data.length<1000)break;
+    desde+=1000;
+  }
+  return filas.map(cumplMapInspeccion);
+}
 async function cumplCargarPreventivos(anio){
   var filas=[],desde=0;
   while(true){   // el servidor entrega máximo 1000 filas por consulta
@@ -14200,9 +14800,20 @@ async function cumplCargarOrdenes(anio){
   }
   return filas.map(cumplMapOrden);
 }
-// Marca o desmarca un preventivo con un click. Hace lo mismo que ya hacía la app al ejecutar una orden.
+// Marca o desmarca un preventivo o una inspección con un click. Hace lo mismo que ya hacía la app al ejecutar una orden.
 // Las órdenes de trabajo (solicitudes) NO se cierran desde aquí: se cierran en su propio módulo y esta ventana solo refleja su estado.
 async function cumplMarcar(t,hecho,usuarioNombre){
+  if(t.fuente==="inspeccion"){
+    var i=t.raw;
+    var patchI=hecho
+      ?{estado:"ejecutado",fecha_ejecucion:cumplHoyISO(),ejecutor:i.asignado_a||usuarioNombre||null}
+      :{estado:i.mes_reprogramado?"reprogramado":"programado",fecha_ejecucion:null,ejecutor:null};
+    var rI=await sb.from("mtto_inspecciones").update(patchI).eq("id",i.id).select();
+    if(rI.error)throw rI.error;
+    if(hecho)registrarHistorial("insp_ejecutada",(i.consecutivo||"")+" "+(i.area_nombre||"")+" ("+MTTO_MESES[(i.mes||1)-1]+")",patchI.ejecutor);
+    if(typeof INSP_CACHE!=="undefined"&&INSP_CACHE[i.anio])INSP_CACHE[i.anio]=INSP_CACHE[i.anio].map(function(x){return x.id===i.id?Object.assign({},x,patchI):x;});   // la pestaña Inspecciones se entera
+    return cumplMapInspeccion((rI.data&&rI.data[0])||Object.assign({},i,patchI));
+  }
   if(t.fuente!=="preventivo")throw new Error("Esta tarea se cierra desde su propio módulo.");
   var o=t.raw;
   var patch=hecho
@@ -14225,9 +14836,10 @@ function cumplObtener(anio){
   var fallos=[],cambios0=CUMPL_CAMBIOS;
   var p=Promise.all([
     cumplCargarPreventivos(anio)["catch"](function(e){fallos.push("preventivos: "+((e&&e.message)||e));return [];}),
-    cumplCargarOrdenes(anio)["catch"](function(e){fallos.push("órdenes de trabajo: "+((e&&e.message)||e));return [];})
+    cumplCargarOrdenes(anio)["catch"](function(e){fallos.push("órdenes de trabajo: "+((e&&e.message)||e));return [];}),
+    cumplCargarInspecciones(anio)["catch"](function(e){fallos.push("inspecciones: "+((e&&e.message)||e));return [];})
   ]).then(function(res){
-    var tareas=res[0].concat(res[1]);
+    var tareas=res[0].concat(res[1],res[2]);
     if(!fallos.length&&CUMPL_CAMBIOS===cambios0)CUMPL_CACHE[anio]={tareas:tareas,ts:Date.now()};
     delete CUMPL_ENCURSO[anio];
     return {tareas:tareas,fallos:fallos};
@@ -14336,7 +14948,7 @@ function CumplimientoInterno(props){
     if(cambioPendRef.current&&onCambioRef.current)onCambioRef.current();   // al salir de la pestaña, el resto de la app se pone al día
   };},[]);
   function alternar(t){
-    if(!puede||t.fuente!=="preventivo")return;
+    if(!puede||(t.fuente!=="preventivo"&&t.fuente!=="inspeccion"))return;
     var key=t.key,nuevo=!t.hecho;
     if(!confRef.current[key])confRef.current[key]=t;   // último estado confirmado por el servidor
     CUMPL_CAMBIOS++;
@@ -14351,7 +14963,7 @@ function CumplimientoInterno(props){
       return cumplMarcar(t,nuevo,nombre).then(function(conf){
         confRef.current[key]=conf;
         if(pendRef.current[key]===1)aplicarTarea(conf);   // si hubo más clicks después, manda lo último que se vio
-        avisarCambio();
+        if(t.fuente==="preventivo")avisarCambio();   // Calendario y Órdenes solo cambian con los preventivos
       },function(e){
         aplicarTarea(confRef.current[key]);               // no se pudo guardar: vuelve a como estaba
         setAviso({ok:false,text:"No se pudo guardar el cambio: "+((e&&e.message)||e)});
@@ -14379,7 +14991,7 @@ function CumplimientoInterno(props){
 
   function tarjeta(t){
     var cat=CUMPL_CATEGORIAS[t.cat]||{label:t.cat,color:"#475569",bg:"#f1f5f9"};
-    var clic=puede&&t.fuente==="preventivo";
+    var clic=puede&&(t.fuente==="preventivo"||t.fuente==="inspeccion");
     return h("div",{key:t.key,className:"ci-card"+(t.hecho?" done":"")},
       h("div",{className:"ci-row"+(clic?" click":""),title:t.fuente==="orden"?"Se cierra desde Solicitudes de Mantenimiento":null,onClick:function(){alternar(t);}},
         h("div",{className:"ci-check"+(t.hecho?" on":"")},t.hecho?"✓":""),
@@ -14450,7 +15062,7 @@ function MantenimientosApp(_ref29){var onBack=_ref29.onBack,initialUser=_ref29.i
 function handleImport(_x7){var _a=arguments,_t=this;return asegurarLibs(["XLSX"]).then(function(){return _handleImport.apply(_t,_a);});}function _handleImport(){_handleImport=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee10(ev){var file,buf,parsed,ex,mkey,existentes,nuevas,base,i,ins,_t5;return _regenerator().w(function(_context10){while(1)switch(_context10.p=_context10.n){case 0:file=ev.target.files&&ev.target.files[0];ev.target.value="";if(file){_context10.n=1;break;}return _context10.a(2);case 1:setImporting(true);_context10.p=2;_context10.n=3;return file.arrayBuffer();case 3:buf=_context10.v;parsed=parseFMAN012(buf);if(!(parsed.actividades.length===0)){_context10.n=4;break;}flash("No se encontraron actividades en el archivo.",false);setImporting(false);return _context10.a(2);case 4:_context10.n=5;return sb.from("mtto_ordenes").select("equipo_codigo,equipo_desc,mes").eq("anio",parsed.anio);case 5:ex=_context10.v;if(!ex.error){_context10.n=6;break;}throw ex.error;case 6:mkey=function mkey(o){return o.equipo_codigo+"|"+(o.equipo_desc||"")+"|"+o.mes;};existentes={};(ex.data||[]).forEach(function(o){existentes[mkey(o)]=true;});nuevas=[];parsed.actividades.forEach(function(a){var k=mkey(a);if(existentes[k])return;existentes[k]=true;// dedupe también dentro del mismo archivo
 nuevas.push(a);});// Consecutivos
 base=(ex.data||[]).length;nuevas.forEach(function(a,i){a.consecutivo=String(base+i+1).padStart(3,"0")+"-"+String(parsed.anio%100).padStart(2,"0");});if(!(nuevas.length===0)){_context10.n=7;break;}flash("Cronograma "+parsed.anio+" ya estaba importado ("+parsed.actividades.length+" actividades). Sin cambios.");_context10.n=12;break;case 7:i=0;case 8:if(!(i<nuevas.length)){_context10.n=11;break;}_context10.n=9;return sb.from("mtto_ordenes").insert(nuevas.slice(i,i+200));case 9:ins=_context10.v;if(!ins.error){_context10.n=10;break;}throw ins.error;case 10:i+=200;_context10.n=8;break;case 11:flash("Importadas "+nuevas.length+" actividades del cronograma "+parsed.anio+" ✓");registrarHistorial("mtto_import","Import F-MAN-012 "+parsed.anio+" ("+nuevas.length+" órdenes)",initialUser&&(initialUser.nombre||initialUser.username));case 12:if(parsed.anio!==anio)setAnio(parsed.anio);else load();_context10.n=14;break;case 13:_context10.p=13;_t5=_context10.v;flash("Error al importar: "+(_t5.message||JSON.stringify(_t5)),false);case 14:setImporting(false);case 15:return _context10.a(2);}},_callee10,null,[[2,13]]);}));return _handleImport.apply(this,arguments);}function updateOrden(_x8,_x9){return _updateOrden.apply(this,arguments);}// ── Derivados ──
-function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee11(ord,patch){var r,upd;return _regenerator().w(function(_context11){while(1)switch(_context11.n){case 0:_context11.n=1;return sb.from("mtto_ordenes").update(patch).eq("id",ord.id).select();case 1:r=_context11.v;if(!r.error){_context11.n=2;break;}flash("Error: "+r.error.message,false);return _context11.a(2);case 2:upd=r.data&&r.data[0];setOrdenes(function(prev){return prev.map(function(o){return o.id===ord.id?upd||Object.assign({},o,patch):o;});});if(upd)setSelOrd(upd);if(patch.estado==="ejecutado"){flash("Orden ejecutada ✓");registrarHistorial("mtto_ejecutada",ord.equipo_codigo+" "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+")",patch.ejecutor);}else if(patch.estado==="reprogramado"){flash("Orden reprogramada ↻");}case 3:return _context11.a(2);}},_callee11);}));return _updateOrden.apply(this,arguments);}var esVencida=function esVencida(o){return o.estado==="programado"&&o.anio<=hoyAnio&&(o.anio<hoyAnio||o.mes<hoyMes);};var porMes=React.useMemo(function(){var arr=[];for(var m=1;m<=12;m++){var os=ordenes.filter(function(o){return o.mes===m;});arr.push({mes:m,total:os.length,ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,venc:os.filter(esVencida).length,repr:os.filter(function(o){return o.estado==="reprogramado";}).length});}return arr;},[ordenes]);var delMes=React.useMemo(function(){var lista=ordenes.filter(function(o){return o.mes===mes;});if(filtroTec){lista=lista.filter(function(o){return(o.asignado_a||"")===filtroTec;});}if(busca.trim()){var b=busca.trim().toLowerCase();lista=lista.filter(function(o){return(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista;},[ordenes,mes,busca,filtroTec]);var secciones=React.useMemo(function(){var map={};delMes.forEach(function(o){var s=o.seccion||"SIN SECCIÓN";(map[s]=map[s]||[]).push(o);});return Object.keys(map).map(function(s){return{seccion:s,items:map[s]};});},[delMes]);var registroFiltrado=React.useMemo(function(){var lista=ordenes.slice();if(regMes){lista=lista.filter(function(o){return o.mes===parseInt(regMes,10);});}if(regEstado){if(regEstado==="vencida"){lista=lista.filter(esVencida);}else{lista=lista.filter(function(o){return o.estado===regEstado;});}}if(regBusca.trim()){var b=regBusca.trim().toLowerCase();lista=lista.filter(function(o){return(o.consecutivo||"").toLowerCase().indexOf(b)>=0||(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista.sort(function(a,b){return(a.consecutivo||"").localeCompare(b.consecutivo||"");});},[ordenes,regMes,regEstado,regBusca]);function fmtFecha(v){if(!v)return"—";try{var d=new Date(v);if(isNaN(d.getTime()))return String(v).slice(0,10);return d.toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(e){return String(v).slice(0,10);}}var totAnio=ordenes.length;var totEjec=ordenes.filter(function(o){return o.estado==="ejecutado";}).length;var totVenc=ordenes.filter(esVencida).length;return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--lighter)",paddingBottom:40}},/*#__PURE__*/React.createElement("style",null,"\n        .mtto-hdr{background:var(--navy);padding:calc(14px + env(safe-area-inset-top,0px)) 20px 14px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:60;box-shadow:0 2px 12px rgba(13,47,92,0.28);}\n        .mtto-hdr-back{background:rgba(255,255,255,0.12);border:none;border-radius:8px;color:#fff;cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:5px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;flex-shrink:0;}\n        .mtto-hdr-logo{height:40px;width:auto;display:block;border-radius:10px;flex-shrink:0;}\n        .mtto-hdr-title{font-family:Montserrat,sans-serif;font-weight:800;font-size:14px;color:#fff;letter-spacing:0.3px;}\n        .mtto-hdr-sub{font-family:Montserrat,sans-serif;font-size:9px;color:rgba(255,255,255,0.45);letter-spacing:1.5px;text-transform:uppercase;margin-top:1px;}\n        .mtto-hdr-spacer{flex:1;}\n        .mtto-hdr-import{background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);border-radius:8px;color:#fff;cursor:pointer;padding:7px 12px;display:flex;align-items:center;gap:6px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;white-space:nowrap;flex-shrink:0;}\n@media (max-width:767px){\n  .mtto-hdr-import-label{display:none;}\n  .mtto-hdr-import{padding:9px 10px;}\n  .mtto-hdr-title{font-size:13px;}\n  .mtto-hdr-sub{font-size:8px;}\n}\n        .mtto-hdr-import:disabled{opacity:0.65;cursor:default;}\n        .mtto-toolbar{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:2px solid var(--navy);padding:12px 20px 10px;position:sticky;top:calc(60px + env(safe-area-inset-top,0px));z-index:55;}\n      "),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr"},onBack&&/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-back",onClick:onBack},"\u2190 Suite"),/*#__PURE__*/React.createElement("img",{className:"mtto-hdr-logo",src:LOGO_SRC,alt:"Bussi\xE9"}),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-title"},"Mantenimientos"),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-sub"},"Bussi\xE9 \xB7 Preventivos")),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-spacer"}),canImport&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("input",{ref:fileRef,type:"file",accept:".xlsm,.xlsx",style:{display:"none"},onChange:handleImport}),/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-import",disabled:importing,onClick:function onClick(){fileRef.current&&fileRef.current.click();}},/*#__PURE__*/React.createElement("span",null,importing?"⏳":"⬆"),/*#__PURE__*/React.createElement("span",{className:"mtto-hdr-import-label"},importing?"Importando…":"Importar F-MAN-012")))),/*#__PURE__*/React.createElement("div",{className:"mtto-toolbar"},/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap"}},"Cronograma preventivo \xB7 F-MAN-012"),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:anio,style:{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"},onChange:function onChange(ev){setAnio(parseInt(ev.target.value,10));}},[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return/*#__PURE__*/React.createElement("option",{key:a,value:a},a);})),/*#__PURE__*/React.createElement("div",{className:"mtto-tabs",style:{maxWidth:660}},(canImport?[["calendario","Calendario"],["ordenes","Órdenes"],["registro","Registro"],["cumplimiento","Cumplimiento"],["cumplimiento1","Cumplimiento1"],["admin","⚙️ Admin"]]:[["calendario","Calendario"],["ordenes","Órdenes"],["registro","Registro"],["cumplimiento","Cumplimiento"],["cumplimiento1","Cumplimiento1"]]).map(function(tb){return/*#__PURE__*/React.createElement("button",{key:tb[0],className:"mtto-tab-btn"+(tab===tb[0]?" active":""),onClick:function onClick(){setTab(tb[0]);}},tb[1]);})),tab==="cumplimiento"&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginLeft:"auto"}},/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.deleteMonth&&ifr.current.contentWindow.deleteMonth();},style:{background:"#fff",color:"var(--navy)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"🗑 Borrar mes"),/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.exportReport&&ifr.current.contentWindow.exportReport();},style:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"⬇ Exportar informe"),/*#__PURE__*/React.createElement("button",{type:"button",disabled:generandoPptx,onClick:function onClick(){abrirInformeSemanalApp();},style:{background:"#2d7dd2",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:generandoPptx?"default":"pointer",opacity:generandoPptx?0.7:1,whiteSpace:"nowrap"}},generandoPptx?"⏳ Generando…":"📊 Informe PPTX")))),flashMsg&&/*#__PURE__*/React.createElement("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:flashMsg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 20px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},flashMsg.msg),/*#__PURE__*/React.createElement("div",{style:{maxWidth:860,margin:"0 auto",padding:"18px 16px"}},loading?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:60,color:"var(--gray)",fontWeight:600}},"Cargando cronograma\u2026"):totAnio===0?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:"70px 20px",color:"var(--gray)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:44,marginBottom:12}},"\uD83D\uDDD3\uFE0F"),/*#__PURE__*/React.createElement("div",{style:{fontWeight:700,color:"var(--navy)",fontSize:16,marginBottom:6}},"Sin cronograma para ",anio),/*#__PURE__*/React.createElement("div",{style:{fontSize:13}},canImport?"Importa el archivo F-MAN-012 para cargar las actividades programadas.":"Aún no se ha importado el cronograma de este año.")):/*#__PURE__*/React.createElement(React.Fragment,null,tab==="calendario"&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:("var(--navy)")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"📅"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:"var(--navy)"}},totAnio),React.createElement("div",{style:{fontSize:9.5,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3,fontFamily:"Montserrat,sans-serif",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"Programadas "+anio))),React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:("#1D7A3E")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"✅"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:"#1D7A3E"}},totEjec),React.createElement("div",{style:{fontSize:9.5,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3,fontFamily:"Montserrat,sans-serif",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"Ejecutadas"))),React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:(totVenc>0?"#C0001A":"var(--gray)")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"⚠️"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:totVenc>0?"#C0001A":"var(--gray)"}},totVenc),React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}},"Vencidas")))),/*#__PURE__*/React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}},porMes.map(function(pm){var actual=pm.mes===hoyMes&&anio===hoyAnio;var pct=pm.total>0?Math.round(pm.ejec/pm.total*100):null;return/*#__PURE__*/React.createElement("button",{key:pm.mes,onClick:function onClick(){setMes(pm.mes);setTab("ordenes");},className:"stat-card",style:{cursor:"pointer",textAlign:"left",border:actual?"2px solid var(--accent)":"1px solid var(--border)",background:"#fff",padding:"13px 14px"}},/*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},/*#__PURE__*/React.createElement("span",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:"var(--navy)",textTransform:"uppercase"}},MTTO_MESES_C[pm.mes-1]),actual&&/*#__PURE__*/React.createElement("span",{style:{fontSize:9,fontWeight:800,color:"var(--accent)",letterSpacing:0.8}},"HOY")),/*#__PURE__*/React.createElement("div",{style:{fontSize:22,fontWeight:800,color:"var(--navy)",marginTop:4}},pm.total),/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:5,fontSize:11,fontWeight:700}},/*#__PURE__*/React.createElement("span",{style:{color:"#1D7A3E"}},"\u2713 ",pm.ejec),pm.venc>0&&/*#__PURE__*/React.createElement("span",{style:{color:"#C0001A"}},"\u26A0 ",pm.venc),pm.repr>0&&/*#__PURE__*/React.createElement("span",{style:{color:"#C45200"}},"\u21BB ",pm.repr)),pct!==null&&/*#__PURE__*/React.createElement("div",{style:{height:5,background:"var(--light)",borderRadius:3,marginTop:8,overflow:"hidden"}},/*#__PURE__*/React.createElement("div",{style:{height:"100%",width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)",borderRadius:3}})));}))),tab==="ordenes"&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}},/*#__PURE__*/React.createElement("select",{className:"ios-input",value:mes,style:{width:"auto",padding:"9px 12px",fontWeight:700,fontSize:13},onChange:function onChange(ev){setMes(parseInt(ev.target.value,10));}},MTTO_MESES.map(function(mn,i){var pm=porMes[i];return/*#__PURE__*/React.createElement("option",{key:i,value:i+1},mn," (",pm.total,")");})),/*#__PURE__*/React.createElement("input",{className:"ios-input",placeholder:"Buscar equipo, c\xF3digo o secci\xF3n\u2026",value:busca,onChange:function onChange(ev){setBusca(ev.target.value);},style:{flex:1,minWidth:180,padding:"9px 12px",fontSize:13}}),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:filtroTec,style:{width:"auto",maxWidth:180,padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function onChange(ev){setFiltroTec(ev.target.value);}},/*#__PURE__*/React.createElement("option",{value:""},"\uD83D\uDC64 Todos"),usuarios.map(function(u){var n=u.nombre||u.username;return/*#__PURE__*/React.createElement("option",{key:u.id,value:n},n);})),/*#__PURE__*/React.createElement("button",{type:"button",disabled:delMes.length===0||descargandoLote,onClick:function onClick(){setDescargandoLote(true);descargarOrdenesMesFMAN008(delMes,MTTO_MESES[mes-1],anio).finally(function(){setDescargandoLote(false);});},style:{background:delMes.length===0?"var(--light)":"var(--navy)",color:delMes.length===0?"var(--gray)":"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:delMes.length===0?"default":"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}},descargandoLote?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")")),delMes.length===0?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600}},"Sin actividades ",busca?"que coincidan con la búsqueda":"programadas en "+MTTO_MESES[mes-1],"."):secciones.map(function(sec){return/*#__PURE__*/React.createElement("div",{key:sec.seccion,style:{marginBottom:18}},/*#__PURE__*/React.createElement("div",{style:{fontFamily:"Montserrat,sans-serif",fontSize:11,fontWeight:800,color:"var(--gray)",textTransform:"uppercase",letterSpacing:1,margin:"0 2px 8px"}},sec.seccion," \xB7 ",sec.items.length),/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},sec.items.map(function(o){var fq=MTTO_FREQ_STYLE[o.frecuencia]||MTTO_FREQ_STYLE.T;var venc=esVencida(o);var est=MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado;return/*#__PURE__*/React.createElement("button",{key:o.id,onClick:function onClick(){setSelOrd(o);},style:{background:"#fff",border:"1px solid var(--border)",borderRadius:14,padding:"12px 14px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:12,boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},/*#__PURE__*/React.createElement("div",{style:{width:42,height:42,borderRadius:11,background:fq.bg,color:fq.col,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:15,flexShrink:0}},o.frecuencia),/*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:0}},/*#__PURE__*/React.createElement("div",{style:{fontSize:13.5,fontWeight:700,color:"var(--navy)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},o.equipo_desc),/*#__PURE__*/React.createElement("div",{style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}},o.equipo_codigo,o.consecutivo?" · "+o.consecutivo:""),o.asignado_a&&/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--accent)",fontWeight:700,marginTop:3}},"\uD83D\uDC64 ",o.asignado_a)),/*#__PURE__*/React.createElement("span",{className:"badge "+(venc?"badge-red":est.cls),style:{flexShrink:0}},venc?"Vencida":est.label));})));})),tab==="registro"&&React.createElement(React.Fragment,null,
+function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee11(ord,patch){var r,upd;return _regenerator().w(function(_context11){while(1)switch(_context11.n){case 0:_context11.n=1;return sb.from("mtto_ordenes").update(patch).eq("id",ord.id).select();case 1:r=_context11.v;if(!r.error){_context11.n=2;break;}flash("Error: "+r.error.message,false);return _context11.a(2);case 2:upd=r.data&&r.data[0];setOrdenes(function(prev){return prev.map(function(o){return o.id===ord.id?upd||Object.assign({},o,patch):o;});});if(upd)setSelOrd(upd);if(patch.estado==="ejecutado"){flash("Orden ejecutada ✓");registrarHistorial("mtto_ejecutada",ord.equipo_codigo+" "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+")",patch.ejecutor);}else if(patch.estado==="reprogramado"){flash("Orden reprogramada ↻");}case 3:return _context11.a(2);}},_callee11);}));return _updateOrden.apply(this,arguments);}var esVencida=function esVencida(o){return o.estado==="programado"&&o.anio<=hoyAnio&&(o.anio<hoyAnio||o.mes<hoyMes);};var porMes=React.useMemo(function(){var arr=[];for(var m=1;m<=12;m++){var os=ordenes.filter(function(o){return o.mes===m;});arr.push({mes:m,total:os.length,ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,venc:os.filter(esVencida).length,repr:os.filter(function(o){return o.estado==="reprogramado";}).length});}return arr;},[ordenes]);var delMes=React.useMemo(function(){var lista=ordenes.filter(function(o){return o.mes===mes;});if(filtroTec){lista=lista.filter(function(o){return(o.asignado_a||"")===filtroTec;});}if(busca.trim()){var b=busca.trim().toLowerCase();lista=lista.filter(function(o){return(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista;},[ordenes,mes,busca,filtroTec]);var secciones=React.useMemo(function(){var map={};delMes.forEach(function(o){var s=o.seccion||"SIN SECCIÓN";(map[s]=map[s]||[]).push(o);});return Object.keys(map).map(function(s){return{seccion:s,items:map[s]};});},[delMes]);var registroFiltrado=React.useMemo(function(){var lista=ordenes.slice();if(regMes){lista=lista.filter(function(o){return o.mes===parseInt(regMes,10);});}if(regEstado){if(regEstado==="vencida"){lista=lista.filter(esVencida);}else{lista=lista.filter(function(o){return o.estado===regEstado;});}}if(regBusca.trim()){var b=regBusca.trim().toLowerCase();lista=lista.filter(function(o){return(o.consecutivo||"").toLowerCase().indexOf(b)>=0||(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista.sort(function(a,b){return(a.consecutivo||"").localeCompare(b.consecutivo||"");});},[ordenes,regMes,regEstado,regBusca]);function fmtFecha(v){if(!v)return"—";try{var d=new Date(v);if(isNaN(d.getTime()))return String(v).slice(0,10);return d.toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(e){return String(v).slice(0,10);}}var totAnio=ordenes.length;var totEjec=ordenes.filter(function(o){return o.estado==="ejecutado";}).length;var totVenc=ordenes.filter(esVencida).length;return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--lighter)",paddingBottom:40}},/*#__PURE__*/React.createElement("style",null,"\n        .mtto-hdr{background:var(--navy);padding:calc(14px + env(safe-area-inset-top,0px)) 20px 14px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:60;box-shadow:0 2px 12px rgba(13,47,92,0.28);}\n        .mtto-hdr-back{background:rgba(255,255,255,0.12);border:none;border-radius:8px;color:#fff;cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:5px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;flex-shrink:0;}\n        .mtto-hdr-logo{height:40px;width:auto;display:block;border-radius:10px;flex-shrink:0;}\n        .mtto-hdr-title{font-family:Montserrat,sans-serif;font-weight:800;font-size:14px;color:#fff;letter-spacing:0.3px;}\n        .mtto-hdr-sub{font-family:Montserrat,sans-serif;font-size:9px;color:rgba(255,255,255,0.45);letter-spacing:1.5px;text-transform:uppercase;margin-top:1px;}\n        .mtto-hdr-spacer{flex:1;}\n        .mtto-hdr-import{background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);border-radius:8px;color:#fff;cursor:pointer;padding:7px 12px;display:flex;align-items:center;gap:6px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;white-space:nowrap;flex-shrink:0;}\n@media (max-width:767px){\n  .mtto-hdr-import-label{display:none;}\n  .mtto-hdr-import{padding:9px 10px;}\n  .mtto-hdr-title{font-size:13px;}\n  .mtto-hdr-sub{font-size:8px;}\n}\n        .mtto-hdr-import:disabled{opacity:0.65;cursor:default;}\n        .mtto-toolbar{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:2px solid var(--navy);padding:12px 20px 10px;position:sticky;top:calc(60px + env(safe-area-inset-top,0px));z-index:55;}\n      "),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr"},onBack&&/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-back",onClick:onBack},"\u2190 Suite"),/*#__PURE__*/React.createElement("img",{className:"mtto-hdr-logo",src:LOGO_SRC,alt:"Bussi\xE9"}),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-title"},"Mantenimientos"),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-sub"},"Bussi\xE9 \xB7 Preventivos")),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-spacer"}),canImport&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("input",{ref:fileRef,type:"file",accept:".xlsm,.xlsx",style:{display:"none"},onChange:handleImport}),/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-import",disabled:importing,onClick:function onClick(){fileRef.current&&fileRef.current.click();}},/*#__PURE__*/React.createElement("span",null,importing?"⏳":"⬆"),/*#__PURE__*/React.createElement("span",{className:"mtto-hdr-import-label"},importing?"Importando…":"Importar F-MAN-012")))),/*#__PURE__*/React.createElement("div",{className:"mtto-toolbar"},/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap"}},"Cronograma preventivo \xB7 F-MAN-012"),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:anio,style:{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"},onChange:function onChange(ev){setAnio(parseInt(ev.target.value,10));}},[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return/*#__PURE__*/React.createElement("option",{key:a,value:a},a);})),/*#__PURE__*/React.createElement("div",{className:"mtto-tabs",style:{maxWidth:660}},(canImport?[["calendario","Calendario"],["ordenes","Órdenes"],["inspecciones","Inspecciones"],["registro","Registro"],["cumplimiento","Cumplimiento"],["cumplimiento1","Cumplimiento1"],["admin","⚙️ Admin"]]:[["calendario","Calendario"],["ordenes","Órdenes"],["inspecciones","Inspecciones"],["registro","Registro"],["cumplimiento","Cumplimiento"],["cumplimiento1","Cumplimiento1"]]).map(function(tb){return/*#__PURE__*/React.createElement("button",{key:tb[0],className:"mtto-tab-btn"+(tab===tb[0]?" active":""),onClick:function onClick(){setTab(tb[0]);}},tb[1]);})),tab==="cumplimiento"&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginLeft:"auto"}},/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.deleteMonth&&ifr.current.contentWindow.deleteMonth();},style:{background:"#fff",color:"var(--navy)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"🗑 Borrar mes"),/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.exportReport&&ifr.current.contentWindow.exportReport();},style:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"⬇ Exportar informe"),/*#__PURE__*/React.createElement("button",{type:"button",disabled:generandoPptx,onClick:function onClick(){abrirInformeSemanalApp();},style:{background:"#2d7dd2",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:generandoPptx?"default":"pointer",opacity:generandoPptx?0.7:1,whiteSpace:"nowrap"}},generandoPptx?"⏳ Generando…":"📊 Informe PPTX")))),flashMsg&&/*#__PURE__*/React.createElement("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:flashMsg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 20px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},flashMsg.msg),/*#__PURE__*/React.createElement("div",{style:{maxWidth:860,margin:"0 auto",padding:"18px 16px"}},loading?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:60,color:"var(--gray)",fontWeight:600}},"Cargando cronograma\u2026"):totAnio===0?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:"70px 20px",color:"var(--gray)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:44,marginBottom:12}},"\uD83D\uDDD3\uFE0F"),/*#__PURE__*/React.createElement("div",{style:{fontWeight:700,color:"var(--navy)",fontSize:16,marginBottom:6}},"Sin cronograma para ",anio),/*#__PURE__*/React.createElement("div",{style:{fontSize:13}},canImport?"Importa el archivo F-MAN-012 para cargar las actividades programadas.":"Aún no se ha importado el cronograma de este año.")):/*#__PURE__*/React.createElement(React.Fragment,null,tab==="calendario"&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:("var(--navy)")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"📅"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:"var(--navy)"}},totAnio),React.createElement("div",{style:{fontSize:9.5,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3,fontFamily:"Montserrat,sans-serif",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"Programadas "+anio))),React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:("#1D7A3E")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"✅"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:"#1D7A3E"}},totEjec),React.createElement("div",{style:{fontSize:9.5,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3,fontFamily:"Montserrat,sans-serif",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"Ejecutadas"))),React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:(totVenc>0?"#C0001A":"var(--gray)")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"⚠️"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:totVenc>0?"#C0001A":"var(--gray)"}},totVenc),React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}},"Vencidas")))),/*#__PURE__*/React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}},porMes.map(function(pm){var actual=pm.mes===hoyMes&&anio===hoyAnio;var pct=pm.total>0?Math.round(pm.ejec/pm.total*100):null;return/*#__PURE__*/React.createElement("button",{key:pm.mes,onClick:function onClick(){setMes(pm.mes);setTab("ordenes");},className:"stat-card",style:{cursor:"pointer",textAlign:"left",border:actual?"2px solid var(--accent)":"1px solid var(--border)",background:"#fff",padding:"13px 14px"}},/*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},/*#__PURE__*/React.createElement("span",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:"var(--navy)",textTransform:"uppercase"}},MTTO_MESES_C[pm.mes-1]),actual&&/*#__PURE__*/React.createElement("span",{style:{fontSize:9,fontWeight:800,color:"var(--accent)",letterSpacing:0.8}},"HOY")),/*#__PURE__*/React.createElement("div",{style:{fontSize:22,fontWeight:800,color:"var(--navy)",marginTop:4}},pm.total),/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:5,fontSize:11,fontWeight:700}},/*#__PURE__*/React.createElement("span",{style:{color:"#1D7A3E"}},"\u2713 ",pm.ejec),pm.venc>0&&/*#__PURE__*/React.createElement("span",{style:{color:"#C0001A"}},"\u26A0 ",pm.venc),pm.repr>0&&/*#__PURE__*/React.createElement("span",{style:{color:"#C45200"}},"\u21BB ",pm.repr)),pct!==null&&/*#__PURE__*/React.createElement("div",{style:{height:5,background:"var(--light)",borderRadius:3,marginTop:8,overflow:"hidden"}},/*#__PURE__*/React.createElement("div",{style:{height:"100%",width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)",borderRadius:3}})));}))),tab==="ordenes"&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}},/*#__PURE__*/React.createElement("select",{className:"ios-input",value:mes,style:{width:"auto",padding:"9px 12px",fontWeight:700,fontSize:13},onChange:function onChange(ev){setMes(parseInt(ev.target.value,10));}},MTTO_MESES.map(function(mn,i){var pm=porMes[i];return/*#__PURE__*/React.createElement("option",{key:i,value:i+1},mn," (",pm.total,")");})),/*#__PURE__*/React.createElement("input",{className:"ios-input",placeholder:"Buscar equipo, c\xF3digo o secci\xF3n\u2026",value:busca,onChange:function onChange(ev){setBusca(ev.target.value);},style:{flex:1,minWidth:180,padding:"9px 12px",fontSize:13}}),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:filtroTec,style:{width:"auto",maxWidth:180,padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function onChange(ev){setFiltroTec(ev.target.value);}},/*#__PURE__*/React.createElement("option",{value:""},"\uD83D\uDC64 Todos"),usuarios.map(function(u){var n=u.nombre||u.username;return/*#__PURE__*/React.createElement("option",{key:u.id,value:n},n);})),/*#__PURE__*/React.createElement("button",{type:"button",disabled:delMes.length===0||descargandoLote,onClick:function onClick(){setDescargandoLote(true);descargarOrdenesMesFMAN008(delMes,MTTO_MESES[mes-1],anio).finally(function(){setDescargandoLote(false);});},style:{background:delMes.length===0?"var(--light)":"var(--navy)",color:delMes.length===0?"var(--gray)":"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:delMes.length===0?"default":"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}},descargandoLote?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")")),delMes.length===0?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600}},"Sin actividades ",busca?"que coincidan con la búsqueda":"programadas en "+MTTO_MESES[mes-1],"."):secciones.map(function(sec){return/*#__PURE__*/React.createElement("div",{key:sec.seccion,style:{marginBottom:18}},/*#__PURE__*/React.createElement("div",{style:{fontFamily:"Montserrat,sans-serif",fontSize:11,fontWeight:800,color:"var(--gray)",textTransform:"uppercase",letterSpacing:1,margin:"0 2px 8px"}},sec.seccion," \xB7 ",sec.items.length),/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},sec.items.map(function(o){var fq=MTTO_FREQ_STYLE[o.frecuencia]||MTTO_FREQ_STYLE.T;var venc=esVencida(o);var est=MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado;return/*#__PURE__*/React.createElement("button",{key:o.id,onClick:function onClick(){setSelOrd(o);},style:{background:"#fff",border:"1px solid var(--border)",borderRadius:14,padding:"12px 14px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:12,boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},/*#__PURE__*/React.createElement("div",{style:{width:42,height:42,borderRadius:11,background:fq.bg,color:fq.col,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:15,flexShrink:0}},o.frecuencia),/*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:0}},/*#__PURE__*/React.createElement("div",{style:{fontSize:13.5,fontWeight:700,color:"var(--navy)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},o.equipo_desc),/*#__PURE__*/React.createElement("div",{style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}},o.equipo_codigo,o.consecutivo?" · "+o.consecutivo:""),o.asignado_a&&/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--accent)",fontWeight:700,marginTop:3}},"\uD83D\uDC64 ",o.asignado_a)),/*#__PURE__*/React.createElement("span",{className:"badge "+(venc?"badge-red":est.cls),style:{flexShrink:0}},venc?"Vencida":est.label));})));})),tab==="inspecciones"&&React.createElement(InspeccionesTab,{anio:anio,usuarios:usuarios,currentUser:initialUser,canImport:canImport,onCambiarAnio:setAnio}),tab==="registro"&&React.createElement(React.Fragment,null,
   React.createElement("div",{style:{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}},
     React.createElement("input",{className:"ios-input",placeholder:"Buscar consecutivo, equipo, código o área…",value:regBusca,onChange:function(ev){setRegBusca(ev.target.value);},style:{flex:1,minWidth:200,padding:"9px 12px",fontSize:13}}),
     React.createElement("select",{className:"ios-input",value:regMes,style:{width:"auto",padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function(ev){setRegMes(ev.target.value);}},
@@ -14497,7 +15109,7 @@ function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator
     )
   )
 ),
-tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="cumplimiento1"&&React.createElement("div",{style:{width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement(CumplimientoInterno,{anio:anio,currentUser:initialUser,onCambio:load})),tab==="admin"&&canImport&&React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:16}},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminInstructivosPanel,null)))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
+tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="cumplimiento1"&&React.createElement("div",{style:{width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement(CumplimientoInterno,{anio:anio,currentUser:initialUser,onCambio:load})),tab==="admin"&&canImport&&React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:16}},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminFMAN010Panel,null),React.createElement(AdminInstructivosPanel,null)))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
 // Los equipos de producción vienen como "COD-ÁREA-N - NOMBRE" (ej: "EP-322-1 - ENVASADORA PPR").
 // El código de área es todo antes del último "-N". Con ese número final buscamos el
 // nombre real del área en AREAS_LOC ("NOMBRE (322)") para mostrar una etiqueta legible.
