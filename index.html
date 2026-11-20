@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261120e";
+window.APP_BUILD = "20261120f";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14415,8 +14415,12 @@ async function inspCargarAnio(anio){
 function inspEsErrorTablaFaltante(e){var m=String((e&&e.message)||e||"");return /mtto_inspecciones/.test(m)&&/(does not exist|schema cache|Could not find|no existe)/i.test(m)||(e&&(e.code==="42P01"||e.code==="PGRST205"));}
 function inspMesEfectivo(o){return o.mes_reprogramado||o.mes;}
 
-// Importa las hojas del cronograma desde el mes elegido. No repite lo que ya existe y numera desde L2054.
-async function inspImportar(parsed,desdeMes){
+// Importa el cronograma. Desde el mes "numerarDesde" las inspecciones llevan consecutivo automático (L2054, L2055…);
+// las de meses anteriores se cargan sin consecutivo y, si "historico" es verdadero, ya marcadas como ejecutadas.
+// No repite lo que ya existe.
+async function inspImportar(parsed,opc){
+  opc=opc||{};
+  var desdeMes=opc.desdeMes||1,numDesde=opc.numerarDesde||desdeMes,historico=opc.historico!==false;
   var hojas=parsed.hojas.filter(function(h){return h.mes>=desdeMes;});
   var existentes={},desde=0;
   while(true){
@@ -14427,21 +14431,34 @@ async function inspImportar(parsed,desdeMes){
     desde+=1000;
   }
   var nuevas=hojas.filter(function(h){return !existentes[h.mes+"|"+h.area_nombre];});
-  if(!nuevas.length)return{insertadas:0,total:hojas.length,primero:null,ultimo:null};
-  var u=await sb.from("mtto_inspecciones").select("consecutivo").like("consecutivo","L%").order("id",{ascending:false}).limit(200);
-  if(u.error)throw u.error;
-  var ultimoNum=0;
-  (u.data||[]).forEach(function(o){var n=parseInt(String(o.consecutivo||"").replace(/\D/g,""),10);if(n>ultimoNum)ultimoNum=n;});
-  var conCons=inspAsignarConsecutivos(nuevas,ultimoNum);
-  for(var i=0;i<conCons.length;i+=200){
-    var lote=conCons.slice(i,i+200).map(function(h){return{
-      consecutivo:h.consecutivo,anio:h.anio,mes:h.mes,frecuencia:h.frecuencia,orden:h.orden,
-      area_codigo:h.area_codigo,area_nombre:h.area_nombre,esclusa_c41:h.esclusa_c41,esclusa_c56:h.esclusa_c56,
-      filas_cronograma:h.filas_cronograma,estado:"programado"};});
-    var ins=await sb.from("mtto_inspecciones").insert(lote);
-    if(ins.error)throw ins.error;
+  if(!nuevas.length)return{insertadas:0,total:hojas.length,historicas:0,numeradas:0,primero:null,ultimo:null};
+  var conNumero=nuevas.filter(function(h){return h.mes>=numDesde;});
+  var anteriores=nuevas.filter(function(h){return h.mes<numDesde;});
+  var numeradas=[];
+  if(conNumero.length){
+    var u=await sb.from("mtto_inspecciones").select("consecutivo").like("consecutivo","L%").order("id",{ascending:false}).limit(200);
+    if(u.error)throw u.error;
+    var ultimoNum=0;
+    (u.data||[]).forEach(function(o){var n=parseInt(String(o.consecutivo||"").replace(/\D/g,""),10);if(n>ultimoNum)ultimoNum=n;});
+    numeradas=inspAsignarConsecutivos(conNumero,ultimoNum);
   }
-  return{insertadas:conCons.length,total:hojas.length,primero:conCons[0].consecutivo,ultimo:conCons[conCons.length-1].consecutivo};
+  var hist=anteriores.map(function(h){return Object.assign({},h,{consecutivo:null,estado:historico?"ejecutado":"programado",
+    observaciones:historico?"Histórico: se hizo antes de usar la app":null});});
+  var todas=hist.concat(numeradas);   // primero los meses anteriores
+  for(var i=0;i<todas.length;i+=200){
+    var lote=todas.slice(i,i+200).map(function(h){return{
+      consecutivo:h.consecutivo||null,anio:h.anio,mes:h.mes,frecuencia:h.frecuencia,orden:h.orden,
+      area_codigo:h.area_codigo,area_nombre:h.area_nombre,esclusa_c41:h.esclusa_c41,esclusa_c56:h.esclusa_c56,
+      filas_cronograma:h.filas_cronograma,estado:h.estado||"programado",observaciones:h.observaciones||null};});
+    var ins=await sb.from("mtto_inspecciones").insert(lote);
+    if(ins.error){
+      if(/null value in column "consecutivo"|not-null constraint/i.test(String(ins.error.message||"")))
+        throw new Error("Para cargar meses sin consecutivo falta ejecutar en Supabase: alter table public.mtto_inspecciones alter column consecutivo drop not null;");
+      throw ins.error;
+    }
+  }
+  return{insertadas:todas.length,total:hojas.length,historicas:hist.length,numeradas:numeradas.length,
+         primero:numeradas.length?numeradas[0].consecutivo:null,ultimo:numeradas.length?numeradas[numeradas.length-1].consecutivo:null};
 }
 
 // Mes con el que abre la pestaña: el de hoy; si no tiene inspecciones, el más cercano que sí tenga.
@@ -14469,14 +14486,14 @@ function InspeccionSheet(props){
   async function asignar(){
     setGuardando(true);
     await onUpdate({asignado_a:asig||null,asignado_por:currentUser&&(currentUser.nombre||currentUser.username)||null,fecha_asignacion:asig?new Date().toISOString():null});
-    if(asig)pushNotificacion("🧱 Inspección asignada",insp.consecutivo+" · "+insp.area_nombre+" ("+MTTO_MESES[insp.mes-1]+") → "+asig);
+    if(asig)pushNotificacion("🧱 Inspección asignada",(insp.consecutivo||"Sin consecutivo")+" · "+insp.area_nombre+" ("+MTTO_MESES[insp.mes-1]+") → "+asig);
     setGuardando(false);
   }
   var fila=function(etq,val){return val?h("div",{style:{fontSize:13,color:"var(--navy)",lineHeight:1.45}},h("b",null,etq),val):null;};
   return h("div",{className:"overlay",onClick:onClose},
     h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:480}},
       h("div",{className:"sheet-handle"}),
-      h("div",{className:"sheet-title",style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}},insp.consecutivo,
+      h("div",{className:"sheet-title",style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}},insp.consecutivo||"Sin consecutivo",
         h("span",{className:"badge "+(vencida?"badge-red":est.cls),style:{textTransform:"none"}},vencida?"Vencida":est.label)),
       h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:14}},
         h("div",null,
@@ -14532,7 +14549,9 @@ function InspeccionesTab(props){
   var _bd=S(false),borrando=_bd[0],setBorrando=_bd[1];
   var _p=S(null),previa=_p[0],setPrevia=_p[1];       // vista previa de la importación
   var _i=S(false),importando=_i[0],setImportando=_i[1];
-  var _dm=S(12),desdeMes=_dm[0],setDesdeMes=_dm[1];
+  var _dm=S(1),desdeMes=_dm[0],setDesdeMes=_dm[1];
+  var _nd=S(12),numDesde=_nd[0],setNumDesde=_nd[1];     // desde qué mes se numera (L2054…)
+  var _hi=S(true),historico=_hi[0],setHistorico=_hi[1];   // meses anteriores: cargarlos como ya ejecutados
   var _ms=S(false),modoSel=_ms[0],setModoSel=_ms[1];   // selección para asignar en lote
   var _ch=S({}),marcadas=_ch[0],setMarcadas=_ch[1];
   var _lt=S(""),tecLote=_lt[0],setTecLote=_lt[1];
@@ -14604,21 +14623,21 @@ function InspeccionesTab(props){
       await asegurarLibs(["XLSX"]);
       var parsed=parseFMAN009(await file.arrayBuffer());
       if(!parsed.hojas.length){flash("No se encontraron inspecciones en el archivo.",false);return;}
-      var def=parsed.anio>hoyAnio?1:(parsed.anio===hoyAnio?Math.min(12,hoyMes+1):1);   // por defecto desde el mes que viene
-      setDesdeMes(def);setPrevia(parsed);
+      var def=parsed.anio>hoyAnio?1:(parsed.anio===hoyAnio?Math.min(12,hoyMes+1):1);   // la numeración arranca el mes que viene
+      setDesdeMes(1);setNumDesde(def);setHistorico(true);setPrevia(parsed);   // se carga el año completo
     }catch(e){flash("No se pudo leer el archivo: "+((e&&e.message)||e),false);}
   }
   async function confirmarImport(){
     setImportando(true);
     try{
-      var r=await inspImportar(previa,desdeMes);
+      var r=await inspImportar(previa,{desdeMes:desdeMes,numerarDesde:numDesde,historico:historico});
       if(r.insertadas===0)flash("Ese cronograma ya estaba importado desde "+MTTO_MESES[desdeMes-1]+". Sin cambios.");
       else{
-        flash("Importadas "+r.insertadas+" inspecciones ("+r.primero+" a "+r.ultimo+") ✓");
+        flash("Importadas "+r.insertadas+" inspecciones"+(r.numeradas?" · consecutivos "+r.primero+" a "+r.ultimo:"")+(r.historicas?" · "+r.historicas+" de meses anteriores":"")+" ✓");
         registrarHistorial("insp_import","Import F-MAN-009 "+previa.anio+" desde "+MTTO_MESES[desdeMes-1]+" ("+r.insertadas+" inspecciones)",currentUser&&(currentUser.nombre||currentUser.username));
       }
       var anioImp=previa.anio;setPrevia(null);
-      if(anioImp===anio){setMes(desdeMes);mesAjustado.current=true;setVista("meses");await cargar(true);}
+      if(anioImp===anio){setMes(Math.max(desdeMes,numDesde));mesAjustado.current=true;setVista("meses");await cargar(true);}
       else if(props.onCambiarAnio)props.onCambiarAnio(anioImp);
     }catch(e){flash("Error al importar: "+((e&&e.message)||JSON.stringify(e)),false);}
     setImportando(false);
@@ -14672,7 +14691,7 @@ function InspeccionesTab(props){
             h("div",{style:{width:42,height:42,borderRadius:11,background:fq.bg,color:fq.col,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:o.frecuencia==="BN"?13:15,flexShrink:0}},o.frecuencia),
             h("div",{style:{flex:1,minWidth:0}},
               h("div",{style:{fontSize:13.5,fontWeight:700,color:"var(--navy)",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:1.25}},o.area_nombre),
-              h("div",{style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}},o.consecutivo,extra.length?" · + "+extra.join(" y "):""),
+              h("div",{style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}},o.consecutivo||"sin consecutivo",extra.length?" · + "+extra.join(" y "):""),
               o.asignado_a&&h("div",{style:{fontSize:11,color:"var(--accent)",fontWeight:700,marginTop:3}},"👤 ",o.asignado_a)),
             h("span",{className:"badge "+(venc?"badge-red":est.cls),style:{flexShrink:0}},venc?"Vencida":est.label)));
       }));
@@ -14750,9 +14769,19 @@ function InspeccionesTab(props){
           h("div",null,"El archivo trae ",h("b",null,previa.filas+" filas")," (",previa.areas," áreas y ",previa.esclusas," esclusas). Quedan ",h("b",null,previa.hojas.length+" inspecciones")," en el año: ",
             previa.agrupadas," esclusas se imprimen dentro de la hoja de su área (o junto a la otra esclusa de esa área cuando caen el mismo mes) y ",previa.sueltas.length," van solas en algún mes."),
           h("div",null,h("div",{className:"ios-input-label"},"Importar desde el mes"),
-            h("select",{className:"ios-input",value:desdeMes,onChange:function(ev){setDesdeMes(parseInt(ev.target.value,10));}},
+            h("select",{className:"ios-input",value:desdeMes,onChange:function(ev){var v=parseInt(ev.target.value,10);setDesdeMes(v);if(numDesde<v)setNumDesde(v);}},
               MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",previa.hojas.filter(function(x){return x.mes===i+1;}).length," inspecciones)");}))),
-          h("div",{style:{background:"var(--lighter)",borderRadius:10,padding:"9px 12px",fontSize:12.5}},"Se importan ",h("b",null,previa.hojas.filter(function(x){return x.mes>=desdeMes;}).length)," inspecciones, con consecutivo automático desde ",h("b",null,"L2054")," (o el siguiente disponible). Lo que ya esté importado no se repite."),
+          h("div",null,h("div",{className:"ios-input-label"},"El consecutivo automático (L2054…) empieza en"),
+            h("select",{className:"ios-input",value:numDesde,onChange:function(ev){setNumDesde(parseInt(ev.target.value,10));}},
+              MTTO_MESES.map(function(mn,i){return i+1>=desdeMes?h("option",{key:i,value:i+1},mn):null;}))),
+          desdeMes<numDesde&&h("label",{style:{display:"flex",gap:9,alignItems:"flex-start",fontSize:12.5,cursor:"pointer"}},
+            h("input",{type:"checkbox",checked:historico,style:{marginTop:3},onChange:function(ev){setHistorico(ev.target.checked);}}),
+            h("span",null,"Los meses anteriores a ",h("b",null,MTTO_MESES[numDesde-1])," se cargan como ",h("b",null,"ya ejecutados")," (histórico, sin consecutivo). Si lo desmarcas, quedan pendientes y aparecerán como vencidos.")),
+          h("div",{style:{background:"var(--lighter)",borderRadius:10,padding:"9px 12px",fontSize:12.5,lineHeight:1.5}},
+            "Se importan ",h("b",null,previa.hojas.filter(function(x){return x.mes>=desdeMes;}).length)," inspecciones",
+            desdeMes<numDesde&&h("span",null,": ",h("b",null,previa.hojas.filter(function(x){return x.mes>=desdeMes&&x.mes<numDesde;}).length)," de meses anteriores (sin consecutivo) y ",h("b",null,previa.hojas.filter(function(x){return x.mes>=numDesde;}).length)," con consecutivo desde ",h("b",null,"L2054")," (o el siguiente disponible)"),
+            desdeMes>=numDesde&&h("span",null," con consecutivo desde ",h("b",null,"L2054")," (o el siguiente disponible)"),
+            ". Lo que ya esté importado no se repite."),
           previa.sueltas.length>0&&h("details",null,
             h("summary",{style:{cursor:"pointer",fontWeight:700,fontSize:12.5}},"Ver las "+previa.sueltas.length+" esclusas que quedan solas en algún mes"),
             h("div",{style:{maxHeight:180,overflowY:"auto",marginTop:6,fontSize:12,color:"var(--gray)",lineHeight:1.6}},
