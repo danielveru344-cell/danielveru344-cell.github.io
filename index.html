@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261120g";
+window.APP_BUILD = "20261121a";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14418,6 +14418,307 @@ async function descargarInspeccionesMesFMAN010(lista,mesLabel,anio){
   }
 }
 
+// ── Kit común de Mantenimientos: Órdenes e Inspecciones funcionan y se ven igual ─────────────────
+var MTO_ACENTO={vencida:"#C0001A",ejecutado:"#1D9A50",reprogramado:"#C45200",programado:"#2d7dd2"};
+var MTO_CSS=[
+".mto-pagina{max-width:1560px;margin:0 auto;padding:22px 26px 48px;}",
+".mto-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:20px;}",
+".mto-stat{background:#fff;border:1px solid var(--border);border-radius:18px;padding:15px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 10px rgba(13,47,92,.05);}",
+".mto-stat-ico{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0;}",
+".mto-stat-val{font-size:28px;font-weight:800;line-height:1.05;letter-spacing:-.5px;}",
+".mto-stat-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--gray);font-family:Montserrat,sans-serif;margin-top:4px;}",
+".mto-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center;}",
+".mto-btn{border:none;border-radius:10px;padding:10px 16px;font-family:Montserrat,sans-serif;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;background:var(--light);color:var(--navy);transition:filter .15s,transform .15s;}",
+".mto-btn:hover:not(:disabled){filter:brightness(.96);}",
+".mto-btn:disabled{opacity:.5;cursor:default;}",
+".mto-btn.prim{background:var(--navy);color:#fff;}",
+".mto-btn.peligro{background:#FDECEE;color:#C0001A;}",
+".mto-meses{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;}",
+".mto-mes{background:#fff;border:1px solid var(--border);border-radius:20px;padding:18px 20px;text-align:left;cursor:pointer;box-shadow:0 1px 10px rgba(13,47,92,.05);transition:transform .15s,box-shadow .15s;font-family:inherit;}",
+".mto-mes:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(13,47,92,.13);}",
+".mto-mes.hoy{border:2px solid var(--accent);}",
+".mto-mes.vacio{opacity:.55;}",
+".mto-mes-top{display:flex;justify-content:space-between;align-items:center;}",
+".mto-mes-nombre{font-family:Montserrat,sans-serif;font-weight:800;font-size:13px;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;}",
+".mto-mes-hoy{font-size:9px;font-weight:800;color:var(--accent);letter-spacing:.9px;}",
+".mto-mes-total{font-size:36px;font-weight:800;color:var(--navy);margin-top:8px;line-height:1;letter-spacing:-1px;}",
+".mto-mes-det{display:flex;gap:12px;margin-top:10px;font-size:12px;font-weight:700;}",
+".mto-mes-barra{height:6px;background:var(--light);border-radius:3px;margin-top:14px;overflow:hidden;}",
+".mto-mes-barra i{display:block;height:100%;border-radius:3px;background:var(--accent);}",
+".mto-barra{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}",
+".mto-barra .ios-input{width:auto;padding:10px 13px;font-size:13px;}",
+".mto-barra .mto-busca{flex:1;min-width:220px;}",
+".mto-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px;}",
+".mto-chip{padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:#fff;font-family:Montserrat,sans-serif;font-weight:700;font-size:12px;cursor:pointer;color:var(--gray);}",
+".mto-chip.on{background:var(--navy);color:#fff;border-color:var(--navy);}",
+".mto-chip small{opacity:.7;margin-left:6px;font-weight:700;}",
+".mto-resumen{font-size:11px;color:var(--gray);font-weight:700;margin:0 2px 10px;}",
+".mto-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr));gap:10px;align-items:stretch;}",
+".mto-grupos{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr));gap:22px 14px;align-items:start;}",
+".mto-grupo-items{display:flex;flex-direction:column;gap:10px;}",
+".mto-seccion{font-family:Montserrat,sans-serif;font-size:11px;font-weight:800;color:var(--gray);text-transform:uppercase;letter-spacing:1px;margin:0 2px 10px;padding-bottom:8px;border-bottom:2px solid var(--border);}",
+".mto-fila{display:flex;align-items:stretch;gap:8px;}",
+".mto-fila input[type=checkbox]{width:18px;height:18px;align-self:center;flex-shrink:0;}",
+".mto-card{flex:1;min-width:0;position:relative;display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--border);border-left:4px solid var(--acento,#2d7dd2);border-radius:14px;padding:12px 14px;text-align:left;cursor:pointer;box-shadow:0 1px 8px rgba(13,47,92,.05);transition:transform .12s,box-shadow .12s;font-family:inherit;}",
+".mto-card:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(13,47,92,.11);}",
+".mto-card.marcada{outline:2px solid var(--accent);}",
+".mto-letra{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-family:Montserrat,sans-serif;font-weight:800;font-size:15px;flex-shrink:0;}",
+".mto-card-cuerpo{flex:1;min-width:0;}",
+".mto-card-titulo{font-size:13.5px;font-weight:700;color:var(--navy);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25;}",
+".mto-card-sub{font-size:11.5px;color:var(--gray);font-weight:600;margin-top:2px;}",
+".mto-card-asig{font-size:11px;color:var(--accent);font-weight:700;margin-top:3px;}",
+".mto-vacio{text-align:center;padding:56px 20px;color:var(--gray);font-size:13px;font-weight:600;line-height:1.6;}",
+".mto-vacio b{display:block;color:var(--navy);font-size:16px;margin-bottom:6px;}",
+".mto-admin{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(520px,100%),1fr));gap:18px;align-items:start;}",
+".mto-admin>div{max-width:none !important;margin:0 !important;}",
+".mtto-toolbar>div{max-width:1512px;margin-left:auto;margin-right:auto;}",
+"@media (max-width:640px){.mto-pagina{padding:14px 12px 40px;}.mto-meses{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}.mto-mes{padding:14px 15px;}.mto-mes-total{font-size:28px;}.mto-stat{padding:12px 14px;}.mto-stat-val{font-size:22px;}}"
+].join("\n");
+
+function mtoEstadoDe(o,hoyMes,hoyAnio){
+  if(o.estado==="programado"&&(o.anio<hoyAnio||(o.anio===hoyAnio&&o.mes<hoyMes)))return "vencida";
+  return o.estado||"programado";
+}
+// Mes con el que abre la lista: el de hoy; si no tiene nada, el más cercano que sí tenga.
+function mtoMesInicial(items,anio){
+  var hoy=new Date(),base=anio===hoy.getFullYear()?hoy.getMonth()+1:1;
+  var meses=Array.from(new Set((items||[]).map(function(o){return o.mes;}))).sort(function(a,b){return a-b;});
+  if(!meses.length||meses.indexOf(base)>=0)return base;
+  var sig=meses.filter(function(x){return x>=base;})[0];
+  return sig||meses[meses.length-1];
+}
+
+// Confirmación de borrado, igual para Órdenes e Inspecciones
+function MtoBorrarModal(props){
+  var h=React.createElement,S=React.useState;
+  var _t=S(""),texto=_t[0],setTexto=_t[1];
+  var filas=props.filas||[],ej=filas.filter(function(o){return o.estado==="ejecutado";}).length,asg=filas.filter(function(o){return o.asignado_a;}).length;
+  var exigeTexto=props.alcance==="anio"||ej>0;
+  var habilitado=!props.borrando&&(!exigeTexto||texto.trim().toUpperCase()==="BORRAR");
+  return h("div",{className:"overlay",onClick:function(){if(!props.borrando)props.onCancelar();}},
+    h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:480}},
+      h("div",{className:"sheet-handle"}),
+      h("div",{className:"sheet-title"},"Borrar "+(props.plural||"inspecciones")),
+      h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5}},
+        h("div",null,"Se van a borrar ",h("b",null,filas.length+" "+(props.plural||"inspecciones"))," de ",h("b",null,props.alcance==="mes"?props.mesNombre+" "+props.anio:"todo el cronograma "+props.anio),"."),
+        ej>0&&h("div",{style:{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:10,padding:"9px 12px",fontSize:12.5}},"⚠ ",h("b",null,ej+" ya están ejecutadas"),"; se borra también su registro."),
+        asg>0&&h("div",{style:{fontSize:12.5,color:"var(--gray)"}},asg+" tienen técnico asignado."),
+        props.rangoTexto&&h("div",{style:{fontSize:12.5,color:"var(--gray)"}},props.rangoTexto),
+        h("div",{style:{fontSize:12.5,color:"#C0001A",fontWeight:700}},"Esto no se puede deshacer."),
+        exigeTexto&&h("div",null,h("div",{className:"ios-input-label"},"Escribe BORRAR para confirmar"),
+          h("input",{className:"ios-input",value:texto,placeholder:"BORRAR",autoFocus:true,onChange:function(ev){setTexto(ev.target.value);}})),
+        h("button",{type:"button",disabled:!habilitado,onClick:props.onConfirmar,style:{background:habilitado?"#C0001A":"var(--light)",color:habilitado?"#fff":"var(--gray)",border:"none",borderRadius:10,padding:"13px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:14,cursor:habilitado?"pointer":"default"}},props.borrando?"Borrando…":"Borrar definitivamente"),
+        h("button",{type:"button",disabled:props.borrando,onClick:props.onCancelar,style:{background:"transparent",border:"none",color:"var(--gray)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",padding:"6px"}},"Cancelar"))));
+}
+
+// Módulo por mes: cuadritos → lista del mes. Lo usan Órdenes e Inspecciones con la misma apariencia y los mismos controles.
+function MtoModulo(props){
+  var h=React.createElement,S=React.useState;
+  var anio=props.anio,items=props.items||[],usuarios=props.usuarios||[],currentUser=props.currentUser,campos=props.campos,tx=props.textos||{};
+  var hoy=new Date(),hoyMes=hoy.getMonth()+1,hoyAnio=hoy.getFullYear();
+  var canEdit=!!(currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0);
+  var _v=S("meses"),vista=_v[0],setVista=_v[1];
+  var _m=S(mtoMesInicial(items,anio)),mes=_m[0],setMes=_m[1];
+  var _b=S(""),busca=_b[0],setBusca=_b[1];
+  var _t=S(""),filtroTec=_t[0],setFiltroTec=_t[1];
+  var _e=S(""),filtroEst=_e[0],setFiltroEst=_e[1];
+  var _d=S(false),descargando=_d[0],setDescargando=_d[1];
+  var _s=S(false),modoSel=_s[0],setModoSel=_s[1];
+  var _c=S({}),marcadas=_c[0],setMarcadas=_c[1];
+  var _l=S(""),tecLote=_l[0],setTecLote=_l[1];
+  var ajustado=React.useRef(items.length>0);
+  React.useEffect(function(){if(!ajustado.current&&items.length){ajustado.current=true;setMes(mtoMesInicial(items,anio));}},[items.length]);
+  React.useEffect(function(){setVista("meses");setModoSel(false);setMarcadas({});},[anio]);
+  React.useEffect(function(){
+    if(props.api)props.api.current={
+      irAMeses:function(m){if(m)setMes(m);setVista("meses");setModoSel(false);setMarcadas({});},
+      abrirMes:function(m){setMes(m);setVista("lista");}};
+  });
+  var estadoDe=function(o){return mtoEstadoDe(o,hoyMes,hoyAnio);};
+  var nombreMes=MTTO_MESES[mes-1];
+
+  // ── cálculos
+  var porMes=[];
+  for(var mm=1;mm<=12;mm++){
+    var os=items.filter(function(o){return o.mes===mm;});
+    porMes.push({mes:mm,total:os.length,ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,venc:os.filter(function(o){return estadoDe(o)==="vencida";}).length,repr:os.filter(function(o){return o.estado==="reprogramado";}).length});
+  }
+  var totEjec=items.filter(function(o){return o.estado==="ejecutado";}).length,totVenc=items.filter(function(o){return estadoDe(o)==="vencida";}).length;
+  var pctAnio=items.length?Math.round(totEjec/items.length*100):0;
+  var delMesBase=items.filter(function(o){return o.mes===mes;});
+  var q=busca.trim().toLowerCase();
+  var delMes=delMesBase.filter(function(o){
+    if(filtroTec&&(o.asignado_a||"")!==filtroTec)return false;
+    if(filtroEst&&estadoDe(o)!==filtroEst)return false;
+    if(q&&String(campos.busqueda(o)||"").toLowerCase().indexOf(q)<0)return false;
+    return true;
+  });
+  var cEst={programado:0,ejecutado:0,vencida:0,reprogramado:0};
+  delMesBase.forEach(function(o){cEst[estadoDe(o)]=(cEst[estadoDe(o)]||0)+1;});
+  var nMarcadas=Object.keys(marcadas).filter(function(k){return marcadas[k];}).length;
+  var sinAsignar=delMes.filter(function(o){return o.estado!=="ejecutado"&&!o.asignado_a;});
+
+  function abrirMes(m){setMes(m);setMarcadas({});setModoSel(false);setFiltroEst("");setVista("lista");}
+  function volver(){setVista("meses");setMarcadas({});setModoSel(false);}
+  function alternarMarca(o){setMarcadas(function(p){var n=Object.assign({},p);if(n[o.id])delete n[o.id];else n[o.id]=true;return n;});}
+  async function asignarLote(){
+    var ids=Object.keys(marcadas).filter(function(k){return marcadas[k];}).map(Number);
+    if(!ids.length||!tecLote||!props.asignarLote)return;
+    var quien=currentUser&&(currentUser.nombre||currentUser.username)||null;
+    var ok=await props.asignarLote(ids,{asignado_a:tecLote,asignado_por:quien,fecha_asignacion:new Date().toISOString()},{n:ids.length,tecnico:tecLote,mesNombre:nombreMes});
+    if(ok){setMarcadas({});setModoSel(false);setTecLote("");}
+  }
+  var ctx={items:items,mes:mes,mesNombre:nombreMes,delMes:delMesBase,vista:vista,cargando:!!props.cargando,error:props.errorNode||null};
+
+  // ── piezas
+  var stat=function(icono,valor,etiqueta,color,key){
+    return h("div",{className:"mto-stat",key:key},
+      h("div",{className:"mto-stat-ico",style:{background:color+"1A"}},icono),
+      h("div",{style:{minWidth:0}},h("div",{className:"mto-stat-val",style:{color:color}},valor),h("div",{className:"mto-stat-lbl"},etiqueta)));
+  };
+  var tarjeta=function(o){
+    var est=estadoDe(o),fq=campos.estiloLetra(o)||{bg:"var(--light)",col:"var(--navy)"},letra=String(campos.letra(o)||""),sub=campos.subtitulo(o);
+    var info=MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado;
+    return h("div",{className:"mto-fila",key:o.id},
+      modoSel&&h("input",{type:"checkbox",checked:!!marcadas[o.id],onChange:function(){alternarMarca(o);}}),
+      h("button",{type:"button",className:"mto-card"+(marcadas[o.id]?" marcada":""),style:{"--acento":MTO_ACENTO[est]||MTO_ACENTO.programado},
+        onClick:function(){if(modoSel)alternarMarca(o);else props.onAbrir(o);}},
+        h("div",{className:"mto-letra",style:{background:fq.bg,color:fq.col,fontSize:letra.length>1?13:15}},letra),
+        h("div",{className:"mto-card-cuerpo"},
+          h("div",{className:"mto-card-titulo"},campos.titulo(o)),
+          h("div",{className:"mto-card-sub"},sub),
+          o.asignado_a&&h("div",{className:"mto-card-asig"},"👤 ",o.asignado_a)),
+        h("span",{className:"badge "+(est==="vencida"?"badge-red":info.cls),style:{flexShrink:0}},est==="vencida"?"Vencida":info.label)));
+  };
+
+  // ── vista: cuadritos de mes
+  var vistaMeses;
+  if(props.errorNode)vistaMeses=h("div",null,props.errorNode);
+  else{
+    var acc=props.renderAccionesMeses?props.renderAccionesMeses(ctx):null;
+    var cuerpo;
+    if(props.cargando)cuerpo=h("div",{className:"mto-vacio"},"Cargando…");
+    else if(!items.length)cuerpo=props.vacio||h("div",{className:"mto-vacio"},h("b",null,"Sin programa para "+anio),"Aún no hay "+(tx.plural||"registros")+" cargados en este año.");
+    else cuerpo=h("div",{className:"mto-meses"},porMes.map(function(pm){
+      var actual=pm.mes===hoyMes&&anio===hoyAnio,pct=pm.total>0?Math.round(pm.ejec/pm.total*100):null;
+      return h("button",{type:"button",key:pm.mes,className:"mto-mes"+(actual?" hoy":"")+(pm.total===0?" vacio":""),onClick:function(){abrirMes(pm.mes);}},
+        h("div",{className:"mto-mes-top"},h("span",{className:"mto-mes-nombre"},MTTO_MESES_C[pm.mes-1]),actual&&h("span",{className:"mto-mes-hoy"},"HOY")),
+        h("div",{className:"mto-mes-total"},pm.total),
+        h("div",{className:"mto-mes-det"},
+          h("span",{style:{color:"#1D7A3E"}},"✓ ",pm.ejec),
+          pm.venc>0&&h("span",{style:{color:"#C0001A"}},"⚠ ",pm.venc),
+          pm.repr>0&&h("span",{style:{color:"#C45200"}},"↻ ",pm.repr)),
+        pct!==null&&h("div",{className:"mto-mes-barra"},h("i",{style:{width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)"}})));
+    }));
+    vistaMeses=h("div",null,
+      items.length>0&&!props.cargando&&h("div",{className:"mto-stats"},
+        stat("📅",items.length,(tx.programadas||"Programadas")+" "+anio,"#0D2F5C","a"),
+        stat("✅",totEjec,"Ejecutadas","#1D7A3E","b"),
+        stat("⚠️",totVenc,"Vencidas",totVenc>0?"#C0001A":"#8a96a8","c"),
+        stat("📈",pctAnio+"%","Avance del año","#2d7dd2","d")),
+      acc&&h("div",{className:"mto-acciones"},acc),
+      cuerpo);
+  }
+
+  // ── vista: lista del mes
+  var chips=[["","Todas",delMesBase.length],["programado","Programadas",cEst.programado],["ejecutado","Ejecutadas",cEst.ejecutado],["vencida","Vencidas",cEst.vencida],["reprogramado","Reprogramadas",cEst.reprogramado]];
+  var grupos=null;
+  if(campos.grupo){
+    grupos=[];var mapa={};
+    delMes.forEach(function(o){var g=campos.grupo(o);if(!mapa[g]){mapa[g]={nombre:g,items:[]};grupos.push(mapa[g]);}mapa[g].items.push(o);});
+  }
+  var contenidoLista;
+  if(!delMes.length)contenidoLista=h("div",{className:"mto-vacio"},"Sin "+(tx.plural||"registros")+" "+((busca||filtroTec||filtroEst)?"que coincidan con el filtro":"programados en "+nombreMes)+".");
+  else if(grupos)contenidoLista=h("div",{className:"mto-grupos"},grupos.map(function(g){return h("div",{key:g.nombre},h("div",{className:"mto-seccion"},g.nombre+" · "+g.items.length),h("div",{className:"mto-grupo-items"},g.items.map(tarjeta)));}));
+  else contenidoLista=h("div",{className:"mto-lista"},delMes.map(tarjeta));
+  var accL=props.renderAccionesLista?props.renderAccionesLista(ctx):null;
+  var vistaLista=h("div",null,
+    h("div",{style:{marginBottom:14,display:"flex",gap:8,justifyContent:"space-between",flexWrap:"wrap"}},
+      h("button",{type:"button",className:"mto-btn",onClick:volver},"← Meses"),
+      accL),
+    h("div",{className:"mto-barra"},
+      h("select",{className:"ios-input",value:mes,style:{fontWeight:700},onChange:function(ev){abrirMes(parseInt(ev.target.value,10));}},
+        MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",porMes[i].total,")");})),
+      h("input",{className:"ios-input mto-busca",placeholder:tx.buscar||"Buscar…",value:busca,onChange:function(ev){setBusca(ev.target.value);}}),
+      h("select",{className:"ios-input",value:filtroTec,style:{maxWidth:200,fontWeight:600},onChange:function(ev){setFiltroTec(ev.target.value);}},
+        h("option",{value:""},"👤 Todos"),
+        usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
+      canEdit&&props.asignarLote&&delMesBase.length>0&&h("button",{type:"button",className:"mto-btn"+(modoSel?" prim":""),onClick:function(){setModoSel(!modoSel);setMarcadas({});}},modoSel?"✕ Salir de la selección":"☑ Asignar en lote"),
+      h("button",{type:"button",className:"mto-btn prim",disabled:delMes.length===0||descargando||!props.onImprimir,
+        onClick:function(){setDescargando(true);Promise.resolve(props.onImprimir(delMes,nombreMes)).finally(function(){setDescargando(false);});}},
+        descargando?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")")),
+    modoSel&&h("div",{className:"mto-barra"},
+      h("button",{type:"button",className:"mto-btn",onClick:function(){var n={};sinAsignar.forEach(function(o){n[o.id]=true;});setMarcadas(n);}},"Seleccionar sin asignar ("+sinAsignar.length+")"),
+      h("select",{className:"ios-input",value:tecLote,style:{maxWidth:220,fontWeight:600},onChange:function(ev){setTecLote(ev.target.value);}},
+        h("option",{value:""},"Asignar a…"),usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
+      h("button",{type:"button",className:"mto-btn prim",disabled:!nMarcadas||!tecLote,onClick:asignarLote},"Asignar ("+nMarcadas+")")),
+    h("div",{className:"mto-chips"},chips.map(function(c){
+      return h("button",{type:"button",key:c[0]||"todas",className:"mto-chip"+(filtroEst===c[0]?" on":""),onClick:function(){setFiltroEst(c[0]);}},c[1],h("small",null,c[2]));})),
+    h("div",{className:"mto-resumen"},delMes.length+" "+(tx.plural||"registros")+" · "+delMes.filter(function(o){return o.estado==="ejecutado";}).length+" ejecutadas"+(cEst.vencida?" · "+cEst.vencida+" vencidas":"")),
+    contenidoLista);
+
+  return vista==="meses"?vistaMeses:vistaLista;
+}
+
+// ── Pestaña "Órdenes": mismo molde que Inspecciones (cuadritos de mes → lista del mes) ─────────
+function OrdenesTab(p){
+  var h=React.createElement,S=React.useState;
+  var ordenes=p.ordenes||[],anio=p.anio,canImport=p.canImport;
+  var _bo=S(null),borrar=_bo[0],setBorrar=_bo[1];   // {alcance:"mes"|"anio",mes,mesNombre}
+  var _bd=S(false),borrando=_bd[0],setBorrando=_bd[1];
+  var campos={
+    titulo:function(o){return o.equipo_desc||o.equipo_codigo||"—";},
+    subtitulo:function(o){return [o.equipo_codigo,o.consecutivo].filter(Boolean).join(" · ");},
+    letra:function(o){return o.frecuencia;},
+    estiloLetra:function(o){return MTTO_FREQ_STYLE[o.frecuencia]||MTTO_FREQ_STYLE.T;},
+    grupo:function(o){return o.seccion||"SIN SECCIÓN";},
+    busqueda:function(o){return (o.equipo_codigo||"")+" "+(o.equipo_desc||"")+" "+(o.seccion||"")+" "+(o.consecutivo||"");}
+  };
+  async function asignarLote(ids,patch,info){
+    var ok=await p.onBulkAssign(ids,patch);
+    if(ok){
+      pushNotificacion("🔧 Órdenes asignadas",ids.length+" órdenes de "+info.mesNombre+" → "+info.tecnico);
+      p.flash(ids.length+" órdenes asignadas a "+info.tecnico+" ✓");
+    }
+    return ok;
+  }
+  function filasABorrar(){return borrar?ordenes.filter(function(o){return borrar.alcance==="anio"||o.mes===borrar.mes;}):[];}
+  async function confirmarBorrado(){
+    var b=borrar;if(!b)return;
+    setBorrando(true);
+    try{
+      var filas=filasABorrar();
+      var q=sb.from("mtto_ordenes").delete({count:"exact"}).eq("anio",anio);
+      if(b.alcance==="mes")q=q.eq("mes",b.mes);
+      var r=await q;
+      if(r.error)throw r.error;
+      var n=(r.count!=null)?r.count:filas.length;
+      registrarHistorial("mtto_borrar","Borradas "+n+" órdenes de "+(b.alcance==="mes"?b.mesNombre+" ":"todo el cronograma ")+anio,p.currentUser&&(p.currentUser.nombre||p.currentUser.username));
+      if(typeof CUMPL_CACHE!=="undefined")delete CUMPL_CACHE[anio];   // Cumplimiento1 vuelve a leer
+      setBorrar(null);
+      await p.onReload();
+      p.flash(n+" órdenes borradas ✓");
+    }catch(e){p.flash("No se pudo borrar: "+((e&&e.message)||JSON.stringify(e)),false);}
+    setBorrando(false);
+  }
+  var vacio=h("div",{className:"mto-vacio"},h("b",null,"Sin cronograma para "+anio),canImport?"Importa el archivo F-MAN-012 para cargar las actividades programadas.":"Aún no se ha importado el cronograma de este año.");
+  return h(React.Fragment,null,
+    h(MtoModulo,{anio:anio,items:ordenes,usuarios:p.usuarios,currentUser:p.currentUser,cargando:p.loading,vacio:vacio,
+      textos:{plural:"órdenes",programadas:"Programadas",buscar:"Buscar equipo, código o sección…"},campos:campos,
+      onAbrir:p.onAbrir,asignarLote:asignarLote,
+      onImprimir:function(l,mesNombre){return descargarOrdenesMesFMAN008(l,mesNombre,anio);},
+      renderAccionesMeses:function(ctx){
+        if(!canImport||p.loading)return null;
+        return h(React.Fragment,null,
+          h("button",{type:"button",className:"mto-btn"+(ordenes.length?"":" prim"),disabled:p.importing,onClick:p.onImportClick},p.importing?"⏳ Importando…":"⬆ Importar F-MAN-012"),
+          ordenes.length>0&&h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"anio"});}},"🗑 Borrar cronograma "+anio));
+      },
+      renderAccionesLista:function(ctx){
+        return canImport&&ctx.delMes.length>0?h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"mes",mes:ctx.mes,mesNombre:ctx.mesNombre});}},"🗑 Borrar "+ctx.mesNombre):null;
+      }}),
+    borrar&&h(MtoBorrarModal,{alcance:borrar.alcance,mesNombre:borrar.mesNombre,anio:anio,filas:filasABorrar(),plural:"órdenes",rangoTexto:null,borrando:borrando,onConfirmar:confirmarBorrado,onCancelar:function(){setBorrar(null);}}));
+}
+
 // ── Inspecciones locativas: datos, importación del F-MAN-009 y pantallas ─────────────────────
 var INSP_CACHE={};   // anio -> inspecciones leídas (para abrir al instante)
 async function inspCargarAnio(anio){
@@ -14480,15 +14781,6 @@ async function inspImportar(parsed,opc){
          primero:numeradas.length?numeradas[0].consecutivo:null,ultimo:numeradas.length?numeradas[numeradas.length-1].consecutivo:null};
 }
 
-// Mes con el que abre la pestaña: el de hoy; si no tiene inspecciones, el más cercano que sí tenga.
-function inspMesInicial(filas,anio){
-  var hoy=new Date(),base=anio===hoy.getFullYear()?hoy.getMonth()+1:1;
-  var meses=Array.from(new Set((filas||[]).map(function(o){return o.mes;}))).sort(function(a,b){return a-b;});
-  if(!meses.length||meses.indexOf(base)>=0)return base;
-  var sig=meses.filter(function(x){return x>=base;})[0];
-  return sig||meses[meses.length-1];
-}
-
 // ── Detalle de una inspección ──
 function InspeccionSheet(props){
   var insp=props.insp,currentUser=props.currentUser,usuarios=props.usuarios,onClose=props.onClose,onUpdate=props.onUpdate;
@@ -14547,7 +14839,7 @@ function InspeccionSheet(props){
         onSave:async function(patch){await onUpdate(patch);setModal(null);}})));
 }
 
-// ── Pestaña "Inspecciones" ──
+// ── Pestaña "Inspecciones": usa el mismo molde que Órdenes ──
 function InspeccionesTab(props){
   var anio=props.anio,usuarios=props.usuarios||[],currentUser=props.currentUser,canImport=props.canImport;
   var h=React.createElement,S=React.useState;
@@ -14556,26 +14848,16 @@ function InspeccionesTab(props){
   var _l=S(cache0||[]),lista=_l[0],setLista=_l[1];
   var _c=S(!cache0),cargando=_c[0],setCargando=_c[1];
   var _e=S(null),errorCarga=_e[0],setErrorCarga=_e[1];
-  var _m=S(inspMesInicial(cache0,anio)),mes=_m[0],setMes=_m[1];
-  var _b=S(""),busca=_b[0],setBusca=_b[1];
-  var _t=S(""),filtroTec=_t[0],setFiltroTec=_t[1];
   var _s=S(null),sel=_s[0],setSel=_s[1];
   var _f=S(null),msg=_f[0],setMsg=_f[1];
-  var _d=S(false),descargando=_d[0],setDescargando=_d[1];
-  var _v=S("meses"),vista=_v[0],setVista=_v[1];     // "meses" = cuadritos de cada mes · "lista" = inspecciones del mes elegido
-  var _bo=S(null),borrar=_bo[0],setBorrar=_bo[1];    // confirmación de borrado: {alcance:"mes"|"anio"}
-  var _bt=S(""),textoBorrar=_bt[0],setTextoBorrar=_bt[1];
-  var _bd=S(false),borrando=_bd[0],setBorrando=_bd[1];
   var _p=S(null),previa=_p[0],setPrevia=_p[1];       // vista previa de la importación
   var _i=S(false),importando=_i[0],setImportando=_i[1];
   var _dm=S(1),desdeMes=_dm[0],setDesdeMes=_dm[1];
   var _nd=S(12),numDesde=_nd[0],setNumDesde=_nd[1];     // desde qué mes se numera (L2054…)
   var _hi=S(true),historico=_hi[0],setHistorico=_hi[1];   // meses anteriores: cargarlos como ya ejecutados
-  var _ms=S(false),modoSel=_ms[0],setModoSel=_ms[1];   // selección para asignar en lote
-  var _ch=S({}),marcadas=_ch[0],setMarcadas=_ch[1];
-  var _lt=S(""),tecLote=_lt[0],setTecLote=_lt[1];
-  var fileRef=React.useRef(null),mesAjustado=React.useRef(!!cache0);
-  var canEdit=!!(currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0);
+  var _bo=S(null),borrar=_bo[0],setBorrar=_bo[1];    // {alcance:"mes"|"anio",mes,mesNombre}
+  var _bd=S(false),borrando=_bd[0],setBorrando=_bd[1];
+  var fileRef=React.useRef(null),api=React.useRef(null);
 
   function flash(texto,ok){setMsg({texto:texto,ok:ok!==false});setTimeout(function(){setMsg(null);},4500);}
   async function cargar(silencioso){
@@ -14583,10 +14865,6 @@ function InspeccionesTab(props){
     try{
       var filas=await inspCargarAnio(anio);
       INSP_CACHE[anio]=filas;setLista(filas);setErrorCarga(null);
-      if(!mesAjustado.current&&filas.length){   // la primera vez, abre en el mes más cercano que tenga inspecciones
-        mesAjustado.current=true;
-        setMes(inspMesInicial(filas,anio));
-      }
     }catch(e){
       setErrorCarga(inspEsErrorTablaFaltante(e)?"tabla":((e&&e.message)||String(e)));
     }
@@ -14602,38 +14880,14 @@ function InspeccionesTab(props){
     setSel(upd);
     if(patch.estado==="reprogramado")flash("Inspección reprogramada ↻");
   }
-  async function asignarLote(){
-    var ids=Object.keys(marcadas).filter(function(k){return marcadas[k];}).map(Number);
-    if(!ids.length||!tecLote)return;
-    var quien=currentUser&&(currentUser.nombre||currentUser.username)||null;
-    var patch={asignado_a:tecLote,asignado_por:quien,fecha_asignacion:new Date().toISOString()};
+  async function asignarLote(ids,patch,info){
     var r=await sb.from("mtto_inspecciones").update(patch).in("id",ids).select();
-    if(r.error){flash("Error al asignar: "+r.error.message,false);return;}
+    if(r.error){flash("Error al asignar: "+r.error.message,false);return false;}
     var porId={};(r.data||[]).forEach(function(o){porId[o.id]=o;});
     setLista(function(prev){var n=prev.map(function(o){return porId[o.id]||(ids.indexOf(o.id)>=0?Object.assign({},o,patch):o);});INSP_CACHE[anio]=n;return n;});
-    pushNotificacion("🧱 Inspecciones asignadas",ids.length+" inspecciones de "+MTTO_MESES[mes-1]+" → "+tecLote);
-    flash(ids.length+" inspecciones asignadas a "+tecLote+" ✓");
-    setMarcadas({});setModoSel(false);setTecLote("");
-  }
-  // Filas que alcanzaría el borrado elegido (según lo que se ve en pantalla)
-  function filasABorrar(b){return lista.filter(function(o){return b&&(b.alcance==="anio"||o.mes===mes);});}
-  async function confirmarBorrado(){
-    var b=borrar;if(!b)return;
-    setBorrando(true);
-    try{
-      var filas=filasABorrar(b);
-      var q=sb.from("mtto_inspecciones").delete({count:"exact"}).eq("anio",anio);
-      if(b.alcance==="mes")q=q.eq("mes",mes);
-      var r=await q;
-      if(r.error)throw r.error;
-      var n=(r.count!=null)?r.count:filas.length;
-      registrarHistorial("insp_borrar","Borradas "+n+" inspecciones de "+(b.alcance==="mes"?MTTO_MESES[mes-1]+" ":"todo el cronograma ")+anio,currentUser&&(currentUser.nombre||currentUser.username));
-      if(typeof CUMPL_CACHE!=="undefined")delete CUMPL_CACHE[anio];   // Cumplimiento1 vuelve a leer
-      setBorrar(null);setTextoBorrar("");setMarcadas({});setModoSel(false);setVista("meses");
-      await cargar(true);
-      flash(n+" inspecciones borradas ✓");
-    }catch(e){flash("No se pudo borrar: "+((e&&e.message)||JSON.stringify(e)),false);}
-    setBorrando(false);
+    pushNotificacion("🧱 Inspecciones asignadas",ids.length+" inspecciones de "+info.mesNombre+" → "+info.tecnico);
+    flash(ids.length+" inspecciones asignadas a "+info.tecnico+" ✓");
+    return true;
   }
   async function leerArchivo(ev){
     var file=ev.target.files&&ev.target.files[0];ev.target.value="";
@@ -14656,129 +14910,69 @@ function InspeccionesTab(props){
         registrarHistorial("insp_import","Import F-MAN-009 "+previa.anio+" desde "+MTTO_MESES[desdeMes-1]+" ("+r.insertadas+" inspecciones)",currentUser&&(currentUser.nombre||currentUser.username));
       }
       var anioImp=previa.anio;setPrevia(null);
-      if(anioImp===anio){setMes(Math.max(desdeMes,numDesde));mesAjustado.current=true;setVista("meses");await cargar(true);}
+      if(anioImp===anio){if(api.current)api.current.irAMeses(Math.max(desdeMes,numDesde));await cargar(true);}
       else if(props.onCambiarAnio)props.onCambiarAnio(anioImp);
     }catch(e){flash("Error al importar: "+((e&&e.message)||JSON.stringify(e)),false);}
     setImportando(false);
   }
-
-  var vencida=function(o){return o.estado==="programado"&&(o.anio<hoyAnio||(o.anio===hoyAnio&&o.mes<hoyMes));};
-  var porMes=[];for(var m=1;m<=12;m++){porMes.push(lista.filter(function(o){return o.mes===m;}).length);}
-  var porMesDet=[];
-  for(var mm=1;mm<=12;mm++){
-    var osm=lista.filter(function(o){return o.mes===mm;});
-    porMesDet.push({mes:mm,total:osm.length,ejec:osm.filter(function(o){return o.estado==="ejecutado";}).length,venc:osm.filter(vencida).length,repr:osm.filter(function(o){return o.estado==="reprogramado";}).length});
-  }
-  var totAnio=lista.length,totEjec=lista.filter(function(o){return o.estado==="ejecutado";}).length,totVenc=lista.filter(vencida).length;
-  var q=busca.trim().toLowerCase();
-  var delMes=lista.filter(function(o){
-    if(o.mes!==mes)return false;
-    if(filtroTec&&o.asignado_a!==filtroTec)return false;
-    if(q&&((o.area_nombre||"")+" "+(o.consecutivo||"")+" "+(o.esclusa_c41||"")+" "+(o.esclusa_c56||"")).toLowerCase().indexOf(q)<0)return false;
-    return true;
-  });
-  var nEjec=delMes.filter(function(o){return o.estado==="ejecutado";}).length,nVenc=delMes.filter(vencida).length;
-  var nMarcadas=Object.keys(marcadas).filter(function(k){return marcadas[k];}).length;
-  var btnNavy={background:"var(--navy)",color:"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap"};
-  var btnPeligro={background:"#FDECEE",color:"#C0001A",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap"};
-  var btnClaro={background:"var(--light)",color:"var(--navy)",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap"};
-
-  var cuerpo;
-  if(errorCarga==="tabla"){
-    cuerpo=h("div",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:14,padding:"26px 22px",fontSize:13,color:"var(--navy)",lineHeight:1.55}},
-      h("div",{style:{fontWeight:800,marginBottom:6}},"Falta crear la tabla de inspecciones"),
-      "Ejecuta el archivo ",h("b",null,"inspecciones_fman009.sql")," en Supabase (SQL Editor) y luego toca Reintentar.",
-      h("div",{style:{marginTop:12}},h("button",{type:"button",onClick:function(){cargar(false);},style:btnNavy},"↻ Reintentar")));
-  }else if(errorCarga){
-    cuerpo=h("div",{style:{padding:30,textAlign:"center",color:"#C0001A",fontSize:13,fontWeight:600}},"No se pudieron cargar las inspecciones: "+errorCarga);
-  }else if(cargando){
-    cuerpo=h("div",{style:{textAlign:"center",padding:60,color:"var(--gray)",fontSize:13,fontWeight:600}},"Cargando inspecciones…");
-  }else if(!lista.length){
-    cuerpo=h("div",{style:{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600,lineHeight:1.6}},
-      "Aún no hay inspecciones en "+anio+".",canImport?h("div",null,"Sube el cronograma F-MAN-009 con el botón “Importar F-MAN-009”."):null);
-  }else if(!delMes.length){
-    cuerpo=h("div",{style:{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600}},"Sin inspecciones "+(busca||filtroTec?"que coincidan con el filtro":"programadas en "+MTTO_MESES[mes-1])+".");
-  }else{
-    cuerpo=h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
-      delMes.map(function(o){
-        var fq=INSP_FREQ_STYLE[o.frecuencia]||INSP_FREQ_STYLE.T,venc=vencida(o),est=MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado;
-        var extra=[];if(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre)extra.push("esclusa de personal");if(o.esclusa_c56)extra.push("esclusa de materiales");
-        return h("div",{key:o.id,style:{display:"flex",alignItems:"center",gap:8}},
-          modoSel&&h("input",{type:"checkbox",checked:!!marcadas[o.id],style:{width:18,height:18,flexShrink:0},onChange:function(ev){var c=ev.target.checked;setMarcadas(function(p){var n=Object.assign({},p);if(c)n[o.id]=true;else delete n[o.id];return n;});}}),
-          h("button",{onClick:function(){if(modoSel)setMarcadas(function(p){var n=Object.assign({},p);if(n[o.id])delete n[o.id];else n[o.id]=true;return n;});else setSel(o);},
-            style:{flex:1,minWidth:0,background:"#fff",border:"1px solid var(--border)",borderRadius:14,padding:"12px 14px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:12,boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},
-            h("div",{style:{width:42,height:42,borderRadius:11,background:fq.bg,color:fq.col,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:o.frecuencia==="BN"?13:15,flexShrink:0}},o.frecuencia),
-            h("div",{style:{flex:1,minWidth:0}},
-              h("div",{style:{fontSize:13.5,fontWeight:700,color:"var(--navy)",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:1.25}},o.area_nombre),
-              h("div",{style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}},o.consecutivo||"sin consecutivo",extra.length?" · + "+extra.join(" y "):""),
-              o.asignado_a&&h("div",{style:{fontSize:11,color:"var(--accent)",fontWeight:700,marginTop:3}},"👤 ",o.asignado_a)),
-            h("span",{className:"badge "+(venc?"badge-red":est.cls),style:{flexShrink:0}},venc?"Vencida":est.label)));
-      }));
+  // Borrado de lo importado (un mes o todo el cronograma del año)
+  function filasABorrar(){return borrar?lista.filter(function(o){return borrar.alcance==="anio"||o.mes===borrar.mes;}):[];}
+  async function confirmarBorrado(){
+    var b=borrar;if(!b)return;
+    setBorrando(true);
+    try{
+      var filas=filasABorrar();
+      var q=sb.from("mtto_inspecciones").delete({count:"exact"}).eq("anio",anio);
+      if(b.alcance==="mes")q=q.eq("mes",b.mes);
+      var r=await q;
+      if(r.error)throw r.error;
+      var n=(r.count!=null)?r.count:filas.length;
+      registrarHistorial("insp_borrar","Borradas "+n+" inspecciones de "+(b.alcance==="mes"?b.mesNombre+" ":"todo el cronograma ")+anio,currentUser&&(currentUser.nombre||currentUser.username));
+      if(typeof CUMPL_CACHE!=="undefined")delete CUMPL_CACHE[anio];   // Cumplimiento1 vuelve a leer
+      setBorrar(null);
+      if(api.current)api.current.irAMeses();
+      await cargar(true);
+      flash(n+" inspecciones borradas ✓");
+    }catch(e){flash("No se pudo borrar: "+((e&&e.message)||JSON.stringify(e)),false);}
+    setBorrando(false);
   }
 
-  var statCard=function(icono,valor,etiqueta,color){
-    return h("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},
-      h("div",{style:{width:30,height:30,borderRadius:9,background:color+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},icono),
-      h("div",{style:{minWidth:0}},
-        h("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:color}},valor),
-        h("div",{style:{fontSize:9.5,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3,fontFamily:"Montserrat,sans-serif",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},etiqueta)));
+  var campos={
+    titulo:function(o){return o.area_nombre;},
+    subtitulo:function(o){
+      var extra=[];if(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre)extra.push("esclusa de personal");if(o.esclusa_c56)extra.push("esclusa de materiales");
+      return (o.consecutivo||"sin consecutivo")+(extra.length?" · + "+extra.join(" y "):"");
+    },
+    letra:function(o){return o.frecuencia;},
+    estiloLetra:function(o){return INSP_FREQ_STYLE[o.frecuencia]||INSP_FREQ_STYLE.T;},
+    busqueda:function(o){return (o.area_nombre||"")+" "+(o.consecutivo||"")+" "+(o.esclusa_c41||"")+" "+(o.esclusa_c56||"");}
   };
-  // Cuadritos de cada mes, igual que el Calendario de Órdenes: al tocar uno se abre su lista.
-  var vistaMeses=h("div",null,
-    lista.length>0&&!cargando&&!errorCarga&&h("div",{style:{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}},
-      statCard("📅",totAnio,"Programadas "+anio,"#0D2F5C"),
-      statCard("✅",totEjec,"Ejecutadas","#1D7A3E"),
-      statCard("⚠️",totVenc,"Vencidas",totVenc>0?"#C0001A":"#8a96a8")),
-    (canImport&&!errorCarga&&!cargando)&&h("div",{style:{marginBottom:14}},
-      h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
-        h("button",{type:"button",onClick:function(){fileRef.current&&fileRef.current.click();},style:lista.length?btnClaro:btnNavy},"⬆ Importar F-MAN-009"),
-        lista.length>0&&h("button",{type:"button",onClick:function(){setTextoBorrar("");setBorrar({alcance:"anio"});},style:btnPeligro},"🗑 Borrar cronograma "+anio))),
-    errorCarga==="tabla"?cuerpo:errorCarga?cuerpo:cargando?cuerpo:!lista.length?cuerpo:
-    h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}},
-      porMesDet.map(function(pm){
-        var actual=pm.mes===hoyMes&&anio===hoyAnio;
-        var pct=pm.total>0?Math.round(pm.ejec/pm.total*100):null;
-        return h("button",{key:pm.mes,onClick:function(){setMes(pm.mes);setMarcadas({});setModoSel(false);setVista("lista");},className:"stat-card",
-          style:{cursor:"pointer",textAlign:"left",border:actual?"2px solid var(--accent)":"1px solid var(--border)",background:"#fff",padding:"13px 14px"}},
-          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
-            h("span",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:"var(--navy)",textTransform:"uppercase"}},MTTO_MESES_C[pm.mes-1]),
-            actual&&h("span",{style:{fontSize:9,fontWeight:800,color:"var(--accent)",letterSpacing:0.8}},"HOY")),
-          h("div",{style:{fontSize:22,fontWeight:800,color:"var(--navy)",marginTop:4}},pm.total),
-          h("div",{style:{display:"flex",gap:8,marginTop:5,fontSize:11,fontWeight:700}},
-            h("span",{style:{color:"#1D7A3E"}},"✓ ",pm.ejec),
-            pm.venc>0&&h("span",{style:{color:"#C0001A"}},"⚠ ",pm.venc),
-            pm.repr>0&&h("span",{style:{color:"#C45200"}},"↻ ",pm.repr)),
-          pct!==null&&h("div",{style:{height:5,background:"var(--light)",borderRadius:3,marginTop:8,overflow:"hidden"}},
-            h("div",{style:{height:"100%",width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)",borderRadius:3}})));
-      })));
-  // Lista del mes elegido: imprimir todo el mes o abrir una inspección
-  var vistaLista=h("div",null,
-    h("div",{style:{marginBottom:12,display:"flex",gap:8,justifyContent:"space-between",flexWrap:"wrap"}},
-      h("button",{type:"button",onClick:function(){setVista("meses");setMarcadas({});setModoSel(false);},style:btnClaro},"← Meses"),
-      canImport&&lista.some(function(o){return o.mes===mes;})&&h("button",{type:"button",onClick:function(){setTextoBorrar("");setBorrar({alcance:"mes"});},style:btnPeligro},"🗑 Borrar "+MTTO_MESES[mes-1])),
-    h("div",{style:{display:"flex",gap:10,marginBottom:12,flexWrap:"wrap",alignItems:"center"}},
-      h("select",{className:"ios-input",value:mes,style:{width:"auto",padding:"9px 12px",fontWeight:700,fontSize:13},onChange:function(ev){setMes(parseInt(ev.target.value,10));setMarcadas({});}},
-        MTTO_MESES.map(function(mn,i){return h("option",{key:i,value:i+1},mn," (",porMes[i],")");})),
-      h("input",{className:"ios-input",placeholder:"Buscar área, esclusa o consecutivo…",value:busca,onChange:function(ev){setBusca(ev.target.value);},style:{flex:1,minWidth:180,padding:"9px 12px",fontSize:13}}),
-      h("select",{className:"ios-input",value:filtroTec,style:{width:"auto",maxWidth:180,padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function(ev){setFiltroTec(ev.target.value);}},
-        h("option",{value:""},"👤 Todos"),
-        usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
-      h("button",{type:"button",disabled:delMes.length===0||descargando,
-        onClick:function(){setDescargando(true);descargarInspeccionesMesFMAN010(delMes,MTTO_MESES[mes-1],anio).finally(function(){setDescargando(false);});},
-        style:Object.assign({},btnNavy,delMes.length===0?{background:"var(--light)",color:"var(--gray)",cursor:"default"}:null)},descargando?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")")),
-    canEdit&&lista.length>0&&h("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}},
-      canEdit&&h("button",{type:"button",onClick:function(){setModoSel(!modoSel);setMarcadas({});},style:modoSel?btnNavy:btnClaro},modoSel?"✕ Salir de la selección":"☑ Asignar en lote"),
-      modoSel&&h("button",{type:"button",style:btnClaro,onClick:function(){var n={};delMes.forEach(function(o){if(o.estado!=="ejecutado"&&!o.asignado_a)n[o.id]=true;});setMarcadas(n);}},"Seleccionar sin asignar ("+delMes.filter(function(o){return o.estado!=="ejecutado"&&!o.asignado_a;}).length+")"),
-      modoSel&&h("select",{className:"ios-input",value:tecLote,style:{width:"auto",maxWidth:200,padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function(ev){setTecLote(ev.target.value);}},
-        h("option",{value:""},"Asignar a…"),usuarios.map(function(u){var n=u.nombre||u.username;return h("option",{key:u.id,value:n},n);})),
-      modoSel&&h("button",{type:"button",disabled:!nMarcadas||!tecLote,onClick:asignarLote,style:Object.assign({},btnNavy,(!nMarcadas||!tecLote)?{opacity:0.5,cursor:"default"}:null)},"Asignar ("+nMarcadas+")")),
-    lista.length>0&&!cargando&&h("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,marginBottom:8}},delMes.length+" inspecciones · "+nEjec+" ejecutadas"+(nVenc?" · "+nVenc+" vencidas":"")),
-    cuerpo,
-    null);
+  var errorNode=errorCarga==="tabla"
+    ?h("div",{className:"mto-vacio"},h("b",null,"Falta crear la tabla de inspecciones"),"Ejecuta el archivo ",h("b",{style:{display:"inline",fontSize:"inherit"}},"inspecciones_fman009.sql")," en Supabase (SQL Editor) y luego toca Reintentar.",
+        h("div",{style:{marginTop:14}},h("button",{type:"button",className:"mto-btn prim",onClick:function(){cargar(false);}},"↻ Reintentar")))
+    :errorCarga?h("div",{className:"mto-vacio",style:{color:"#C0001A"}},"No se pudieron cargar las inspecciones: "+errorCarga):null;
+  var vacio=h("div",{className:"mto-vacio"},h("b",null,"Aún no hay inspecciones en "+anio),canImport?"Sube el cronograma F-MAN-009 con el botón “Importar F-MAN-009”.":"Aún no se ha importado el cronograma de este año.");
+  var rangoBorrar=null;
+  if(borrar){
+    var nums=filasABorrar().map(function(o){return parseInt(String(o.consecutivo||"").replace(/\D/g,""),10);}).filter(function(n){return !isNaN(n);});
+    if(nums.length)rangoBorrar="Sus consecutivos (L"+Math.min.apply(null,nums)+" a L"+Math.max.apply(null,nums)+") quedan libres y se volverán a usar en la próxima importación.";
+  }
   return h("div",null,
     msg&&h("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:msg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 18px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},msg.texto),
     h("input",{ref:fileRef,type:"file",accept:".xlsx,.xlsm",style:{display:"none"},onChange:leerArchivo}),
-    vista==="meses"?vistaMeses:vistaLista,
+    h(MtoModulo,{api:api,anio:anio,items:lista,usuarios:usuarios,currentUser:currentUser,cargando:cargando,errorNode:errorNode,vacio:vacio,
+      textos:{plural:"inspecciones",programadas:"Programadas",buscar:"Buscar área, esclusa o consecutivo…"},campos:campos,
+      onAbrir:setSel,asignarLote:asignarLote,
+      onImprimir:function(l,mesNombre){return descargarInspeccionesMesFMAN010(l,mesNombre,anio);},
+      renderAccionesMeses:function(ctx){
+        if(!canImport||cargando||errorCarga)return null;
+        return h(React.Fragment,null,
+          h("button",{type:"button",className:"mto-btn"+(lista.length?"":" prim"),onClick:function(){fileRef.current&&fileRef.current.click();}},"⬆ Importar F-MAN-009"),
+          lista.length>0&&h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"anio"});}},"🗑 Borrar cronograma "+anio));
+      },
+      renderAccionesLista:function(ctx){
+        return canImport&&ctx.delMes.length>0?h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"mes",mes:ctx.mes,mesNombre:ctx.mesNombre});}},"🗑 Borrar "+ctx.mesNombre):null;
+      }}),
     sel&&h(InspeccionSheet,{insp:sel,currentUser:currentUser,usuarios:usuarios,onClose:function(){setSel(null);},onUpdate:function(patch){return actualizar(sel,patch);}}),
     previa&&h("div",{className:"overlay",onClick:function(){if(!importando)setPrevia(null);}},
       h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:520}},
@@ -14807,27 +15001,7 @@ function InspeccionesTab(props){
               previa.sueltas.map(function(s){return h("div",{key:s.fila},s.nombre," · sola en ",s.meses.map(function(m){return MTTO_MESES_C[m-1];}).join(", "));}))),
           h("button",{className:"ios-btn ios-btn-blue",disabled:importando,onClick:confirmarImport,style:{padding:"13px",fontSize:14}},importando?"Importando…":"Importar inspecciones"),
           h("button",{type:"button",disabled:importando,onClick:function(){setPrevia(null);},style:{background:"transparent",border:"none",color:"var(--gray)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",padding:"6px"}},"Cancelar, no importar")))),
-    borrar&&(function(){
-      var filas=filasABorrar(borrar),ej=filas.filter(function(o){return o.estado==="ejecutado";}).length,asg=filas.filter(function(o){return o.asignado_a;}).length;
-      var nums=filas.map(function(o){return parseInt(String(o.consecutivo||"").replace(/\D/g,""),10);}).filter(function(n){return !isNaN(n);});
-      var rango=nums.length?"L"+Math.min.apply(null,nums)+" a L"+Math.max.apply(null,nums):null;
-      var exigeTexto=borrar.alcance==="anio"||ej>0;
-      var habilitado=!borrando&&(!exigeTexto||textoBorrar.trim().toUpperCase()==="BORRAR");
-      return h("div",{className:"overlay",onClick:function(){if(!borrando)setBorrar(null);}},
-        h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:480}},
-          h("div",{className:"sheet-handle"}),
-          h("div",{className:"sheet-title"},"Borrar inspecciones"),
-          h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5}},
-            h("div",null,"Se van a borrar ",h("b",null,filas.length+" inspecciones")," de ",h("b",null,borrar.alcance==="mes"?MTTO_MESES[mes-1]+" "+anio:"todo el cronograma "+anio),"."),
-            ej>0&&h("div",{style:{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:10,padding:"9px 12px",fontSize:12.5}},"⚠ ",h("b",null,ej+" ya están ejecutadas"),"; se borra también su registro."),
-            asg>0&&h("div",{style:{fontSize:12.5,color:"var(--gray)"}},asg+" tienen técnico asignado."),
-            rango&&h("div",{style:{fontSize:12.5,color:"var(--gray)"}},"Sus consecutivos ("+rango+") quedan libres y se volverán a usar en la próxima importación."),
-            h("div",{style:{fontSize:12.5,color:"#C0001A",fontWeight:700}},"Esto no se puede deshacer."),
-            exigeTexto&&h("div",null,h("div",{className:"ios-input-label"},"Escribe BORRAR para confirmar"),
-              h("input",{className:"ios-input",value:textoBorrar,placeholder:"BORRAR",autoFocus:true,onChange:function(ev){setTextoBorrar(ev.target.value);}})),
-            h("button",{type:"button",disabled:!habilitado,onClick:confirmarBorrado,style:{background:habilitado?"#C0001A":"var(--light)",color:habilitado?"#fff":"var(--gray)",border:"none",borderRadius:10,padding:"13px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:14,cursor:habilitado?"pointer":"default"}},borrando?"Borrando…":"Borrar definitivamente"),
-            h("button",{type:"button",disabled:borrando,onClick:function(){setBorrar(null);},style:{background:"transparent",border:"none",color:"var(--gray)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",padding:"6px"}},"Cancelar"))));
-    })());
+    borrar&&h(MtoBorrarModal,{alcance:borrar.alcance,mesNombre:borrar.mesNombre,anio:anio,filas:filasABorrar(),plural:"inspecciones",rangoTexto:rangoBorrar,borrando:borrando,onConfirmar:confirmarBorrado,onCancelar:function(){setBorrar(null);}}));
 }
 
 // ── Administrador: plantilla del F-MAN-010 (igual que la del F-MAN-008) ──
@@ -15235,11 +15409,18 @@ function CumplimientoInterno(props){
   );
 }
 
-function MantenimientosApp(_ref29){var onBack=_ref29.onBack,initialUser=_ref29.initialUser;var t=React.useState("calendario");var tab=t[0],setTab=t[1];var y=React.useState(new Date().getFullYear());var anio=y[0],setAnio=y[1];var mo=React.useState(new Date().getMonth()+1);var mes=mo[0],setMes=mo[1];var d=React.useState([]);var ordenes=d[0],setOrdenes=d[1];var ld=React.useState(true);var loading=ld[0],setLoading=ld[1];var q=React.useState("");var busca=q[0],setBusca=q[1];var sel=React.useState(null);var selOrd=sel[0],setSelOrd=sel[1];var im=React.useState(false);var importing=im[0],setImporting=im[1];var fl=React.useState(null);var flashMsg=fl[0],setFlashMsg=fl[1];var us=React.useState([]);var usuarios=us[0],setUsuarios=us[1];var ft=React.useState("");var filtroTec=ft[0],setFiltroTec=ft[1];var dl=React.useState(false);var descargandoLote=dl[0],setDescargandoLote=dl[1];var rb=React.useState("");var regBusca=rb[0],setRegBusca=rb[1];var re=React.useState("");var regEstado=re[0],setRegEstado=re[1];var rm=React.useState("");var regMes=rm[0],setRegMes=rm[1];var fileRef=React.useRef(null);var ifr=React.useRef(null);var gp=React.useState(false);var generandoPptx=gp[0],setGenerandoPptx=gp[1];var canImport=initialUser&&initialUser.role==="admin";var hoyMes=new Date().getMonth()+1;var hoyAnio=new Date().getFullYear();function flash(msg,ok){setFlashMsg({msg:msg,ok:ok!==false});setTimeout(function(){setFlashMsg(null);},3500);}function load(){return _load.apply(this,arguments);}function _load(){_load=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee1(){var r;return _regenerator().w(function(_context1){while(1)switch(_context1.n){case 0:setLoading(true);_context1.n=1;return sb.from("mtto_ordenes").select("*").eq("anio",anio).order("seccion").order("equipo_codigo").order("mes");case 1:r=_context1.v;if(!r.error){_context1.n=2;break;}flash("Error cargando: "+r.error.message,false);setLoading(false);return _context1.a(2);case 2:setOrdenes(r.data||[]);setLoading(false);case 3:return _context1.a(2);}},_callee1);}));return _load.apply(this,arguments);}React.useEffect(function(){load();cumplPrecargar(anio);},[anio]);React.useEffect(function(){sb.from("usuarios").select("id,username,nombre,role").eq("activo",true).order("nombre").then(function(r){if(!r.error)setUsuarios(r.data||[]);});},[]);// ── Import F-MAN-012 ──
+function MantenimientosApp(_ref29){var onBack=_ref29.onBack,initialUser=_ref29.initialUser;var t=React.useState("ordenes");var tab=t[0],setTab=t[1];var y=React.useState(new Date().getFullYear());var anio=y[0],setAnio=y[1];var mo=React.useState(new Date().getMonth()+1);var mes=mo[0],setMes=mo[1];var d=React.useState([]);var ordenes=d[0],setOrdenes=d[1];var ld=React.useState(true);var loading=ld[0],setLoading=ld[1];var q=React.useState("");var busca=q[0],setBusca=q[1];var sel=React.useState(null);var selOrd=sel[0],setSelOrd=sel[1];var im=React.useState(false);var importing=im[0],setImporting=im[1];var fl=React.useState(null);var flashMsg=fl[0],setFlashMsg=fl[1];var us=React.useState([]);var usuarios=us[0],setUsuarios=us[1];var ft=React.useState("");var filtroTec=ft[0],setFiltroTec=ft[1];var dl=React.useState(false);var descargandoLote=dl[0],setDescargandoLote=dl[1];var rb=React.useState("");var regBusca=rb[0],setRegBusca=rb[1];var re=React.useState("");var regEstado=re[0],setRegEstado=re[1];var rm=React.useState("");var regMes=rm[0],setRegMes=rm[1];var fileRef=React.useRef(null);var ifr=React.useRef(null);var gp=React.useState(false);var generandoPptx=gp[0],setGenerandoPptx=gp[1];var canImport=initialUser&&initialUser.role==="admin";var hoyMes=new Date().getMonth()+1;var hoyAnio=new Date().getFullYear();function flash(msg,ok){setFlashMsg({msg:msg,ok:ok!==false});setTimeout(function(){setFlashMsg(null);},3500);}function load(){return _load.apply(this,arguments);}function _load(){_load=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee1(){var r;return _regenerator().w(function(_context1){while(1)switch(_context1.n){case 0:setLoading(true);_context1.n=1;return sb.from("mtto_ordenes").select("*").eq("anio",anio).order("seccion").order("equipo_codigo").order("mes");case 1:r=_context1.v;if(!r.error){_context1.n=2;break;}flash("Error cargando: "+r.error.message,false);setLoading(false);return _context1.a(2);case 2:setOrdenes(r.data||[]);setLoading(false);case 3:return _context1.a(2);}},_callee1);}));return _load.apply(this,arguments);}React.useEffect(function(){load();cumplPrecargar(anio);},[anio]);React.useEffect(function(){sb.from("usuarios").select("id,username,nombre,role").eq("activo",true).order("nombre").then(function(r){if(!r.error)setUsuarios(r.data||[]);});},[]);// ── Import F-MAN-012 ──
 function handleImport(_x7){var _a=arguments,_t=this;return asegurarLibs(["XLSX"]).then(function(){return _handleImport.apply(_t,_a);});}function _handleImport(){_handleImport=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee10(ev){var file,buf,parsed,ex,mkey,existentes,nuevas,base,i,ins,_t5;return _regenerator().w(function(_context10){while(1)switch(_context10.p=_context10.n){case 0:file=ev.target.files&&ev.target.files[0];ev.target.value="";if(file){_context10.n=1;break;}return _context10.a(2);case 1:setImporting(true);_context10.p=2;_context10.n=3;return file.arrayBuffer();case 3:buf=_context10.v;parsed=parseFMAN012(buf);if(!(parsed.actividades.length===0)){_context10.n=4;break;}flash("No se encontraron actividades en el archivo.",false);setImporting(false);return _context10.a(2);case 4:_context10.n=5;return sb.from("mtto_ordenes").select("equipo_codigo,equipo_desc,mes").eq("anio",parsed.anio);case 5:ex=_context10.v;if(!ex.error){_context10.n=6;break;}throw ex.error;case 6:mkey=function mkey(o){return o.equipo_codigo+"|"+(o.equipo_desc||"")+"|"+o.mes;};existentes={};(ex.data||[]).forEach(function(o){existentes[mkey(o)]=true;});nuevas=[];parsed.actividades.forEach(function(a){var k=mkey(a);if(existentes[k])return;existentes[k]=true;// dedupe también dentro del mismo archivo
 nuevas.push(a);});// Consecutivos
-base=(ex.data||[]).length;nuevas.forEach(function(a,i){a.consecutivo=String(base+i+1).padStart(3,"0")+"-"+String(parsed.anio%100).padStart(2,"0");});if(!(nuevas.length===0)){_context10.n=7;break;}flash("Cronograma "+parsed.anio+" ya estaba importado ("+parsed.actividades.length+" actividades). Sin cambios.");_context10.n=12;break;case 7:i=0;case 8:if(!(i<nuevas.length)){_context10.n=11;break;}_context10.n=9;return sb.from("mtto_ordenes").insert(nuevas.slice(i,i+200));case 9:ins=_context10.v;if(!ins.error){_context10.n=10;break;}throw ins.error;case 10:i+=200;_context10.n=8;break;case 11:flash("Importadas "+nuevas.length+" actividades del cronograma "+parsed.anio+" ✓");registrarHistorial("mtto_import","Import F-MAN-012 "+parsed.anio+" ("+nuevas.length+" órdenes)",initialUser&&(initialUser.nombre||initialUser.username));case 12:if(parsed.anio!==anio)setAnio(parsed.anio);else load();_context10.n=14;break;case 13:_context10.p=13;_t5=_context10.v;flash("Error al importar: "+(_t5.message||JSON.stringify(_t5)),false);case 14:setImporting(false);case 15:return _context10.a(2);}},_callee10,null,[[2,13]]);}));return _handleImport.apply(this,arguments);}function updateOrden(_x8,_x9){return _updateOrden.apply(this,arguments);}// ── Derivados ──
-function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee11(ord,patch){var r,upd;return _regenerator().w(function(_context11){while(1)switch(_context11.n){case 0:_context11.n=1;return sb.from("mtto_ordenes").update(patch).eq("id",ord.id).select();case 1:r=_context11.v;if(!r.error){_context11.n=2;break;}flash("Error: "+r.error.message,false);return _context11.a(2);case 2:upd=r.data&&r.data[0];setOrdenes(function(prev){return prev.map(function(o){return o.id===ord.id?upd||Object.assign({},o,patch):o;});});if(upd)setSelOrd(upd);if(patch.estado==="ejecutado"){flash("Orden ejecutada ✓");registrarHistorial("mtto_ejecutada",ord.equipo_codigo+" "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+")",patch.ejecutor);}else if(patch.estado==="reprogramado"){flash("Orden reprogramada ↻");}case 3:return _context11.a(2);}},_callee11);}));return _updateOrden.apply(this,arguments);}var esVencida=function esVencida(o){return o.estado==="programado"&&o.anio<=hoyAnio&&(o.anio<hoyAnio||o.mes<hoyMes);};var porMes=React.useMemo(function(){var arr=[];for(var m=1;m<=12;m++){var os=ordenes.filter(function(o){return o.mes===m;});arr.push({mes:m,total:os.length,ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,venc:os.filter(esVencida).length,repr:os.filter(function(o){return o.estado==="reprogramado";}).length});}return arr;},[ordenes]);var delMes=React.useMemo(function(){var lista=ordenes.filter(function(o){return o.mes===mes;});if(filtroTec){lista=lista.filter(function(o){return(o.asignado_a||"")===filtroTec;});}if(busca.trim()){var b=busca.trim().toLowerCase();lista=lista.filter(function(o){return(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista;},[ordenes,mes,busca,filtroTec]);var secciones=React.useMemo(function(){var map={};delMes.forEach(function(o){var s=o.seccion||"SIN SECCIÓN";(map[s]=map[s]||[]).push(o);});return Object.keys(map).map(function(s){return{seccion:s,items:map[s]};});},[delMes]);var registroFiltrado=React.useMemo(function(){var lista=ordenes.slice();if(regMes){lista=lista.filter(function(o){return o.mes===parseInt(regMes,10);});}if(regEstado){if(regEstado==="vencida"){lista=lista.filter(esVencida);}else{lista=lista.filter(function(o){return o.estado===regEstado;});}}if(regBusca.trim()){var b=regBusca.trim().toLowerCase();lista=lista.filter(function(o){return(o.consecutivo||"").toLowerCase().indexOf(b)>=0||(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista.sort(function(a,b){return(a.consecutivo||"").localeCompare(b.consecutivo||"");});},[ordenes,regMes,regEstado,regBusca]);function fmtFecha(v){if(!v)return"—";try{var d=new Date(v);if(isNaN(d.getTime()))return String(v).slice(0,10);return d.toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(e){return String(v).slice(0,10);}}var totAnio=ordenes.length;var totEjec=ordenes.filter(function(o){return o.estado==="ejecutado";}).length;var totVenc=ordenes.filter(esVencida).length;return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--lighter)",paddingBottom:40}},/*#__PURE__*/React.createElement("style",null,"\n        .mtto-hdr{background:var(--navy);padding:calc(14px + env(safe-area-inset-top,0px)) 20px 14px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:60;box-shadow:0 2px 12px rgba(13,47,92,0.28);}\n        .mtto-hdr-back{background:rgba(255,255,255,0.12);border:none;border-radius:8px;color:#fff;cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:5px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;flex-shrink:0;}\n        .mtto-hdr-logo{height:40px;width:auto;display:block;border-radius:10px;flex-shrink:0;}\n        .mtto-hdr-title{font-family:Montserrat,sans-serif;font-weight:800;font-size:14px;color:#fff;letter-spacing:0.3px;}\n        .mtto-hdr-sub{font-family:Montserrat,sans-serif;font-size:9px;color:rgba(255,255,255,0.45);letter-spacing:1.5px;text-transform:uppercase;margin-top:1px;}\n        .mtto-hdr-spacer{flex:1;}\n        .mtto-hdr-import{background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);border-radius:8px;color:#fff;cursor:pointer;padding:7px 12px;display:flex;align-items:center;gap:6px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;white-space:nowrap;flex-shrink:0;}\n@media (max-width:767px){\n  .mtto-hdr-import-label{display:none;}\n  .mtto-hdr-import{padding:9px 10px;}\n  .mtto-hdr-title{font-size:13px;}\n  .mtto-hdr-sub{font-size:8px;}\n}\n        .mtto-hdr-import:disabled{opacity:0.65;cursor:default;}\n        .mtto-toolbar{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:2px solid var(--navy);padding:12px 20px 10px;position:sticky;top:calc(60px + env(safe-area-inset-top,0px));z-index:55;}\n      "),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr"},onBack&&/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-back",onClick:onBack},"\u2190 Suite"),/*#__PURE__*/React.createElement("img",{className:"mtto-hdr-logo",src:LOGO_SRC,alt:"Bussi\xE9"}),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-title"},"Mantenimientos"),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-sub"},"Bussi\xE9 \xB7 Preventivos")),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-spacer"}),canImport&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("input",{ref:fileRef,type:"file",accept:".xlsm,.xlsx",style:{display:"none"},onChange:handleImport}),/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-import",disabled:importing,onClick:function onClick(){fileRef.current&&fileRef.current.click();}},/*#__PURE__*/React.createElement("span",null,importing?"⏳":"⬆"),/*#__PURE__*/React.createElement("span",{className:"mtto-hdr-import-label"},importing?"Importando…":"Importar F-MAN-012")))),/*#__PURE__*/React.createElement("div",{className:"mtto-toolbar"},/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap"}},"Cronograma preventivo \xB7 F-MAN-012"),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:anio,style:{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"},onChange:function onChange(ev){setAnio(parseInt(ev.target.value,10));}},[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return/*#__PURE__*/React.createElement("option",{key:a,value:a},a);})),/*#__PURE__*/React.createElement("div",{className:"mtto-tabs",style:{maxWidth:660}},(canImport?[["calendario","Calendario"],["ordenes","Órdenes"],["inspecciones","Inspecciones"],["registro","Registro"],["cumplimiento","Cumplimiento"],["cumplimiento1","Cumplimiento1"],["admin","⚙️ Admin"]]:[["calendario","Calendario"],["ordenes","Órdenes"],["inspecciones","Inspecciones"],["registro","Registro"],["cumplimiento","Cumplimiento"],["cumplimiento1","Cumplimiento1"]]).map(function(tb){return/*#__PURE__*/React.createElement("button",{key:tb[0],className:"mtto-tab-btn"+(tab===tb[0]?" active":""),onClick:function onClick(){setTab(tb[0]);}},tb[1]);})),tab==="cumplimiento"&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginLeft:"auto"}},/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.deleteMonth&&ifr.current.contentWindow.deleteMonth();},style:{background:"#fff",color:"var(--navy)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"🗑 Borrar mes"),/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.exportReport&&ifr.current.contentWindow.exportReport();},style:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"⬇ Exportar informe"),/*#__PURE__*/React.createElement("button",{type:"button",disabled:generandoPptx,onClick:function onClick(){abrirInformeSemanalApp();},style:{background:"#2d7dd2",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:generandoPptx?"default":"pointer",opacity:generandoPptx?0.7:1,whiteSpace:"nowrap"}},generandoPptx?"⏳ Generando…":"📊 Informe PPTX")))),flashMsg&&/*#__PURE__*/React.createElement("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:flashMsg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 20px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},flashMsg.msg),/*#__PURE__*/React.createElement("div",{style:{maxWidth:860,margin:"0 auto",padding:"18px 16px"}},loading?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:60,color:"var(--gray)",fontWeight:600}},"Cargando cronograma\u2026"):totAnio===0?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:"70px 20px",color:"var(--gray)"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:44,marginBottom:12}},"\uD83D\uDDD3\uFE0F"),/*#__PURE__*/React.createElement("div",{style:{fontWeight:700,color:"var(--navy)",fontSize:16,marginBottom:6}},"Sin cronograma para ",anio),/*#__PURE__*/React.createElement("div",{style:{fontSize:13}},canImport?"Importa el archivo F-MAN-012 para cargar las actividades programadas.":"Aún no se ha importado el cronograma de este año.")):/*#__PURE__*/React.createElement(React.Fragment,null,tab==="calendario"&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:("var(--navy)")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"📅"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:"var(--navy)"}},totAnio),React.createElement("div",{style:{fontSize:9.5,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3,fontFamily:"Montserrat,sans-serif",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"Programadas "+anio))),React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:("#1D7A3E")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"✅"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:"#1D7A3E"}},totEjec),React.createElement("div",{style:{fontSize:9.5,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3,fontFamily:"Montserrat,sans-serif",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},"Ejecutadas"))),React.createElement("div",{className:"stat-card",style:{flex:1,minWidth:120,padding:"11px 12px",display:"flex",flexDirection:"row",alignItems:"center",gap:9}},React.createElement("div",{style:{width:30,height:30,borderRadius:9,background:(totVenc>0?"#C0001A":"var(--gray)")+"1A",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}},"⚠️"),React.createElement("div",{style:{minWidth:0}},React.createElement("div",{style:{fontSize:19,fontWeight:800,letterSpacing:-0.3,lineHeight:1.1,color:totVenc>0?"#C0001A":"var(--gray)"}},totVenc),React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}},"Vencidas")))),/*#__PURE__*/React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:10}},porMes.map(function(pm){var actual=pm.mes===hoyMes&&anio===hoyAnio;var pct=pm.total>0?Math.round(pm.ejec/pm.total*100):null;return/*#__PURE__*/React.createElement("button",{key:pm.mes,onClick:function onClick(){setMes(pm.mes);setTab("ordenes");},className:"stat-card",style:{cursor:"pointer",textAlign:"left",border:actual?"2px solid var(--accent)":"1px solid var(--border)",background:"#fff",padding:"13px 14px"}},/*#__PURE__*/React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},/*#__PURE__*/React.createElement("span",{style:{fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:"var(--navy)",textTransform:"uppercase"}},MTTO_MESES_C[pm.mes-1]),actual&&/*#__PURE__*/React.createElement("span",{style:{fontSize:9,fontWeight:800,color:"var(--accent)",letterSpacing:0.8}},"HOY")),/*#__PURE__*/React.createElement("div",{style:{fontSize:22,fontWeight:800,color:"var(--navy)",marginTop:4}},pm.total),/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:5,fontSize:11,fontWeight:700}},/*#__PURE__*/React.createElement("span",{style:{color:"#1D7A3E"}},"\u2713 ",pm.ejec),pm.venc>0&&/*#__PURE__*/React.createElement("span",{style:{color:"#C0001A"}},"\u26A0 ",pm.venc),pm.repr>0&&/*#__PURE__*/React.createElement("span",{style:{color:"#C45200"}},"\u21BB ",pm.repr)),pct!==null&&/*#__PURE__*/React.createElement("div",{style:{height:5,background:"var(--light)",borderRadius:3,marginTop:8,overflow:"hidden"}},/*#__PURE__*/React.createElement("div",{style:{height:"100%",width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)",borderRadius:3}})));}))),tab==="ordenes"&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}},/*#__PURE__*/React.createElement("select",{className:"ios-input",value:mes,style:{width:"auto",padding:"9px 12px",fontWeight:700,fontSize:13},onChange:function onChange(ev){setMes(parseInt(ev.target.value,10));}},MTTO_MESES.map(function(mn,i){var pm=porMes[i];return/*#__PURE__*/React.createElement("option",{key:i,value:i+1},mn," (",pm.total,")");})),/*#__PURE__*/React.createElement("input",{className:"ios-input",placeholder:"Buscar equipo, c\xF3digo o secci\xF3n\u2026",value:busca,onChange:function onChange(ev){setBusca(ev.target.value);},style:{flex:1,minWidth:180,padding:"9px 12px",fontSize:13}}),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:filtroTec,style:{width:"auto",maxWidth:180,padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function onChange(ev){setFiltroTec(ev.target.value);}},/*#__PURE__*/React.createElement("option",{value:""},"\uD83D\uDC64 Todos"),usuarios.map(function(u){var n=u.nombre||u.username;return/*#__PURE__*/React.createElement("option",{key:u.id,value:n},n);})),/*#__PURE__*/React.createElement("button",{type:"button",disabled:delMes.length===0||descargandoLote,onClick:function onClick(){setDescargandoLote(true);descargarOrdenesMesFMAN008(delMes,MTTO_MESES[mes-1],anio).finally(function(){setDescargandoLote(false);});},style:{background:delMes.length===0?"var(--light)":"var(--navy)",color:delMes.length===0?"var(--gray)":"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5,cursor:delMes.length===0?"default":"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}},descargandoLote?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")")),delMes.length===0?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:"50px 20px",color:"var(--gray)",fontSize:13,fontWeight:600}},"Sin actividades ",busca?"que coincidan con la búsqueda":"programadas en "+MTTO_MESES[mes-1],"."):secciones.map(function(sec){return/*#__PURE__*/React.createElement("div",{key:sec.seccion,style:{marginBottom:18}},/*#__PURE__*/React.createElement("div",{style:{fontFamily:"Montserrat,sans-serif",fontSize:11,fontWeight:800,color:"var(--gray)",textTransform:"uppercase",letterSpacing:1,margin:"0 2px 8px"}},sec.seccion," \xB7 ",sec.items.length),/*#__PURE__*/React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:8}},sec.items.map(function(o){var fq=MTTO_FREQ_STYLE[o.frecuencia]||MTTO_FREQ_STYLE.T;var venc=esVencida(o);var est=MTTO_ESTADO[o.estado]||MTTO_ESTADO.programado;return/*#__PURE__*/React.createElement("button",{key:o.id,onClick:function onClick(){setSelOrd(o);},style:{background:"#fff",border:"1px solid var(--border)",borderRadius:14,padding:"12px 14px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:12,boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},/*#__PURE__*/React.createElement("div",{style:{width:42,height:42,borderRadius:11,background:fq.bg,color:fq.col,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:15,flexShrink:0}},o.frecuencia),/*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:0}},/*#__PURE__*/React.createElement("div",{style:{fontSize:13.5,fontWeight:700,color:"var(--navy)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},o.equipo_desc),/*#__PURE__*/React.createElement("div",{style:{fontSize:11.5,color:"var(--gray)",fontWeight:600,marginTop:2}},o.equipo_codigo,o.consecutivo?" · "+o.consecutivo:""),o.asignado_a&&/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--accent)",fontWeight:700,marginTop:3}},"\uD83D\uDC64 ",o.asignado_a)),/*#__PURE__*/React.createElement("span",{className:"badge "+(venc?"badge-red":est.cls),style:{flexShrink:0}},venc?"Vencida":est.label));})));})),tab==="inspecciones"&&React.createElement(InspeccionesTab,{anio:anio,usuarios:usuarios,currentUser:initialUser,canImport:canImport,onCambiarAnio:setAnio}),tab==="registro"&&React.createElement(React.Fragment,null,
+base=(ex.data||[]).length;nuevas.forEach(function(a,i){a.consecutivo=String(base+i+1).padStart(3,"0")+"-"+String(parsed.anio%100).padStart(2,"0");});if(!(nuevas.length===0)){_context10.n=7;break;}flash("Cronograma "+parsed.anio+" ya estaba importado ("+parsed.actividades.length+" actividades). Sin cambios.");_context10.n=12;break;case 7:i=0;case 8:if(!(i<nuevas.length)){_context10.n=11;break;}_context10.n=9;return sb.from("mtto_ordenes").insert(nuevas.slice(i,i+200));case 9:ins=_context10.v;if(!ins.error){_context10.n=10;break;}throw ins.error;case 10:i+=200;_context10.n=8;break;case 11:flash("Importadas "+nuevas.length+" actividades del cronograma "+parsed.anio+" ✓");registrarHistorial("mtto_import","Import F-MAN-012 "+parsed.anio+" ("+nuevas.length+" órdenes)",initialUser&&(initialUser.nombre||initialUser.username));case 12:if(parsed.anio!==anio)setAnio(parsed.anio);else load();_context10.n=14;break;case 13:_context10.p=13;_t5=_context10.v;flash("Error al importar: "+(_t5.message||JSON.stringify(_t5)),false);case 14:setImporting(false);case 15:return _context10.a(2);}},_callee10,null,[[2,13]]);}));return _handleImport.apply(this,arguments);}async function bulkAsignarOrdenes(ids,patch){
+  var r=await sb.from("mtto_ordenes").update(patch).in("id",ids).select();
+  if(r.error){flash("Error al asignar: "+r.error.message,false);return false;}
+  var porId={};(r.data||[]).forEach(function(o){porId[o.id]=o;});
+  setOrdenes(function(prev){return prev.map(function(o){return porId[o.id]||(ids.indexOf(o.id)>=0?Object.assign({},o,patch):o);});});
+  return true;
+}
+function updateOrden(_x8,_x9){return _updateOrden.apply(this,arguments);}// ── Derivados ──
+function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee11(ord,patch){var r,upd;return _regenerator().w(function(_context11){while(1)switch(_context11.n){case 0:_context11.n=1;return sb.from("mtto_ordenes").update(patch).eq("id",ord.id).select();case 1:r=_context11.v;if(!r.error){_context11.n=2;break;}flash("Error: "+r.error.message,false);return _context11.a(2);case 2:upd=r.data&&r.data[0];setOrdenes(function(prev){return prev.map(function(o){return o.id===ord.id?upd||Object.assign({},o,patch):o;});});if(upd)setSelOrd(upd);if(patch.estado==="ejecutado"){flash("Orden ejecutada ✓");registrarHistorial("mtto_ejecutada",ord.equipo_codigo+" "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+")",patch.ejecutor);}else if(patch.estado==="reprogramado"){flash("Orden reprogramada ↻");}case 3:return _context11.a(2);}},_callee11);}));return _updateOrden.apply(this,arguments);}var esVencida=function esVencida(o){return o.estado==="programado"&&o.anio<=hoyAnio&&(o.anio<hoyAnio||o.mes<hoyMes);};var porMes=React.useMemo(function(){var arr=[];for(var m=1;m<=12;m++){var os=ordenes.filter(function(o){return o.mes===m;});arr.push({mes:m,total:os.length,ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,venc:os.filter(esVencida).length,repr:os.filter(function(o){return o.estado==="reprogramado";}).length});}return arr;},[ordenes]);var delMes=React.useMemo(function(){var lista=ordenes.filter(function(o){return o.mes===mes;});if(filtroTec){lista=lista.filter(function(o){return(o.asignado_a||"")===filtroTec;});}if(busca.trim()){var b=busca.trim().toLowerCase();lista=lista.filter(function(o){return(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista;},[ordenes,mes,busca,filtroTec]);var secciones=React.useMemo(function(){var map={};delMes.forEach(function(o){var s=o.seccion||"SIN SECCIÓN";(map[s]=map[s]||[]).push(o);});return Object.keys(map).map(function(s){return{seccion:s,items:map[s]};});},[delMes]);var registroFiltrado=React.useMemo(function(){var lista=ordenes.slice();if(regMes){lista=lista.filter(function(o){return o.mes===parseInt(regMes,10);});}if(regEstado){if(regEstado==="vencida"){lista=lista.filter(esVencida);}else{lista=lista.filter(function(o){return o.estado===regEstado;});}}if(regBusca.trim()){var b=regBusca.trim().toLowerCase();lista=lista.filter(function(o){return(o.consecutivo||"").toLowerCase().indexOf(b)>=0||(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista.sort(function(a,b){return(a.consecutivo||"").localeCompare(b.consecutivo||"");});},[ordenes,regMes,regEstado,regBusca]);function fmtFecha(v){if(!v)return"—";try{var d=new Date(v);if(isNaN(d.getTime()))return String(v).slice(0,10);return d.toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(e){return String(v).slice(0,10);}}var totAnio=ordenes.length;var totEjec=ordenes.filter(function(o){return o.estado==="ejecutado";}).length;var totVenc=ordenes.filter(esVencida).length;return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--lighter)",paddingBottom:40}},/*#__PURE__*/React.createElement("style",null,"\n        .mtto-hdr{background:var(--navy);padding:calc(14px + env(safe-area-inset-top,0px)) 20px 14px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:60;box-shadow:0 2px 12px rgba(13,47,92,0.28);}\n        .mtto-hdr-back{background:rgba(255,255,255,0.12);border:none;border-radius:8px;color:#fff;cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:5px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;flex-shrink:0;}\n        .mtto-hdr-logo{height:40px;width:auto;display:block;border-radius:10px;flex-shrink:0;}\n        .mtto-hdr-title{font-family:Montserrat,sans-serif;font-weight:800;font-size:14px;color:#fff;letter-spacing:0.3px;}\n        .mtto-hdr-sub{font-family:Montserrat,sans-serif;font-size:9px;color:rgba(255,255,255,0.45);letter-spacing:1.5px;text-transform:uppercase;margin-top:1px;}\n        .mtto-hdr-spacer{flex:1;}\n        .mtto-hdr-import{background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);border-radius:8px;color:#fff;cursor:pointer;padding:7px 12px;display:flex;align-items:center;gap:6px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;white-space:nowrap;flex-shrink:0;}\n@media (max-width:767px){\n  .mtto-hdr-import-label{display:none;}\n  .mtto-hdr-import{padding:9px 10px;}\n  .mtto-hdr-title{font-size:13px;}\n  .mtto-hdr-sub{font-size:8px;}\n}\n        .mtto-hdr-import:disabled{opacity:0.65;cursor:default;}\n        .mtto-toolbar{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:2px solid var(--navy);padding:12px 20px 10px;position:sticky;top:calc(60px + env(safe-area-inset-top,0px));z-index:55;}\n      "),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr"},onBack&&/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-back",onClick:onBack},"\u2190 Suite"),/*#__PURE__*/React.createElement("img",{className:"mtto-hdr-logo",src:LOGO_SRC,alt:"Bussi\xE9"}),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-title"},"Mantenimientos"),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-sub"},"Bussi\xE9 \xB7 Preventivos")),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-spacer"}),canImport&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("input",{ref:fileRef,type:"file",accept:".xlsm,.xlsx",style:{display:"none"},onChange:handleImport}),null)),/*#__PURE__*/React.createElement("div",{className:"mtto-toolbar"},/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap"}},(tab==="inspecciones"?"Inspecciones locativas \xB7 F-MAN-009":"Cronograma preventivo \xB7 F-MAN-012")),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:anio,style:{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"},onChange:function onChange(ev){setAnio(parseInt(ev.target.value,10));}},[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return/*#__PURE__*/React.createElement("option",{key:a,value:a},a);})),/*#__PURE__*/React.createElement("div",{className:"mtto-tabs",style:{maxWidth:660}},(canImport?[["ordenes","Órdenes"],["inspecciones","Inspecciones"],["registro","Registro"],["cumplimiento","Cumplimiento"],["cumplimiento1","Cumplimiento1"],["admin","⚙️ Admin"]]:[["ordenes","Órdenes"],["inspecciones","Inspecciones"],["registro","Registro"],["cumplimiento","Cumplimiento"],["cumplimiento1","Cumplimiento1"]]).map(function(tb){return/*#__PURE__*/React.createElement("button",{key:tb[0],className:"mtto-tab-btn"+(tab===tb[0]?" active":""),onClick:function onClick(){setTab(tb[0]);}},tb[1]);})),tab==="cumplimiento"&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginLeft:"auto"}},/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.deleteMonth&&ifr.current.contentWindow.deleteMonth();},style:{background:"#fff",color:"var(--navy)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"🗑 Borrar mes"),/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.exportReport&&ifr.current.contentWindow.exportReport();},style:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"⬇ Exportar informe"),/*#__PURE__*/React.createElement("button",{type:"button",disabled:generandoPptx,onClick:function onClick(){abrirInformeSemanalApp();},style:{background:"#2d7dd2",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:generandoPptx?"default":"pointer",opacity:generandoPptx?0.7:1,whiteSpace:"nowrap"}},generandoPptx?"⏳ Generando…":"📊 Informe PPTX")))),flashMsg&&/*#__PURE__*/React.createElement("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:flashMsg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 20px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},flashMsg.msg),/*#__PURE__*/React.createElement("div",{className:"mto-pagina"},React.createElement("style",null,MTO_CSS),loading?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:60,color:"var(--gray)",fontWeight:600}},"Cargando cronograma\u2026"):/*#__PURE__*/React.createElement(React.Fragment,null,tab==="ordenes"&&React.createElement(OrdenesTab,{anio:anio,ordenes:ordenes,usuarios:usuarios,currentUser:initialUser,canImport:canImport,importing:importing,loading:false,onImportClick:function(){fileRef.current&&fileRef.current.click();},onAbrir:function(o){setSelOrd(o);},onBulkAssign:bulkAsignarOrdenes,onReload:load,flash:flash}),tab==="inspecciones"&&React.createElement(InspeccionesTab,{anio:anio,usuarios:usuarios,currentUser:initialUser,canImport:canImport,onCambiarAnio:setAnio}),tab==="registro"&&React.createElement(React.Fragment,null,
   React.createElement("div",{style:{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}},
     React.createElement("input",{className:"ios-input",placeholder:"Buscar consecutivo, equipo, código o área…",value:regBusca,onChange:function(ev){setRegBusca(ev.target.value);},style:{flex:1,minWidth:200,padding:"9px 12px",fontSize:13}}),
     React.createElement("select",{className:"ios-input",value:regMes,style:{width:"auto",padding:"9px 12px",fontSize:13,fontWeight:600},onChange:function(ev){setRegMes(ev.target.value);}},
@@ -15286,7 +15467,7 @@ function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator
     )
   )
 ),
-tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="cumplimiento1"&&React.createElement("div",{style:{width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement(CumplimientoInterno,{anio:anio,currentUser:initialUser,onCambio:load})),tab==="admin"&&canImport&&React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:16}},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminFMAN010Panel,null),React.createElement(AdminInstructivosPanel,null)))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
+tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="cumplimiento1"&&React.createElement("div",{style:{width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement(CumplimientoInterno,{anio:anio,currentUser:initialUser,onCambio:load})),tab==="admin"&&canImport&&React.createElement("div",{className:"mto-admin"},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminFMAN010Panel,null),React.createElement(AdminInstructivosPanel,null)))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
 // Los equipos de producción vienen como "COD-ÁREA-N - NOMBRE" (ej: "EP-322-1 - ENVASADORA PPR").
 // El código de área es todo antes del último "-N". Con ese número final buscamos el
 // nombre real del área en AREAS_LOC ("NOMBRE (322)") para mostrar una etiqueta legible.
