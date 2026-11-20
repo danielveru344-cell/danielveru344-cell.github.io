@@ -13534,6 +13534,47 @@ async function aplicarActividadesFMAN008(ws,ord,cache){
     }
   }finally{ajustarEscalaPaginaFMAN008(ws);}
 }
+
+// ── Próximo mantenimiento (casilla J5): mes de la siguiente orden del equipo en el cronograma ──
+async function obtenerProgramacionEquiposFMAN008(codigos,desdeAnio){
+  var mapa={};
+  codigos=Array.from(new Set((codigos||[]).filter(Boolean)));
+  try{
+    for(var i=0;i<codigos.length;i+=60){
+      var lote=codigos.slice(i,i+60),desde=0;
+      while(true){   // el servidor entrega máximo 1000 filas por consulta: se pide por páginas
+        var q=sb.from("mtto_ordenes").select("id,equipo_codigo,anio,mes,estado,mes_reprogramado").in("equipo_codigo",lote);
+        if(desdeAnio)q=q.gte("anio",desdeAnio);
+        var r=await q.range(desde,desde+999);
+        if(r.error||!r.data)break;
+        r.data.forEach(function(o){(mapa[o.equipo_codigo]=mapa[o.equipo_codigo]||[]).push(o);});
+        if(r.data.length<1000)break;
+        desde+=1000;
+      }
+    }
+  }catch(e){}
+  return mapa;
+}
+function proximoMantenimientoFMAN008(ord,filas){
+  if(!ord||!ord.anio||!ord.mes||!filas)return "";
+  var ref=ord.anio*12+ord.mes,mejor=null;
+  filas.forEach(function(o){var k=o.anio*12+o.mes;if(k>ref&&(!mejor||k<mejor.k))mejor={k:k,o:o};});
+  if(!mejor)return "";
+  var o=mejor.o;
+  var mes=(o.estado==="reprogramado"&&o.mes_reprogramado)?o.mes_reprogramado:o.mes;   // si esa orden se reprogramó, el mes nuevo
+  return (MTTO_MESES[mes-1]||"")+" "+o.anio;
+}
+async function aplicarProximoMantenimientoFMAN008(ws,ord,progCache){
+  if(ord.frecuencia==="Correctivo")return;   // el correctivo no tiene "próximo" en el cronograma
+  var filas;
+  if(progCache)filas=progCache[ord.equipo_codigo];
+  else{var m=await obtenerProgramacionEquiposFMAN008([ord.equipo_codigo],ord.anio);filas=m[ord.equipo_codigo];}
+  var texto=proximoMantenimientoFMAN008(ord,filas);
+  if(!texto)return;   // sin siguiente orden en el cronograma: queda el texto de la plantilla ("Según Programa")
+  var celda=ws.getCell("J5");
+  celda.value=texto;
+  celda.alignment=Object.assign({},celda.alignment,{horizontal:"center",vertical:"middle",wrapText:false,shrinkToFit:true});
+}
 async function generarBufferFMAN008(ord,templateBuf){
   var wb=new ExcelJS.Workbook();
   await wb.xlsx.load(templateBuf.slice(0));
@@ -13564,6 +13605,7 @@ async function generarBufferFMAN008(ord,templateBuf){
   celdaObs.value=ord.observaciones||"";
   celdaObs.alignment=Object.assign({},celdaObs.alignment,{wrapText:true,vertical:"top",horizontal:"left"});
   ws.getCell("A78").value=ord.ejecutor||"";
+  await aplicarProximoMantenimientoFMAN008(ws,ord,null);
   await aplicarActividadesFMAN008(ws,ord,null);
   return wb.xlsx.writeBuffer();
 }
@@ -13615,6 +13657,8 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
     var templateBuf=await obtenerPlantillaFMAN008();
     var wbDestino=new ExcelJS.Workbook();
     var cacheActividades={};
+    var anioMin=Math.min.apply(null,ordenes.map(function(o){return o.anio||9999;}));
+    var progEquipos=await obtenerProgramacionEquiposFMAN008(ordenes.map(function(o){return o.equipo_codigo;}),isFinite(anioMin)&&anioMin<9999?anioMin:null);
     var usados={};
     for(var i=0;i<ordenes.length;i++){
       var ord=ordenes[i];
@@ -13638,6 +13682,7 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
       celdaObs.value=ord.observaciones||"";
       celdaObs.alignment=Object.assign({},celdaObs.alignment,{wrapText:true,vertical:"top",horizontal:"left"});
       wsSrc.getCell("A78").value=ord.ejecutor||"";
+      await aplicarProximoMantenimientoFMAN008(wsSrc,ord,progEquipos);
       await aplicarActividadesFMAN008(wsSrc,ord,cacheActividades);
 
       var base=String(ord.equipo_codigo||ord.consecutivo||("Orden"+(i+1))).replace(/[\[\]\*\?\/\\:]/g,"-").slice(0,28)||("Orden"+(i+1));
