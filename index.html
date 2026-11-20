@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261119g";
+window.APP_BUILD = "20261119h";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14244,7 +14244,10 @@ var CUMPL_CSS="\n"+
 ".ci-mes{padding:11px 13px;font-size:12px;font-weight:700;color:rgba(255,255,255,.45);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:6px;}\n"+
 ".ci-mes.on{color:#fff;border-color:#2d7dd2;}\n"+
 ".ci-mes small{font-size:10px;opacity:.7;}\n"+
-".ci-refresh{margin-left:auto;background:none;border:none;color:rgba(255,255,255,.6);font-size:16px;cursor:pointer;padding:0 10px;}\n"+
+".ci-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;align-self:center;margin-left:auto;flex-shrink:0;}\n"+
+".ci-dot.sync{background:#fbbf24;animation:ci-pulso .8s infinite;}\n"+
+"@keyframes ci-pulso{0%,100%{opacity:1}50%{opacity:.3}}\n"+
+".ci-refresh{margin-left:0;background:none;border:none;color:rgba(255,255,255,.6);font-size:16px;cursor:pointer;padding:0 10px;}\n"+
 ".ci-glob{background:#fff;padding:12px 18px;border-bottom:1px solid #e2e8f0;display:flex;gap:20px;align-items:center;flex-wrap:wrap;}\n"+
 ".ci-gs{text-align:center;}.ci-gn{font-size:20px;font-weight:800;}.ci-gl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;}\n"+
 ".ci-prog{flex:1;min-width:150px;max-width:260px;}.ci-pbar{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-top:4px;}.ci-pfill{height:100%;border-radius:4px;transition:width .4s;}\n"+
@@ -14281,7 +14284,9 @@ function CumplimientoInterno(props){
   var _c=S(!cache0),cargando=_c[0],setCargando=_c[1];
   var _m=S(vista0.mes),mesSel=_m[0],setMesSel=_m[1];
   var _r=S(vista0.tec),tecSel=_r[0],setTecSel=_r[1];
-  var _g=S({}),guardando=_g[0],setGuardando=_g[1];
+  var _g=S(0),guardandoN=_g[0],setGuardandoN=_g[1];   // cuántos guardados van en camino
+  var colaRef=React.useRef({}),pendRef=React.useRef({}),confRef=React.useRef({}),cambioPendRef=React.useRef(false),flushRef=React.useRef(null);
+  var onCambioRef=React.useRef(onCambio);onCambioRef.current=onCambio;
   var _a=S(null),aviso=_a[0],setAviso=_a[1];
 
   async function cargar(silencioso){
@@ -14303,17 +14308,43 @@ function CumplimientoInterno(props){
   // Lo último visto y lo último leído quedan guardados para la próxima vez que se abra la ventana
   React.useEffect(function(){if(tareas.length&&!cargando)CUMPL_CACHE[anio]={tareas:tareas,ts:Date.now()};},[tareas]);
 
-  async function alternar(t){
-    if(!puede||t.fuente!=="preventivo"||guardando[t.key])return;
+  function aplicarTarea(nueva){setTareas(function(prev){return prev.map(function(x){return x.key===nueva.key?nueva:x;});});}
+  // Avisa al resto de Mantenimientos (Calendario/Órdenes) que hubo cambios, sin recargarlo a cada click
+  function avisarCambio(){
+    cambioPendRef.current=true;
+    if(flushRef.current)clearTimeout(flushRef.current);
+    flushRef.current=setTimeout(function(){if(cambioPendRef.current){cambioPendRef.current=false;if(onCambioRef.current)onCambioRef.current();}},2500);
+  }
+  React.useEffect(function(){return function(){
+    if(flushRef.current)clearTimeout(flushRef.current);
+    if(cambioPendRef.current&&onCambioRef.current)onCambioRef.current();   // al salir de la pestaña, el resto de la app se pone al día
+  };},[]);
+  function alternar(t){
+    if(!puede||t.fuente!=="preventivo")return;
+    var key=t.key,nuevo=!t.hecho;
+    if(!confRef.current[key])confRef.current[key]=t;   // último estado confirmado por el servidor
+    CUMPL_CAMBIOS++;
     setAviso(null);
-    setGuardando(function(g){var n=Object.assign({},g);n[t.key]=true;return n;});
-    try{
-      var nueva=await cumplMarcar(t,!t.hecho,usuario&&(usuario.nombre||usuario.username)||"");
-      CUMPL_CAMBIOS++;
-      setTareas(function(prev){return prev.map(function(x){return x.key===t.key?nueva:x;});});
-      if(t.fuente==="preventivo"&&onCambio)onCambio();
-    }catch(e){setAviso({ok:false,text:"No se pudo guardar el cambio: "+((e&&e.message)||e)});}
-    setGuardando(function(g){var n=Object.assign({},g);delete n[t.key];return n;});
+    // 1) se ve al instante
+    aplicarTarea(Object.assign({},t,{hecho:nuevo,fecha:nuevo?cumplFecha(cumplHoyISO()):""}));
+    // 2) se guarda por detrás, un guardado detrás de otro por cada tarea
+    pendRef.current[key]=(pendRef.current[key]||0)+1;
+    setGuardandoN(function(n){return n+1;});
+    var nombre=usuario&&(usuario.nombre||usuario.username)||"";
+    colaRef.current[key]=(colaRef.current[key]||Promise.resolve()).then(function(){
+      return cumplMarcar(t,nuevo,nombre).then(function(conf){
+        confRef.current[key]=conf;
+        if(pendRef.current[key]===1)aplicarTarea(conf);   // si hubo más clicks después, manda lo último que se vio
+        avisarCambio();
+      },function(e){
+        aplicarTarea(confRef.current[key]);               // no se pudo guardar: vuelve a como estaba
+        setAviso({ok:false,text:"No se pudo guardar el cambio: "+((e&&e.message)||e)});
+      });
+    }).then(function(){
+      pendRef.current[key]--;
+      if(!pendRef.current[key]){delete pendRef.current[key];delete confRef.current[key];}
+      setGuardandoN(function(n){return n-1;});
+    });
   }
 
   var porMes={};
@@ -14333,7 +14364,7 @@ function CumplimientoInterno(props){
   function tarjeta(t){
     var cat=CUMPL_CATEGORIAS[t.cat]||{label:t.cat,color:"#475569",bg:"#f1f5f9"};
     var clic=puede&&t.fuente==="preventivo";
-    return h("div",{key:t.key,className:"ci-card"+(t.hecho?" done":""),style:guardando[t.key]?{opacity:.6}:null},
+    return h("div",{key:t.key,className:"ci-card"+(t.hecho?" done":"")},
       h("div",{className:"ci-row"+(clic?" click":""),title:t.fuente==="orden"?"Se cierra desde Solicitudes de Mantenimiento":null,onClick:function(){alternar(t);}},
         h("div",{className:"ci-check"+(t.hecho?" on":"")},t.hecho?"✓":""),
         h("div",{className:"ci-info"},
@@ -14387,6 +14418,7 @@ function CumplimientoInterno(props){
       meses.map(function(m){
         return h("div",{key:m,className:"ci-mes"+(m===mes?" on":""),onClick:function(){setMesSel(m);setTecSel("");CUMPL_VISTA[anio]={mes:m,tec:""};}},
           MTTO_MESES[m-1].toUpperCase(),h("small",null,pct(porMes[m])+"%"));}),
+      h("span",{className:"ci-dot"+(guardandoN>0?" sync":""),title:guardandoN>0?"Guardando…":"Todo guardado"}),
       h("button",{type:"button",className:"ci-refresh",title:"Actualizar",onClick:function(){cargar(false);}},"↻")),
     aviso&&h("div",{className:"ci-aviso",style:{background:aviso.ok?"#dcfce7":"#fee2e2",color:aviso.ok?"#166534":"#991b1b",margin:"10px 4px 0"}},aviso.text),
     !puede&&!cargando&&meses.length>0&&h("div",{style:{fontSize:11,color:"#94a3b8",margin:"8px 4px 0"}},"Solo lectura: marcar tareas está habilitado para administrador y almacenista."),
