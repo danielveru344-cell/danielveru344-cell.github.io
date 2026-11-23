@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261121p";
+window.APP_BUILD = "20261123a";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -16889,7 +16889,14 @@ var ASG_CSS=".asg{border:1px solid var(--border);background:#fff;border-radius:1
  +".asg-ok{border:none;border-radius:10px;padding:11px;font-family:Montserrat,sans-serif;font-weight:700;font-size:13px;cursor:pointer;background:var(--navy);color:#fff;}.asg-ok.rojo{background:#C0001A;}.asg-ok:disabled{opacity:.45;cursor:default;}"
  +".asg-cancel{border:none;border-radius:10px;padding:11px;font-family:Montserrat,sans-serif;font-weight:700;font-size:13px;cursor:pointer;background:#fff;color:var(--gray);border:1px solid var(--border);}"
  +".asg-aviso{font-size:12px;color:#C0001A;font-weight:700;}.asg-nota{font-size:12px;color:var(--gray);font-weight:600;}"
- +".asg-final{background:#FDECEE;border:1px solid #F5B5BC;border-radius:12px;padding:10px 13px;font-size:13px;color:#7a1a26;line-height:1.5;}";
+ +".asg-final{background:#FDECEE;border:1px solid #F5B5BC;border-radius:12px;padding:10px 13px;font-size:13px;color:#7a1a26;line-height:1.5;}"
+ // En la tarjeta de Solicitudes: separado del pie (solicitante y fecha) y más compacto, al tamaño de la tarjeta
+ +".sm-req-asg{margin-top:12px;}"
+ +".sm-req-asg .asg{border:none;background:var(--lighter,#F4F7FB);border-radius:12px;padding:10px 12px;gap:9px;}"
+ +".sm-req-asg .asg-resp{font-size:12.5px;}"
+ +".sm-req-asg .asg-botones{gap:6px;}"
+ +".sm-req-asg .asg-btn{padding:9px 8px;font-size:12px;min-width:84px;border-radius:9px;}"
+ +".sm-req-asg .asg-panel{background:#fff;}";
 
 // Los tres botones de siempre, iguales en Órdenes, Inspecciones y Solicitudes: Asignar · Reasignar · Rechazar.
 //  · Asignar   → confirma al responsable HABITUAL que ya trae el sistema (si no hay uno definido, se elige a mano).
@@ -17130,11 +17137,11 @@ function SolAsignacion(p){
   var sol=p.s;
   var _t=S(0),setT=_t[1];          // para volver a dibujar al elegir quién asigna
   var claves=sol.tipo==="area"?[["area",sol.area_codigo]]:[["equipo",sol.item_codigo],["area",sol.area_codigo]];
-  return h(MtoAsignacion,{etiqueta:"solicitud",item:sol,usuarios:p.asignables,usuarioActual:p.initialUser,puede:true,final:sol.estado==="cerrada",claves:claves,
+  return h("div",{className:"sm-req-asg"},h(MtoAsignacion,{etiqueta:"solicitud",item:sol,usuarios:p.asignables,usuarioActual:p.initialUser,puede:true,final:sol.estado==="cerrada",claves:claves,
     // la elección se lee en el momento: así la ven todas las tarjetas, no solo en la que se eligió
     quien:{get valor(){return solLeerQuien();},opciones:SOL_QUIEN_ASIGNA,onCambio:function(v){try{localStorage.setItem("sm_quien_asigna",v);}catch(e){}setT(function(n){return n+1;});}},
     onAsignar:function(nombre,meta){return p.onAsignar(sol,nombre,meta,solLeerQuien());},
-    onRechazar:function(motivo,meta){return p.onRechazar(sol,motivo,meta);}});
+    onRechazar:function(motivo,meta){return p.onRechazar(sol,motivo,meta);}}));
 }
 
 function RootApp(){var s=React.useState(null);var mod=s[0];var setMod=s[1];var u=React.useState(null);var rootUser=u[0];var setRootUser=u[1];React.useEffect(function(){if(mod){window.history.pushState({bussie:"module",mod:mod},"");var handler=function handler(e){setMod(null);window.history.pushState({bussie:"suite"},"");};window.addEventListener("popstate",handler);return function(){window.removeEventListener("popstate",handler);};}else{if(!window.history.state||!window.history.state.bussie){window.history.replaceState({bussie:"suite"},"");}}},[mod]);var modOk=!!mod&&accModuloPermitido(rootUser,mod);
