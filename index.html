@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261123e";
+window.APP_BUILD = "20261123f";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14299,7 +14299,7 @@ var MTO_CSS=[
 ".mto-mes-hoy{font-size:9px;font-weight:800;color:var(--accent);letter-spacing:.9px;}",
 ".mto-mes-total{font-size:36px;font-weight:800;color:var(--navy);margin-top:8px;line-height:1;letter-spacing:-1px;}",
 ".mto-mes-det{display:flex;gap:12px;margin-top:10px;font-size:12px;font-weight:700;}",
-".mto-mes-barra{height:6px;background:var(--light);border-radius:3px;margin-top:14px;overflow:hidden;}",
+".mto-mes-cumpl{display:flex;align-items:center;gap:9px;margin-top:12px;}.mto-mes-barra{flex:1;height:6px;background:var(--light);border-radius:3px;overflow:hidden;}.mto-mes-pct{font-family:Montserrat,sans-serif;font-size:13px;font-weight:800;min-width:38px;text-align:right;}",
 ".mto-mes-barra i{display:block;height:100%;border-radius:3px;background:var(--accent);}",
 ".mto-barra{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}",
 ".mto-barra .ios-input{width:auto;padding:10px 13px;font-size:13px;}",
@@ -14551,7 +14551,10 @@ function MtoModulo(props){
           h("span",{style:{color:"#1D7A3E"}},"✓ ",pm.ejec),
           pm.venc>0&&h("span",{style:{color:"#C0001A"}},"⚠ ",pm.venc),
           pm.repr>0&&h("span",{style:{color:"#C45200"}},"↻ ",pm.repr),pm.rech>0&&h("span",{style:{color:"#8a96a8"}},"✕ ",pm.rech)),
-        pct!==null&&h("div",{className:"mto-mes-barra"},h("i",{style:{width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)"}})));
+        // Barra + porcentaje de cumplimiento del mes (ejecutadas / programadas, sin contar rechazadas)
+        pct!==null&&h("div",{className:"mto-mes-cumpl",title:"Cumplimiento del mes: "+pm.ejec+" de "+pm.total+" ejecutadas"},
+          h("div",{className:"mto-mes-barra"},h("i",{style:{width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)"}})),
+          h("span",{className:"mto-mes-pct",style:{color:pct>=100?"#1D7A3E":"var(--navy)"}},pct+"%")));
     }));
     vistaMeses=h("div",null,
       items.length>0&&!props.cargando&&h("div",{className:"mto-stats"},
