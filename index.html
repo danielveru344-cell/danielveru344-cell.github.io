@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261123h";
+window.APP_BUILD = "20261123i";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -17360,7 +17360,8 @@ function SolAsignacion(p){
     // la elección se lee en el momento: así la ven todas las tarjetas, no solo en la que se eligió
     quien:{get valor(){return solLeerQuien();},opciones:SOL_QUIEN_ASIGNA,onCambio:function(v){try{localStorage.setItem("sm_quien_asigna",v);}catch(e){}setT(function(n){return n+1;});}},
     onAsignar:function(nombre,meta){return p.onAsignar(sol,nombre,meta,solLeerQuien());},
-    onRechazar:function(motivo,meta){return p.onRechazar(sol,motivo,meta);}}));
+    // Rechazar solo mientras nadie la tiene: una vez asignada ya no se puede rechazar
+    onRechazar:(sol.asignado_a||sol.estado==="asignada"||sol.estado==="cerrada")?null:function(motivo,meta){return p.onRechazar(sol,motivo,meta);}}));
 }
 
 function RootApp(){var s=React.useState(null);var mod=s[0];var setMod=s[1];var u=React.useState(null);var rootUser=u[0];var setRootUser=u[1];React.useEffect(function(){if(mod){window.history.pushState({bussie:"module",mod:mod},"");var handler=function handler(e){setMod(null);window.history.pushState({bussie:"suite"},"");};window.addEventListener("popstate",handler);return function(){window.removeEventListener("popstate",handler);};}else{if(!window.history.state||!window.history.state.bussie){window.history.replaceState({bussie:"suite"},"");}}},[mod]);var modOk=!!mod&&accModuloPermitido(rootUser,mod);
