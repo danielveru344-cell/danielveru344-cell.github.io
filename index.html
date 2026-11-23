@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261123g";
+window.APP_BUILD = "20261123h";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14662,6 +14662,210 @@ function MtoModulo(props){
 }
 
 // ── Pestaña "Órdenes": mismo molde que Inspecciones (cuadritos de mes → lista del mes) ─────────
+// ── Programación mensual por persona (formato "PROGRAMACIÓN MENSUAL DE MANTENIMIENTO PLANTA BUSSIE") ──
+// Reúne lo mismo que Cumplimiento: preventivos (F-MAN-012), inspecciones locativas (F-MAN-009) y solicitudes asignadas.
+// Un Excel con una hoja por persona; cada hoja trae las actividades que esa persona tiene en el mes.
+var PROG_AZUL="FF17394D",PROG_GRIS="FFD9D9D9",PROG_CELESTE="FFE8F1F4";
+async function progCargarAnio(anio){
+  var res=await Promise.all([cumplCargarPreventivos(anio),cumplCargarInspecciones(anio),cumplCargarOrdenes(anio)]);
+  var arrastre=[];   // solicitudes asignadas en años anteriores que siguen abiertas
+  try{
+    var r=await sb.from("solicitudes_mantenimiento").select("*").eq("estado","asignada").lt("asignado_en",new Date(anio,0,1).toISOString()).limit(1000);
+    if(!r.error)arrastre=(r.data||[]).map(cumplMapOrden).map(function(t){return Object.assign({},t,{mes:0,arrastre:true});});
+  }catch(e){}
+  return res[0].concat(res[1],res[2],arrastre);
+}
+// Tareas de una persona (o de todas) en un mes. Las solicitudes asignadas antes y todavía abiertas también entran.
+function progTareasMes(tareas,mes){
+  return tareas.filter(function(t){
+    if(t.fuente==="orden")return t.mes===mes||((t.arrastre||t.mes<mes)&&t.raw.estado==="asignada");
+    return t.mes===mes;
+  });
+}
+function progPersonas(tareasMes){
+  var c={};
+  tareasMes.forEach(function(t){var k=t.raw.asignado_a||"";c[k]=(c[k]||0)+1;});
+  return Object.keys(c).sort(function(a,b){if(!a)return 1;if(!b)return -1;return a.localeCompare(b,"es");}).map(function(k){return {nombre:k,n:c[k]};});
+}
+function progFila(t,anio,mes){
+  var o=t.raw,ultimo=new Date(anio,mes,0);
+  if(t.fuente==="preventivo"){
+    var corr=o.frecuencia==="Correctivo",fq=corr?"Correctivo":(MTTO_FREQ[o.frecuencia]||o.frecuencia||"");
+    return [o.equipo_desc||"",o.equipo_codigo||"",o.consecutivo||"",corr?"Mantenimiento correctivo":("Mantenimiento preventivo"+(fq?" "+fq.toLowerCase():"")),fq,o.asignado_a||"",ultimo];
+  }
+  if(t.fuente==="inspeccion"){
+    var extra=[];
+    if(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre)extra.push("esclusa de personal");
+    if(o.esclusa_c56)extra.push("esclusa de materiales");
+    return [o.area_nombre||"",o.area_codigo||"",o.consecutivo||"","Inspección locativa"+(extra.length?" + "+extra.join(" y "):""),INSP_FREQ[o.frecuencia]||o.frecuencia||"",o.asignado_a||"",ultimo];
+  }
+  var fe=o.fecha_estimada?new Date(String(o.fecha_estimada).slice(0,10)+"T12:00:00"):null;
+  return [smResumenSolicitud(o),o.item_codigo||o.area_codigo||"",o.consecutivo||"",(o.descripcion||"").trim()||"Solicitud de mantenimiento","Solicitud",o.asignado_a||"",fe];
+}
+var PROG_SECCIONES=[
+  {fuente:"preventivo",titulo:"MANTENIMIENTO PREVENTIVO DE EQUIPOS (F-MAN-012 V01)",col1:"EQUIPO"},
+  {fuente:"inspeccion",titulo:"INSPECCIONES LOCATIVAS (F-MAN-009)",col1:"ÁREA"},
+  {fuente:"orden",titulo:"SOLICITUDES DE MANTENIMIENTO ASIGNADAS",col1:"EQUIPO / ÁREA"}];
+async function progGenerarExcel(opc){
+  // opc: {anio, mes, tareas (ya del mes), personas:[nombre...], elaborado, aprobado}
+  await asegurarLibs(["ExcelJS"]);
+  var wb=new ExcelJS.Workbook();
+  var logoId=null;
+  try{
+    var buf=await fetch("/assets/logo_programacion.png").then(function(r){if(!r.ok)throw new Error("logo");return r.arrayBuffer();});
+    logoId=wb.addImage({buffer:buf,extension:"png"});
+  }catch(e){}
+  var med={style:"medium"},thin={style:"thin"};
+  var fuente={name:"Calibri",size:11};
+  var usados={};
+  opc.personas.forEach(function(persona){
+    var mias=opc.tareas.filter(function(t){return (t.raw.asignado_a||"")===persona;});
+    var base=(persona||"Sin asignar").replace(/[\[\]\*\?\/\\:]/g,"-").slice(0,28),nombre=base,n=2;
+    while(usados[nombre.toLowerCase()])nombre=base.slice(0,26)+" "+(n++);
+    usados[nombre.toLowerCase()]=true;
+    var ws=wb.addWorksheet(nombre,{views:[{showGridLines:false}],
+      pageSetup:{paperSize:1,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,
+        margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}}});
+    ws.columns=[{width:45.3},{width:11},{width:13},{width:47.2},{width:12.7},{width:33.2},{width:25.2}];
+    ws.getRow(1).height=16;
+    // Título
+    ws.mergeCells("A2:F2");
+    var t=ws.getCell("A2");
+    t.value="PROGRAMACIÓN MENSUAL DE MANTENIMIENTO PLANTA BUSSIE";
+    t.font={name:"Calibri",size:16,bold:true,color:{argb:"FFFFFFFF"}};
+    t.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_AZUL}};
+    t.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+    t.border={top:med,left:med,bottom:med,right:med};
+    ws.getRow(2).height=21.5;
+    // Logo (G2:G6)
+    ws.mergeCells("G2:G6");
+    ws.getCell("G2").border={top:med,left:med,bottom:med,right:med};
+    if(logoId!==null)ws.addImage(logoId,{tl:{col:6.33,row:1.12},ext:{width:70,height:88},editAs:"oneCell"});
+    // Datos del encabezado
+    var cab=[["MES DE PROGRAMA:",MTTO_MESES[opc.mes-1].toUpperCase()+" "+opc.anio],["FECHA DE EMISIÓN:",new Date()],
+      ["ELABORADO POR:",(opc.elaborado||"").toUpperCase()],["APROBADO POR:",(opc.aprobado||"").toUpperCase()]];
+    cab.forEach(function(c,i){
+      var r=3+i;
+      ws.mergeCells("B"+r+":F"+r);
+      var a=ws.getCell("A"+r),b=ws.getCell("B"+r);
+      a.value=c[0];b.value=c[1];
+      a.font=Object.assign({},fuente,{bold:true});b.font=Object.assign({},fuente,{bold:true});
+      a.alignment={horizontal:"center",vertical:"middle"};b.alignment={horizontal:"left",vertical:"middle"};
+      a.border={top:med,left:med,bottom:med,right:med};b.border={top:med,left:med,bottom:med,right:med};
+      if(c[1] instanceof Date)b.numFmt="dd/mm/yyyy";
+      ws.getRow(r).height=15;
+    });
+    var fila=7;
+    var secciones=PROG_SECCIONES.map(function(s){return {s:s,items:mias.filter(function(x){return x.fuente===s.fuente;})};}).filter(function(x){return x.items.length>0;});
+    if(!secciones.length)secciones=[{s:PROG_SECCIONES[0],items:[]}];
+    secciones.forEach(function(sec){
+      ws.mergeCells("A"+fila+":G"+fila);
+      var st=ws.getCell("A"+fila);
+      st.value=sec.s.titulo;
+      st.font=Object.assign({},fuente,{bold:true});
+      st.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_GRIS}};
+      st.alignment={horizontal:"center",vertical:"middle"};
+      st.border={top:med,left:med,bottom:med,right:med};
+      ws.getRow(fila).height=15;
+      fila++;
+      var heads=[sec.s.col1,"CÓDIGO","CONSECUTIVO","ACTIVIDAD PROGRAMADA","FRECUENCIA","RESPONSABLE","FECHA LÍMITE DE EJECUCIÓN"];
+      heads.forEach(function(v,i){
+        var c=ws.getRow(fila).getCell(i+1);
+        c.value=v;c.font=Object.assign({},fuente,{color:{argb:"FFFFFFFF"}});
+        c.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_AZUL}};
+        c.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+        c.border={top:med,left:med,bottom:med,right:med};
+      });
+      ws.getRow(fila).height=29.5;
+      fila++;
+      var filas=sec.items.map(function(x){var f=progFila(x,opc.anio,opc.mes);if(!f[5])f[5]="SIN ASIGNAR";return f;})
+        .sort(function(a,b){return String(a[1]).localeCompare(String(b[1]),"es",{numeric:true})||String(a[2]).localeCompare(String(b[2]),"es",{numeric:true});});
+      if(!filas.length)filas=[["Sin actividades programadas en el mes","","","","",persona||"",null]];
+      filas.forEach(function(vals,k){
+        var row=ws.getRow(fila);
+        vals.forEach(function(v,i){
+          var c=row.getCell(i+1);
+          c.value=(v===null||v===undefined)?"":v;
+          c.font=fuente;
+          c.alignment={horizontal:(i===0||i===3)?"left":"center",vertical:"middle",wrapText:true};
+          c.border={top:k===0?med:thin,bottom:k===filas.length-1?med:thin,left:i===0?med:thin,right:i===6?med:thin};
+          if(i===5)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_CELESTE}};
+          if(i===6&&v instanceof Date)c.numFmt="dd/mm/yyyy";
+        });
+        fila++;
+      });
+    });
+    ws.pageSetup.printArea="A1:G"+(fila-1);
+    ws.pageSetup.printTitlesRow="2:6";
+  });
+  var buf2=await wb.xlsx.writeBuffer();
+  var mesTx=MTTO_MESES[opc.mes-1];
+  var sufijo=opc.personas.length===1?"_"+String(opc.personas[0]||"Sin asignar").replace(/\s+/g,"_"):"";
+  descargarBuffer(buf2,"Programacion_"+mesTx+"_"+opc.anio+sufijo+".xlsx");
+}
+// Botón + ventana: elegir mes y persona(s), y descargar.
+function ProgPersonaBoton(props){
+  var h=React.createElement,S=React.useState;
+  var _a=S(false),abierto=_a[0],setAbierto=_a[1];
+  return h(React.Fragment,null,
+    h("button",{type:"button",className:"mto-btn",onClick:function(){setAbierto(true);},title:"Programación mensual de mantenimiento, una hoja por persona"},"🖨 Programación por persona"),
+    abierto&&h(ProgPersonaModal,{anio:props.anio,mes:props.mes,currentUser:props.currentUser,onCerrar:function(){setAbierto(false);}}));
+}
+var PROG_TAREAS_CACHE={};
+function ProgPersonaModal(props){
+  var h=React.createElement,S=React.useState;
+  var hoy=new Date(),anio=props.anio;
+  var mes0=props.mes||(anio===hoy.getFullYear()?hoy.getMonth()+1:1);
+  var _m=S(mes0),mes=_m[0],setMes=_m[1];
+  var _p=S("__todas"),persona=_p[0],setPersona=_p[1];
+  var _t=S(PROG_TAREAS_CACHE[anio]||null),tareas=_t[0],setTareas=_t[1];
+  var _e=S(null),error=_e[0],setError=_e[1];
+  var _g=S(false),generando=_g[0],setGenerando=_g[1];
+  var leer=function(k,d){try{return localStorage.getItem(k)||d;}catch(e){return d;}};
+  var cu=props.currentUser||{};
+  var _el=S(leer("prog_elaborado",cu.nombre||cu.username||"")),elaborado=_el[0],setElaborado=_el[1];
+  var _ap=S(leer("prog_aprobado","Martín Burgos")),aprobado=_ap[0],setAprobado=_ap[1];
+  React.useEffect(function(){
+    if(tareas)return;
+    var vivo=true;
+    progCargarAnio(anio).then(function(t){PROG_TAREAS_CACHE[anio]=t;if(vivo)setTareas(t);}).catch(function(err){if(vivo)setError(String(err&&err.message||err));});
+    return function(){vivo=false;};
+  },[anio]);
+  var delMes=tareas?progTareasMes(tareas,mes):[];
+  var personas=progPersonas(delMes);
+  var elegidas=persona==="__todas"?personas.map(function(x){return x.nombre;}):[persona];
+  var puede=!!tareas&&!generando&&personas.length>0&&elegidas.length>0;
+  var generar=function(){
+    setGenerando(true);setError(null);
+    try{localStorage.setItem("prog_elaborado",elaborado);localStorage.setItem("prog_aprobado",aprobado);}catch(e){}
+    progGenerarExcel({anio:anio,mes:mes,tareas:delMes,personas:elegidas,elaborado:elaborado,aprobado:aprobado})
+      .then(function(){setGenerando(false);props.onCerrar();})
+      .catch(function(err){console.error(err);setGenerando(false);setError("No se pudo generar el archivo: "+(err&&err.message||err));});
+  };
+  var lbl=function(t){return h("div",{className:"ios-input-label"},t);};
+  return h("div",{className:"overlay",onClick:function(){if(!generando)props.onCerrar();}},
+    h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:480}},
+      h("div",{className:"sheet-handle"}),
+      h("div",{className:"sheet-title"},"Programación por persona"),
+      h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5}},
+        h("div",{style:{fontSize:12.5,color:"var(--gray)"}},"Genera el formato de programación mensual con una hoja por persona: preventivos, inspecciones locativas y solicitudes asignadas."),
+        h("div",null,lbl("Mes"),
+          h("select",{className:"ios-input",value:mes,onChange:function(ev){setMes(parseInt(ev.target.value,10));setPersona("__todas");}},
+            MTTO_MESES.map(function(n,i){return h("option",{key:i,value:i+1},n+" "+anio);}))),
+        h("div",null,lbl("Persona"),
+          !tareas&&!error?h("div",{style:{fontSize:12.5,color:"var(--gray)"}},"Cargando actividades…"):
+          h("select",{className:"ios-input",value:persona,onChange:function(ev){setPersona(ev.target.value);},disabled:!personas.length},
+            h("option",{value:"__todas"},"Todas las personas ("+personas.length+")"),
+            personas.map(function(x){return h("option",{key:x.nombre||"__sin",value:x.nombre},(x.nombre||"Sin asignar")+" · "+x.n+" actividades");}))),
+        tareas&&!personas.length&&h("div",{style:{fontSize:12.5,color:"#C45200"}},"No hay actividades programadas en "+MTTO_MESES[mes-1]+"."),
+        h("div",null,lbl("Elaborado por"),h("input",{className:"ios-input",value:elaborado,onChange:function(ev){setElaborado(ev.target.value);}})),
+        h("div",null,lbl("Aprobado por"),h("input",{className:"ios-input",value:aprobado,onChange:function(ev){setAprobado(ev.target.value);}})),
+        error&&h("div",{style:{fontSize:12.5,color:"#C0001A"}},error),
+        h("button",{type:"button",disabled:!puede,onClick:generar,style:{background:puede?"var(--navy)":"var(--light)",color:puede?"#fff":"var(--gray)",border:"none",borderRadius:10,padding:"13px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:14,cursor:puede?"pointer":"default"}},
+          generando?"Generando…":"⬇ Descargar Excel"+(elegidas.length>1?" ("+elegidas.length+" hojas)":"")),
+        h("button",{type:"button",disabled:generando,onClick:props.onCerrar,style:{background:"transparent",border:"none",color:"var(--gray)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",padding:"6px"}},"Cancelar"))));
+}
+
 function OrdenesTab(p){
   var h=React.createElement,S=React.useState;
   var ordenes=p.ordenes||[],anio=p.anio,canImport=p.canImport;
@@ -14716,10 +14920,13 @@ function OrdenesTab(p){
         if(!canImport||p.loading)return null;
         return h(React.Fragment,null,
           h("button",{type:"button",className:"mto-btn"+(ordenes.length?"":" prim"),disabled:p.importing,onClick:p.onImportClick},p.importing?"⏳ Importando…":"⬆ Importar F-MAN-012"),
+          ordenes.length>0&&h(ProgPersonaBoton,{anio:anio,currentUser:p.currentUser}),
           ordenes.length>0&&h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"anio"});}},"🗑 Borrar cronograma "+anio));
       },
       renderAccionesLista:function(ctx){
-        return canImport&&ctx.delMes.length>0?h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"mes",mes:ctx.mes,mesNombre:ctx.mesNombre});}},"🗑 Borrar "+ctx.mesNombre):null;
+        if(!canImport||!ctx.delMes.length)return null;
+        return h(React.Fragment,null,h(ProgPersonaBoton,{anio:anio,mes:ctx.mes,currentUser:p.currentUser}),
+          h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"mes",mes:ctx.mes,mesNombre:ctx.mesNombre});}},"🗑 Borrar "+ctx.mesNombre));
       }}),
     borrar&&h(MtoBorrarModal,{alcance:borrar.alcance,mesNombre:borrar.mesNombre,anio:anio,filas:filasABorrar(),plural:"órdenes",rangoTexto:null,borrando:borrando,onConfirmar:confirmarBorrado,onCancelar:function(){setBorrar(null);}}));
 }
@@ -15097,10 +15304,13 @@ function InspeccionesTab(props){
         if(!canImport||cargando||errorCarga)return null;
         return h(React.Fragment,null,
           h("button",{type:"button",className:"mto-btn"+(lista.length?"":" prim"),onClick:function(){fileRef.current&&fileRef.current.click();}},"⬆ Importar F-MAN-009"),
+          lista.length>0&&h(ProgPersonaBoton,{anio:anio,currentUser:currentUser}),
           lista.length>0&&h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"anio"});}},"🗑 Borrar cronograma "+anio));
       },
       renderAccionesLista:function(ctx){
-        return canImport&&ctx.delMes.length>0?h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"mes",mes:ctx.mes,mesNombre:ctx.mesNombre});}},"🗑 Borrar "+ctx.mesNombre):null;
+        if(!canImport||!ctx.delMes.length)return null;
+        return h(React.Fragment,null,h(ProgPersonaBoton,{anio:anio,mes:ctx.mes,currentUser:currentUser}),
+          h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"mes",mes:ctx.mes,mesNombre:ctx.mesNombre});}},"🗑 Borrar "+ctx.mesNombre));
       }}),
     sel&&h(InspeccionSheet,{insp:sel,currentUser:currentUser,usuarios:usuarios,onClose:function(){setSel(null);},onUpdate:function(patch){return actualizar(sel,patch);}}),
     previa&&h("div",{className:"overlay",onClick:function(){if(!importando)setPrevia(null);}},
