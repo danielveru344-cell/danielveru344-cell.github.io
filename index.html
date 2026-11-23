@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261123d";
+window.APP_BUILD = "20261123e";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14379,12 +14379,12 @@ var MTO_CSS=[
 "@media (max-width:1100px){.mtto-toolbar>div>div:first-child{display:none;}}",
 "@media (max-width:640px){.mtto-toolbar>div{flex-wrap:wrap !important;padding:8px 12px 0;}.mtto-toolbar>div>div:first-child{display:block;order:0;flex:1;margin-left:0;align-self:center;font-size:11.5px !important;}.mtto-toolbar>div>select{order:1;margin-left:auto;}.mtto-toolbar>div>div.mtto-tabs{order:3;width:100%;flex-basis:100%;}.mtto-tab-btn{height:46px;padding:0 13px;font-size:13px;}}",
 "@media (max-width:640px){.mto-pagina{padding:14px 12px 40px;}.mto-meses{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}.mto-mes{padding:14px 15px;}.mto-mes-total{font-size:28px;}.mto-stat{padding:12px 14px;}.mto-stat-val{font-size:22px;}}",
-"/* Pestañas parejas: ícono arriba y texto debajo (máximo dos líneas), mismo alto y mismo estilo */",
-".mtto-toolbar>div>div.mtto-tabs{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(max-content,1fr);gap:2px;align-items:stretch;}",
-".mtto-toolbar .mtto-tab-btn{height:auto !important;min-width:92px;padding:9px 14px 11px !important;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;font-size:12px !important;line-height:1.25;text-align:center;border-radius:10px 10px 0 0;}",
-".mtto-toolbar .mtto-tab-ic{font-size:18px;line-height:1;}",
+"/* Pestañas: ícono a la izquierda y texto en una o dos líneas, todas del mismo alto y centradas */",
+".mtto-toolbar>div>div.mtto-tabs{display:flex !important;gap:4px;align-items:stretch;}",
+".mtto-toolbar .mtto-tab-btn{height:58px !important;padding:0 16px !important;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:9px;font-size:12.5px !important;line-height:1.2;text-align:left;border-radius:0;}",
+".mtto-toolbar .mtto-tab-ic{font-size:17px;line-height:1;flex-shrink:0;}",
 ".mtto-toolbar .mtto-tab-tx{white-space:pre;}",
-".mtto-toolbar .mtto-tab-btn.active::after{left:16px;right:16px;}",
+".mtto-toolbar .mtto-tab-btn.active::after{left:10px;right:10px;}",
 ].join("\n");
 
 function mtoEstadoDe(o,hoyMes,hoyAnio){
