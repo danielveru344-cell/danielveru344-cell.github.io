@@ -635,7 +635,7 @@ async function cargarPreventivosApp() {
       headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` }
     });
     if (!r.ok) return null;
-    const ordenes = (await r.json()).sort((a, b) => a.id - b.id);
+    const ordenes = (await r.json()).filter(o => o.estado !== 'rechazada').sort((a, b) => a.id - b.id);   // una actividad rechazada no cuenta ni como pendiente ni como realizada
     const corte = fechaCorte();
     const mesCorte = corte.getFullYear() === ANIO_APP ? corte.getMonth() : 11;
     const porMes = {};
