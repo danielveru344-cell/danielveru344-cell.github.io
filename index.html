@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261124f";
+window.APP_BUILD = "20261124g";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14747,6 +14747,37 @@ function progFilasOrdenadas(tareas,anio,mes){
         ||String(a[0][0]).localeCompare(String(b[0][0]),"es",{numeric:true});})
     .reduce(function(acc,g){return acc.concat(g);},[]);
 }
+// Subdivisiones dentro de "Mantenimiento preventivo de equipos": se reconocen por la sección del cronograma
+// F-MAN-012 con la que se importó cada equipo. Los demás equipos van primero, sin subtítulo.
+var PROG_SUBGRUPOS=[
+  {titulo:"CEDI Y ALMACÉN GENERAL",re:/CEDI|ALMACEN/},
+  {titulo:"EQUIPOS CONTROL ANALÍTICO",re:/CONTROL\s*ANALITICO/},
+  {titulo:"EQUIPOS MICROBIOLOGÍA",re:/MICROBIOLOG/},
+  {titulo:"EQUIPOS ESTABILIDADES",re:/ESTABILIDAD/}];
+function progSubgrupo(t){
+  var sec=String(t.raw&&t.raw.seccion||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
+  for(var i=0;i<PROG_SUBGRUPOS.length;i++)if(PROG_SUBGRUPOS[i].re.test(sec))return i;
+  return -1;
+}
+// Filas de la sección de equipos con sus subdivisiones; un subtítulo es {sub:"TÍTULO"}.
+function progFilasConSub(tareas,anio,mes){
+  var filas=progFilasOrdenadas(tareas.filter(function(t){return progSubgrupo(t)<0;}),anio,mes);
+  PROG_SUBGRUPOS.forEach(function(g,i){
+    var suyas=tareas.filter(function(t){return progSubgrupo(t)===i;});
+    if(suyas.length)filas=filas.concat([{sub:g.titulo}],progFilasOrdenadas(suyas,anio,mes));
+  });
+  return filas;
+}
+function progPintarSub(ws,fila,titulo,arriba,abajo){
+  ws.mergeCells("A"+fila+":G"+fila);
+  var c=ws.getCell("A"+fila);
+  c.value=titulo;
+  c.font={name:"Calibri",size:11,bold:true,color:{argb:PROG_AZUL}};
+  c.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_CELESTE}};
+  c.alignment={horizontal:"left",vertical:"middle",indent:1};
+  c.border={top:arriba?{style:"medium"}:{style:"thin"},bottom:abajo?{style:"medium"}:{style:"thin"},left:{style:"medium"},right:{style:"medium"}};
+  ws.getRow(fila).height=17;
+}
 // Los equipos de la sección "APOYO TÉCNICO" del cronograma F-MAN-012 van en la sección de apoyo crítico del formato.
 function progEsApoyo(t){
   return t.fuente==="preventivo"&&/APOYO\s*T[EÉ]CNICO/.test(String(t.raw&&t.raw.seccion||"").toUpperCase());
@@ -14833,9 +14864,11 @@ async function progGenerarExcel(opc){
       });
       ws.getRow(fila).height=29.5;
       fila++;
-      var filas=progFilasOrdenadas(sec.items,opc.anio,opc.mes).map(function(f){if(!f[5])f[5]="SIN ASIGNAR";return f;});
+      var filas=(sec.fuente==="preventivo"?progFilasConSub(sec.items,opc.anio,opc.mes):progFilasOrdenadas(sec.items,opc.anio,opc.mes))
+        .map(function(f){if(!f.sub&&!f[5])f[5]="SIN ASIGNAR";return f;});
       if(!filas.length)filas=[["Sin actividades programadas en el mes","","","","",persona||"",null]];
       filas.forEach(function(vals,k){
+        if(vals.sub){progPintarSub(ws,fila,vals.sub,k===0,k===filas.length-1);fila++;return;}
         var row=ws.getRow(fila);
         vals.forEach(function(v,i){
           var c=row.getCell(i+1);
@@ -14882,7 +14915,8 @@ var PROG_LIMPIEZA=[
   ["CHILLER 1","AT-604-2"],["EASY HEAT","AT-604-3"],["UNIDAD MANEJADORA DE AIRE 09","AT-605-1"]];
 var PROG_RESP_RUTINA="PABLO FONSECA";
 function progSecciones(opc){
-  var porFuente=function(f){return progFilasOrdenadas(opc.tareas.filter(function(t){return progEnSeccion(t,{fuente:f});}),opc.anio,opc.mes);};
+  var porFuente=function(f){if(f==="preventivo")return progFilasConSub(opc.tareas.filter(function(t){return progEnSeccion(t,{fuente:f});}),opc.anio,opc.mes);
+    return progFilasOrdenadas(opc.tareas.filter(function(t){return progEnSeccion(t,{fuente:f});}),opc.anio,opc.mes);};
   return [
     {clave:"equipos",corto:"MANTENIMIENTO DE EQUIPOS",titulo:"MANTENIMIENTO PREVENTIVO DE EQUIPOS (F-MAN-012 V01)",col1:"EQUIPO",ordenado:true,filas:porFuente("preventivo")},
     {clave:"apoyo",corto:"MANTENIMIENTO APOYO CRÍTICO",titulo:"MANTENIMIENTO PREVENTIVO EQUIPOS APOYO CRÍTICO (F-MAN-003 V02, F-MAN-023 V01)",col1:"EQUIPO",ordenado:true,filas:porFuente("apoyo")},
@@ -14967,12 +15001,13 @@ async function progGenerarGeneral(opc){
     });
     ws.getRow(fila).height=29.5;
     fila++;
-    var filas=sec.filas.map(function(f){f=f.slice();f[5]=String(f[5]||"SIN ASIGNAR").toUpperCase();return f;});
+    var filas=sec.filas.map(function(f){if(f.sub)return f;f=f.slice();f[5]=String(f[5]||"SIN ASIGNAR").toUpperCase();return f;});
     if(!sec.fijo&&!sec.ordenado)filas.sort(function(a,b){return String(a[1]).localeCompare(String(b[1]),"es",{numeric:true})||String(a[2]).localeCompare(String(b[2]),"es",{numeric:true});});
     var vacia=!filas.length;
     if(vacia)filas=[["","","","","","",""],["","","","","","",""]];   // sección sin datos todavía: quedan filas en blanco
     var ini=fila;
     filas.forEach(function(vals,k){
+      if(vals.sub){progPintarSub(ws,fila,vals.sub,k===0,k===filas.length-1);fila++;return;}
       var row=ws.getRow(fila);
       vals.forEach(function(v,i){
         var c=row.getCell(i+1);
@@ -14992,7 +15027,7 @@ async function progGenerarGeneral(opc){
 
   // ── Cuadro de actividades por técnico (I5:R…) con fórmulas, como en el formato ──
   var nombres={};
-  secs.forEach(function(sec){sec.filas.forEach(function(f){nombres[String(f[5]||"SIN ASIGNAR").toUpperCase()]=true;});});
+  secs.forEach(function(sec){sec.filas.forEach(function(f){if(!f.sub)nombres[String(f[5]||"SIN ASIGNAR").toUpperCase()]=true;});});
   var lista=Object.keys(nombres).sort(function(a,b){if(a==="SIN ASIGNAR")return 1;if(b==="SIN ASIGNAR")return -1;return a.localeCompare(b,"es");});
   var colL=["K","L","M","N","O","P","Q","R"];
   var cab=function(c,v,fondo,color){c.value=v;c.font=Object.assign({},fuente,{bold:true,color:{argb:color||"FF000000"}});
@@ -15008,8 +15043,8 @@ async function progGenerarGeneral(opc){
   rangos.forEach(function(rg,i){
     var L=colL[i];
     cab(ws.getCell(L+"7"),rg.sec.corto,PROG_AZUL,"FFFFFFFF");
-    var a=ws.getCell(L+"5");a.value={formula:"COUNTA(A"+rg.ini+":A"+rg.fin+")"};
-    var b=ws.getCell(L+"6");b.value={formula:"COUNTA(A"+rg.ini+":A"+rg.fin+")-COUNTIF(F"+rg.ini+":F"+rg.fin+",\"SIN ASIGNAR\")"};   // asignadas = con responsable
+    var a=ws.getCell(L+"5");a.value={formula:"COUNTA(F"+rg.ini+":F"+rg.fin+")"};   // por Responsable: los subtítulos no cuentan
+    var b=ws.getCell(L+"6");b.value={formula:"COUNTA(F"+rg.ini+":F"+rg.fin+")-COUNTIF(F"+rg.ini+":F"+rg.fin+",\"SIN ASIGNAR\")"};   // asignadas = con responsable
     [a,b].forEach(function(c){c.font=Object.assign({},fuente,{bold:true});c.alignment={horizontal:"center",vertical:"middle"};c.border={top:med,left:med,bottom:med,right:med};});
   });
   lista.forEach(function(nombre,k){
