@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261124i";
+window.APP_BUILD = "20261124j";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14444,6 +14444,9 @@ function MtoBorrarModal(props){
 function MtoModulo(props){
   var h=React.createElement,S=React.useState;
   var anio=props.anio,items=props.items||[],usuarios=props.usuarios||[],currentUser=props.currentUser,campos=props.campos,tx=props.textos||{};
+  // Cuánto cuenta cada registro en los totales (en Inspecciones: área + esclusas); por defecto 1.
+  var peso=campos.peso||function(){return 1;};
+  var cuenta=function(arr){return arr.reduce(function(a,o){return a+peso(o);},0);};
   var hoy=new Date(),hoyMes=hoy.getMonth()+1,hoyAnio=hoy.getFullYear();
   var canEdit=!!(currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0);
   var _v=S("meses"),vista=_v[0],setVista=_v[1];
@@ -14476,10 +14479,10 @@ function MtoModulo(props){
   var porMes=[];
   for(var mm=1;mm<=12;mm++){
     var os=items.filter(function(o){return o.mes===mm;});
-    porMes.push({mes:mm,total:os.filter(function(o){return o.estado!=="rechazada";}).length,rech:os.filter(function(o){return o.estado==="rechazada";}).length,ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,venc:os.filter(function(o){return estadoDe(o)==="vencida";}).length,repr:os.filter(function(o){return o.estado==="reprogramado";}).length});
+    porMes.push({mes:mm,total:cuenta(os.filter(function(o){return o.estado!=="rechazada";})),rech:cuenta(os.filter(function(o){return o.estado==="rechazada";})),ejec:cuenta(os.filter(function(o){return o.estado==="ejecutado";})),venc:cuenta(os.filter(function(o){return estadoDe(o)==="vencida";})),repr:cuenta(os.filter(function(o){return o.estado==="reprogramado";}))});
   }
-  var totEjec=items.filter(function(o){return o.estado==="ejecutado";}).length,totVenc=items.filter(function(o){return estadoDe(o)==="vencida";}).length;
-  var itemsAct=items.filter(function(o){return o.estado!=="rechazada";});var pctAnio=itemsAct.length?Math.round(totEjec/itemsAct.length*100):0;
+  var totEjec=cuenta(items.filter(function(o){return o.estado==="ejecutado";})),totVenc=cuenta(items.filter(function(o){return estadoDe(o)==="vencida";}));
+  var itemsAct=items.filter(function(o){return o.estado!=="rechazada";});var totAct=cuenta(itemsAct);var pctAnio=totAct?Math.round(totEjec/totAct*100):0;
   var delMesBase=items.filter(function(o){return o.mes===mes;});
   var q=busca.trim().toLowerCase();
   var delMes=delMesBase.filter(function(o){
@@ -14561,7 +14564,7 @@ function MtoModulo(props){
     }));
     vistaMeses=h("div",null,
       items.length>0&&!props.cargando&&h("div",{className:"mto-stats"},
-        stat("📅",itemsAct.length,(tx.programadas||"Programadas")+" "+anio,"#0D2F5C","a"),
+        stat("📅",totAct,(tx.programadas||"Programadas")+" "+anio,"#0D2F5C","a"),
         stat("✅",totEjec,"Ejecutadas","#1D7A3E","b"),
         stat("⚠️",totVenc,"Vencidas",totVenc>0?"#C0001A":"#8a96a8","c"),
         stat("📈",pctAnio+"%","Avance del año","#2d7dd2","d")),
@@ -14640,7 +14643,7 @@ function MtoModulo(props){
             onClick:function(){setDescargando(true);Promise.resolve(props.onImprimir(delMes,nombreMes)).finally(function(){setDescargando(false);});}},
             descargando?"⏳ Generando…":"⬇ Imprimir mes ("+delMes.length+")"),
           accL)),
-      h("div",{className:"mto-cab-sub"},delMesBase.length+" "+(tx.plural||"registros")+" · "+nEjecMes+" ejecutadas"+(cEst.vencida?" · "+cEst.vencida+" vencidas":"")+(cEst.reprogramado?" · "+cEst.reprogramado+" reprogramadas":"")+(cEst.rechazada?" · "+cEst.rechazada+" rechazadas":""))),
+      h("div",{className:"mto-cab-sub"},cuenta(delMesBase)+" "+(tx.plural||"registros")+(campos.pesoNota&&cuenta(delMesBase)!==delMesBase.length?" ("+delMesBase.length+" "+campos.pesoNota+")":"")+" · "+cuenta(delMesBase.filter(function(o){return o.estado==="ejecutado";}))+" ejecutadas"+(cEst.vencida?" · "+cuenta(delMesBase.filter(function(o){return estadoDe(o)==="vencida";}))+" vencidas":"")+(cEst.reprogramado?" · "+cuenta(delMesBase.filter(function(o){return o.estado==="reprogramado";}))+" reprogramadas":"")+(cEst.rechazada?" · "+cuenta(delMesBase.filter(function(o){return o.estado==="rechazada";}))+" rechazadas":""))),
     modoSel&&h("div",{className:"mto-barra"},
       campos.claves&&conHabitual.length>0&&h("button",{type:"button",className:"mto-btn prim","data-lote":"habituales",onClick:asignarHabituales},"⭐ Asignar a sus habituales ("+conHabitual.length+")"),
       h("button",{type:"button",className:"mto-btn",onClick:function(){var n={};sinAsignar.forEach(function(o){n[o.id]=true;});setMarcadas(n);}},"Seleccionar sin asignar ("+sinAsignar.length+")"),
@@ -15543,6 +15546,9 @@ function InspeccionesTab(props){
   }
 
   var campos={
+    // Una inspección cuenta como las filas del cronograma que cubre: el área y cada esclusa que va en el mismo F-MAN-010.
+    peso:function(o){return 1+(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre?1:0)+(o.esclusa_c56?1:0);},
+    pesoNota:"formatos F-MAN-010",
     titulo:function(o){return o.area_nombre;},
     subtitulo:function(o){
       var extra=[];if(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre)extra.push("esclusa de personal");if(o.esclusa_c56)extra.push("esclusa de materiales");
