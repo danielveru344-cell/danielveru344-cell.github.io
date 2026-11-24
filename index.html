@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261124b";
+window.APP_BUILD = "20261124c";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14718,10 +14718,31 @@ function progFilas(t,anio,mes){
   });
   return filas;
 }
-// Filas de varias tareas, ordenadas por código y consecutivo sin separar un área de sus esclusas.
+// Orden de equipos y áreas en la programación: primero los que no tienen código, luego por código de menor
+// a mayor según sus números (EP-322-1 antes que MS-405-1; 322 antes que 1000) y al final los AP (AP500, AT-AP500-1).
+function progClaveCodigo(cod){
+  var c=String(cod==null?"":cod).trim().toUpperCase();
+  var grupo=!c?0:(/(^|[^A-Z])AP\s?\d/.test(c)?2:1);
+  var nums=(c.match(/\d+/g)||[]).map(Number);
+  return {grupo:grupo,nums:nums,txt:c};
+}
+function progCompararCodigo(a,b){
+  var x=progClaveCodigo(a),y=progClaveCodigo(b);
+  if(x.grupo!==y.grupo)return x.grupo-y.grupo;
+  for(var i=0;i<Math.max(x.nums.length,y.nums.length);i++){
+    var u=x.nums[i],v=y.nums[i];
+    if(u===undefined)return -1;if(v===undefined)return 1;
+    if(u!==v)return u-v;
+  }
+  return x.txt.localeCompare(y.txt,"es");
+}
+// Filas de varias tareas, ordenadas por código (ver arriba) y consecutivo sin separar un área de sus esclusas.
 function progFilasOrdenadas(tareas,anio,mes){
   return tareas.map(function(t){return progFilas(t,anio,mes);})
-    .sort(function(a,b){return String(a[0][1]).localeCompare(String(b[0][1]),"es",{numeric:true})||String(a[0][2]).localeCompare(String(b[0][2]),"es",{numeric:true});})
+    .sort(function(a,b){
+      return progCompararCodigo(a[0][1],b[0][1])
+        ||(!a[0][1]&&!b[0][1]?String(a[0][0]).localeCompare(String(b[0][0]),"es",{numeric:true}):0)   // sin código: por nombre
+        ||String(a[0][2]).localeCompare(String(b[0][2]),"es",{numeric:true});})
     .reduce(function(acc,g){return acc.concat(g);},[]);
 }
 var PROG_SECCIONES=[
