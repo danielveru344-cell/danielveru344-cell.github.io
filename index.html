@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261125a";
+window.APP_BUILD = "20261125b";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14710,7 +14710,7 @@ function progFila(t,anio,mes){
     return [o.equipo_desc||"",o.equipo_codigo||"",o.consecutivo||"",corr?"Mantenimiento correctivo":("Mantenimiento preventivo"+(fq?" "+fq.toLowerCase():"")),fq,o.asignado_a||"",ultimo];
   }
   if(t.fuente==="agua"){
-    var fa=["SISTEMA DE AGUA PURIFICADA "+String(o.sistema||"").toUpperCase(),"","",o.actividad+" (SEMANA "+AGUA_ROMANO[(o.semana||1)-1]+")",AGUA_FREQ[o.frecuencia]||o.frecuencia||"",o.asignado_a||"",aguaFinSemana(anio,mes,o.semana||4)];
+    var fa=["AGUA PURIFICADA "+String(o.sistema||"").toUpperCase(),"","",o.actividad+" (SEMANA "+AGUA_ROMANO[(o.semana||1)-1]+")",AGUA_FREQ[o.frecuencia]||o.frecuencia||"",o.asignado_a||"",aguaFinSemana(anio,mes,o.semana||4)];
     fa.ordenAgua=[aguaOrdenSistema(o.sistema),o.semana||0,o.orden||0];   // sistema (1200, 600, 120) → semana → orden del cronograma
     return fa;
   }
@@ -14787,6 +14787,19 @@ function progFilasConSub(tareas,anio,mes){
   PROG_SUBGRUPOS.forEach(function(g,i){
     var suyas=tareas.filter(function(t){return progSubgrupo(t)===i;});
     if(suyas.length)filas=filas.concat([{sub:g.titulo}],progFilasOrdenadas(suyas,anio,mes));
+  });
+  return filas;
+}
+// Apoyo crítico: primero los equipos de "APOYO TÉCNICO" del F-MAN-012 y luego una subdivisión por cada
+// sistema de agua purificada (1200, 600 y 120 L/h) con sus actividades por semana. Estas no llevan consecutivo.
+function progFilasApoyo(tareas,anio,mes){
+  var filas=progFilasOrdenadas(tareas.filter(function(t){return t.fuente!=="agua";}),anio,mes);
+  var sistemas={};
+  tareas.forEach(function(t){if(t.fuente==="agua"){var s=t.raw.sistema||"";(sistemas[s]=sistemas[s]||{formato:t.raw.formato||"",tareas:[]}).tareas.push(t);}});
+  Object.keys(sistemas).sort(function(a,b){return aguaOrdenSistema(a)-aguaOrdenSistema(b);}).forEach(function(s){
+    var g=sistemas[s];
+    filas=filas.concat([{sub:"SISTEMA DE AGUA PURIFICADA "+s.toUpperCase()+(g.formato?" · "+g.formato:"")}],
+      progFilasOrdenadas(g.tareas,anio,mes).map(function(f){f[2]="";return f;}));   // sin consecutivo
   });
   return filas;
 }
@@ -14886,7 +14899,7 @@ async function progGenerarExcel(opc){
       });
       ws.getRow(fila).height=29.5;
       fila++;
-      var filas=(sec.fuente==="preventivo"?progFilasConSub(sec.items,opc.anio,opc.mes):progFilasOrdenadas(sec.items,opc.anio,opc.mes))
+      var filas=(sec.fuente==="preventivo"?progFilasConSub(sec.items,opc.anio,opc.mes):sec.fuente==="apoyo"?progFilasApoyo(sec.items,opc.anio,opc.mes):progFilasOrdenadas(sec.items,opc.anio,opc.mes))
         .map(function(f){if(!f.sub&&!f[5])f[5]="SIN ASIGNAR";return f;});
       if(!filas.length)filas=[["Sin actividades programadas en el mes","","","","",persona||"",null]];
       filas.forEach(function(vals,k){
@@ -14938,6 +14951,7 @@ var PROG_LIMPIEZA=[
 var PROG_RESP_RUTINA="PABLO FONSECA";
 function progSecciones(opc){
   var porFuente=function(f){if(f==="preventivo")return progFilasConSub(opc.tareas.filter(function(t){return progEnSeccion(t,{fuente:f});}),opc.anio,opc.mes);
+    if(f==="apoyo")return progFilasApoyo(opc.tareas.filter(function(t){return progEnSeccion(t,{fuente:f});}),opc.anio,opc.mes);
     return progFilasOrdenadas(opc.tareas.filter(function(t){return progEnSeccion(t,{fuente:f});}),opc.anio,opc.mes);};
   return [
     {clave:"equipos",corto:"MANTENIMIENTO DE EQUIPOS",titulo:"MANTENIMIENTO PREVENTIVO DE EQUIPOS (F-MAN-012 V01)",col1:"EQUIPO",ordenado:true,filas:porFuente("preventivo")},
@@ -15111,9 +15125,9 @@ function ProgPersonaModal(props){
   var _el=S(leer("prog_elaborado",cu.nombre||cu.username||"")),elaborado=_el[0],setElaborado=_el[1];
   var _ap=S(leer("prog_aprobado","Martín Burgos")),aprobado=_ap[0],setAprobado=_ap[1];
   React.useEffect(function(){
-    if(tareas)return;
+    // Siempre se vuelve a leer al abrir (lo guardado se muestra mientras tanto): así entra lo importado o asignado hace un momento
     var vivo=true;
-    progCargarAnio(anio).then(function(t){PROG_TAREAS_CACHE[anio]=t;if(vivo)setTareas(t);}).catch(function(err){if(vivo)setError(String(err&&err.message||err));});
+    progCargarAnio(anio).then(function(t){PROG_TAREAS_CACHE[anio]=t;if(vivo)setTareas(t);}).catch(function(err){if(vivo&&!PROG_TAREAS_CACHE[anio])setError(String(err&&err.message||err));});
     return function(){vivo=false;};
   },[anio]);
   var delMes=tareas?progTareasMes(tareas,mes):[];
