@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261125c";
+window.APP_BUILD = "20261125d";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -15759,10 +15759,11 @@ async function aguaImportar(cronos,opc){
 }
 function aguaFechaHoy(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 // Fecha máxima de una actividad: el domingo de su semana en el cronograma (semana I = primer domingo del mes,
-// II = segundo, III = tercero, IV = cuarto). Ej.: diciembre 2026 → 6, 13, 20 y 27.
+// II = segundo, III = tercero, IV = cuarto). Ej.: diciembre 2026 → 6, 13, 20 y 27; noviembre 2026 (empieza en domingo) → 8, 15, 22 y 29.
 function aguaFinSemana(anio,mes,semana){
   var d1=new Date(anio,mes-1,1);
   var primerDomingo=1+((7-d1.getDay())%7);
+  if(primerDomingo===1)primerDomingo=8;   // si el mes empieza en domingo, la semana I va hasta el domingo siguiente
   return new Date(anio,mes-1,primerDomingo+7*(Math.max(1,Math.min(4,semana||1))-1));
 }
 
