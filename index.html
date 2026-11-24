@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261124j";
+window.APP_BUILD = "20261124k";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -13397,6 +13397,59 @@ function llenarActividadesFMAN008(ws,actividades){
   return sobran;
 }
 
+// ── Plantillas de impresión: se leen una sola vez por descarga ──────────────────────────────
+// Antes, cada hoja del Excel del mes volvía a abrir la plantilla y la copiaba celda por celda.
+// Ahora se abre una vez, se guarda su "molde" y cada hoja nueva se crea directo desde el molde.
+async function plantillaPreparada(templateBuf){
+  var wb=new ExcelJS.Workbook();
+  await wb.xlsx.load(templateBuf.slice(0));
+  var ws=wb.worksheets[0];
+  var modelo=ws.model;
+  modelo.mergeCells=modelo.merges;   // el molde trae las celdas combinadas sin pisar sus estilos
+  return {modelo:modelo,
+    saltos:(ws.rowBreaks||[]).map(function(b){return b.id;}),
+    media:(wb.model.media||[]).map(function(m){return {buffer:m.buffer,extension:m.extension};})};
+}
+function clonarMolde(o){
+  if(typeof structuredClone==="function")return structuredClone(o);
+  return JSON.parse(JSON.stringify(o));
+}
+// Las imágenes de la plantilla (logo) se agregan una sola vez al Excel de destino y todas las hojas las comparten.
+function mediaDePlantillaEn(wbDestino,tpl){
+  return tpl.media.map(function(m){return wbDestino.addImage({buffer:m.buffer,extension:m.extension});});
+}
+function hojaDesdePlantilla(wbDestino,tpl,nombre,mapaMedia){
+  var m=clonarMolde(Object.assign({},tpl.modelo,{media:[]}));
+  m.name=nombre;
+  m.media=(tpl.modelo.media||[]).map(function(md){return Object.assign({},md,{imageId:mapaMedia[md.imageId]});});
+  var ws=wbDestino.addWorksheet(nombre);
+  ws.model=m;
+  tpl.saltos.forEach(function(f){ws.getRow(f).addPageBreak();});   // se conservan los saltos de página
+  return ws;
+}
+// Actividades del instructivo de todos los equipos del mes en 2 consultas (antes eran 2 por cada orden).
+async function precargarActividadesFMAN008(codigos,cache){
+  codigos=Array.from(new Set((codigos||[]).filter(Boolean))).filter(function(c){return !cache[c];});
+  if(!codigos.length)return;
+  try{
+    var asign={};
+    for(var i=0;i<codigos.length;i+=100){
+      var r=await sb.from("equipo_instructivo").select("equipo_codigo,instructivo_codigo").in("equipo_codigo",codigos.slice(i,i+100));
+      if(r.error)return;   // si falla, cada orden lo consulta como antes
+      (r.data||[]).forEach(function(x){if(x.instructivo_codigo)asign[x.equipo_codigo]=x.instructivo_codigo;});
+    }
+    var instr=Array.from(new Set(Object.keys(asign).map(function(k){return asign[k];}))),porInstr={};
+    for(var j=0;j<instr.length;j+=100){
+      var a=await sb.from("instructivo_actividades").select("instructivo_codigo,orden,actividad").in("instructivo_codigo",instr.slice(j,j+100)).order("orden",{ascending:true}).limit(10000);
+      if(a.error)return;
+      (a.data||[]).forEach(function(x){(porInstr[x.instructivo_codigo]=porInstr[x.instructivo_codigo]||[]).push(x);});
+    }
+    codigos.forEach(function(c){
+      var l=asign[c]?(porInstr[asign[c]]||[]):[];
+      cache[c]=l.slice().sort(function(x,y){return (x.orden||0)-(y.orden||0);}).map(function(x){return x.actividad;});
+    });
+  }catch(e){}
+}
 async function obtenerActividadesFMAN008(equipoCodigo,cache){
   // Actividades del numeral 7.3 del instructivo que le corresponde al equipo.
   // Si no hay instructivo asignado (o las tablas aún no existen), devuelve [] y las filas quedan en blanco.
@@ -13562,12 +13615,18 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
     var cacheActividades={};
     var anioMin=Math.min.apply(null,ordenes.map(function(o){return o.anio||9999;}));
     var progEquipos=await obtenerProgramacionEquiposFMAN008(ordenes.map(function(o){return o.equipo_codigo;}),isFinite(anioMin)&&anioMin<9999?anioMin:null);
+    var tpl=await plantillaPreparada(templateBuf);   // la plantilla se lee una sola vez
+    var mapaMedia=mediaDePlantillaEn(wbDestino,tpl);
+    await precargarActividadesFMAN008(ordenes.filter(function(o){return o.frecuencia!=="Correctivo";}).map(function(o){return o.equipo_codigo;}),cacheActividades);
     var usados={};
     for(var i=0;i<ordenes.length;i++){
       var ord=ordenes[i];
-      var wbSrc=new ExcelJS.Workbook();
-      await wbSrc.xlsx.load(templateBuf.slice(0));
-      var wsSrc=wbSrc.worksheets[0];
+      var base=String(ord.equipo_codigo||ord.consecutivo||("Orden"+(i+1))).replace(/[\[\]\*\?\/\\:]/g,"-").slice(0,28)||("Orden"+(i+1));
+      var nombreHoja=base;
+      var n=1;
+      while(usados[nombreHoja]){n++;nombreHoja=base.slice(0,25)+"_"+n;}
+      usados[nombreHoja]=true;
+      var wsSrc=hojaDesdePlantilla(wbDestino,tpl,nombreHoja,mapaMedia);
       wsSrc.__escalaBase=wsSrc.pageSetup.fitToPage?0:(wsSrc.pageSetup.scale||0);
       wsSrc.pageSetup.fitToPage=false;
       wsSrc.getRow(38).addPageBreak();
@@ -13588,44 +13647,8 @@ async function descargarOrdenesMesFMAN008(ordenes,mesLabel,anio){
       await aplicarProximoMantenimientoFMAN008(wsSrc,ord,progEquipos);
       await aplicarActividadesFMAN008(wsSrc,ord,cacheActividades);
 
-      var base=String(ord.equipo_codigo||ord.consecutivo||("Orden"+(i+1))).replace(/[\[\]\*\?\/\\:]/g,"-").slice(0,28)||("Orden"+(i+1));
-      var nombreHoja=base;
-      var n=1;
-      while(usados[nombreHoja]){n++;nombreHoja=base.slice(0,25)+"_"+n;}
-      usados[nombreHoja]=true;
-
-      var wsDest=wbDestino.addWorksheet(nombreHoja,{
-        properties:wsSrc.properties,
-        pageSetup:wsSrc.pageSetup,
-        views:wsSrc.views
-      });
-
-      wsDest.columns=wsSrc.columns.map(function(c){return{width:c.width};});
-
-      wsSrc.eachRow({includeEmpty:true},function(row,rowNumber){
-        var destRow=wsDest.getRow(rowNumber);
-        row.eachCell({includeEmpty:true},function(cell,colNumber){
-          var destCell=destRow.getCell(colNumber);
-          destCell.value=cell.value;
-          destCell.style=cell.style;
-        });
-        if(row.height)destRow.height=row.height;
-        destRow.commit();
-      });
-
-      (wsSrc.model.merges||[]).forEach(function(range){
-        try{(wsDest.mergeCellsWithoutStyle||wsDest.mergeCells).call(wsDest,range);}catch(e){}   // sin pisar el estilo: se conservan los bordes
-      });
-
-      wsSrc.getImages().forEach(function(imgRef){
-        var media=wbSrc.model.media[imgRef.imageId];
-        if(media){
-          var newId=wbDestino.addImage({buffer:media.buffer,extension:media.extension});
-          wsDest.addImage(newId,imgRef.range);
-        }
-      });
     }
-    var outBuffer=await wbDestino.xlsx.writeBuffer();
+    var outBuffer=await wbDestino.xlsx.writeBuffer({zip:{compression:"DEFLATE",compressionOptions:{level:1}}});
     descargarBuffer(outBuffer,"F-MAN-008_Ordenes_"+(mesLabel||"mes")+"_"+(anio||"")+".xlsx");
     var idsAEmitir=ordenes.filter(function(o){return o&&o.id;}).map(function(o){return o.id;});
     if(idsAEmitir.length>0){
@@ -14232,38 +14255,20 @@ async function descargarInspeccionesMesFMAN010(lista,mesLabel,anio){
   try{
     await asegurarLibs(["ExcelJS"]);
     var templateBuf=await obtenerPlantillaFMAN010();
+    var tpl=await plantillaPreparada(templateBuf);   // la plantilla se lee una sola vez
     var wbDestino=new ExcelJS.Workbook();
+    var mapaMedia=mediaDePlantillaEn(wbDestino,tpl);
     var usados={};
     for(var i=0;i<lista.length;i++){
       var insp=lista[i];
-      var wbSrc=new ExcelJS.Workbook();
-      await wbSrc.xlsx.load(templateBuf.slice(0));
-      var wsSrc=wbSrc.worksheets[0];
-      aplicarDatosFMAN010(wsSrc,insp);
       var base=String(insp.consecutivo||("Inspeccion"+(i+1))).replace(/[\[\]\*\?\/\\:]/g,"-").slice(0,28);
       var nombreHoja=base,n=1;
       while(usados[nombreHoja]){n++;nombreHoja=base.slice(0,25)+"_"+n;}
       usados[nombreHoja]=true;
-      var wsDest=wbDestino.addWorksheet(nombreHoja,{properties:wsSrc.properties,pageSetup:wsSrc.pageSetup,views:wsSrc.views});
-      wsDest.columns=wsSrc.columns.map(function(c){return{width:c.width};});
-      wsSrc.eachRow({includeEmpty:true},function(row,rowNumber){
-        var destRow=wsDest.getRow(rowNumber);
-        row.eachCell({includeEmpty:true},function(cell,colNumber){
-          var destCell=destRow.getCell(colNumber);
-          destCell.value=cell.value;
-          destCell.style=cell.style;
-        });
-        if(row.height)destRow.height=row.height;
-        destRow.commit();
-      });
-      (wsSrc.model.merges||[]).forEach(function(range){try{(wsDest.mergeCellsWithoutStyle||wsDest.mergeCells).call(wsDest,range);}catch(e){}});   // sin pisar el estilo: así se conservan todos los bordes
-      (wsSrc.rowBreaks||[]).forEach(function(b){wsDest.getRow(b.id).addPageBreak();});   // se conservan las 2 páginas de cada hoja
-      wsSrc.getImages().forEach(function(imgRef){
-        var media=wbSrc.model.media[imgRef.imageId];
-        if(media){var newId=wbDestino.addImage({buffer:media.buffer,extension:media.extension});wsDest.addImage(newId,imgRef.range);}
-      });
+      var ws=hojaDesdePlantilla(wbDestino,tpl,nombreHoja,mapaMedia);
+      aplicarDatosFMAN010(ws,insp);
     }
-    var out=await wbDestino.xlsx.writeBuffer();
+    var out=await wbDestino.xlsx.writeBuffer({zip:{compression:"DEFLATE",compressionOptions:{level:1}}});
     descargarBuffer(out,"F-MAN-010_Inspecciones_"+(mesLabel||"mes")+"_"+(anio||"")+".xlsx");
     var ids=lista.filter(function(o){return o&&o.id;}).map(function(o){return o.id;});
     if(ids.length>0){
