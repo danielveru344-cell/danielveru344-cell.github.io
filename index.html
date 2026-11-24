@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261124g";
+window.APP_BUILD = "20261124h";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14771,10 +14771,10 @@ function progFilasConSub(tareas,anio,mes){
 function progPintarSub(ws,fila,titulo,arriba,abajo){
   ws.mergeCells("A"+fila+":G"+fila);
   var c=ws.getCell("A"+fila);
-  c.value=titulo;
+  c.value=String(titulo).toUpperCase();
   c.font={name:"Calibri",size:11,bold:true,color:{argb:PROG_AZUL}};
   c.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_CELESTE}};
-  c.alignment={horizontal:"left",vertical:"middle",indent:1};
+  c.alignment={horizontal:"center",vertical:"middle"};
   c.border={top:arriba?{style:"medium"}:{style:"thin"},bottom:abajo?{style:"medium"}:{style:"thin"},left:{style:"medium"},right:{style:"medium"}};
   ws.getRow(fila).height=17;
 }
@@ -14836,7 +14836,7 @@ async function progGenerarExcel(opc){
       var a=ws.getCell("A"+r),b=ws.getCell("B"+r);
       a.value=c[0];b.value=c[1];
       a.font=Object.assign({},fuente,{bold:true});b.font=Object.assign({},fuente,{bold:true});
-      a.alignment={horizontal:"center",vertical:"middle"};b.alignment={horizontal:"left",vertical:"middle"};
+      a.alignment={horizontal:"center",vertical:"middle"};b.alignment={horizontal:"center",vertical:"middle"};
       a.border={top:med,left:med,bottom:med,right:med};b.border={top:med,left:med,bottom:med,right:med};
       if(c[1] instanceof Date)b.numFmt="dd/mm/yyyy";
       ws.getRow(r).height=15;
@@ -14872,9 +14872,9 @@ async function progGenerarExcel(opc){
         var row=ws.getRow(fila);
         vals.forEach(function(v,i){
           var c=row.getCell(i+1);
-          c.value=(v===null||v===undefined)?"":v;
+          c.value=(v===null||v===undefined)?"":(typeof v==="string"?v.toUpperCase():v);
           c.font=fuente;
-          c.alignment={horizontal:(i===0||i===3)?"left":"center",vertical:"middle",wrapText:true};
+          c.alignment={horizontal:"center",vertical:"middle",wrapText:true};
           c.border={top:k===0?med:thin,bottom:k===filas.length-1?med:thin,left:i===0?med:thin,right:i===6?med:thin};
           if(i===5)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_CELESTE}};
           if(i===6&&v instanceof Date)c.numFmt="dd/mm/yyyy";
@@ -14974,7 +14974,7 @@ async function progGenerarGeneral(opc){
     var a=ws.getCell("A"+r),b=ws.getCell("B"+r);
     a.value=c[0];b.value=c[1];
     a.font=Object.assign({},fuente,{bold:true});b.font=Object.assign({},fuente,{bold:true});
-    a.alignment={horizontal:"center",vertical:"middle"};b.alignment={horizontal:"left",vertical:"middle"};
+    a.alignment={horizontal:"center",vertical:"middle"};b.alignment={horizontal:"center",vertical:"middle"};
     a.border={top:med,left:med,bottom:med,right:med};b.border={top:med,left:med,bottom:med,right:med};
     if(c[1] instanceof Date)b.numFmt="dd/mm/yyyy";
     ws.getRow(r).height=15;
@@ -15011,9 +15011,9 @@ async function progGenerarGeneral(opc){
       var row=ws.getRow(fila);
       vals.forEach(function(v,i){
         var c=row.getCell(i+1);
-        c.value=(v===null||v===undefined)?"":v;
+        c.value=(v===null||v===undefined)?"":(typeof v==="string"?v.toUpperCase():v);
         c.font=fuente;
-        c.alignment={horizontal:(i===0||i===3)?"left":"center",vertical:"middle",wrapText:true};
+        c.alignment={horizontal:"center",vertical:"middle",wrapText:true};
         c.border={top:k===0?med:thin,bottom:k===filas.length-1?med:thin,left:i===0?med:thin,right:i===6?med:thin};
         if(i===5&&!vacia)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_CELESTE}};
         if((i===6||i===4)&&v instanceof Date)c.numFmt="dd/mm/yyyy";
@@ -15049,9 +15049,9 @@ async function progGenerarGeneral(opc){
   });
   lista.forEach(function(nombre,k){
     var r=r0+k;
-    var n=ws.getCell("I"+r);n.value=nombre;
+    var n=ws.getCell("I"+r);n.value=String(nombre).toUpperCase();
     var tot=ws.getCell("J"+r);tot.value={formula:"SUM(K"+r+":R"+r+")"};
-    [n,tot].forEach(function(c){c.font=Object.assign({},fuente,{bold:c===tot});c.alignment={horizontal:c===n?"left":"center",vertical:"middle"};
+    [n,tot].forEach(function(c){c.font=Object.assign({},fuente,{bold:c===tot});c.alignment={horizontal:"center",vertical:"middle"};
       c.border={top:k===0?med:thin,bottom:k===lista.length-1?med:thin,left:med,right:med};});
     rangos.forEach(function(rg,i){
       var c=ws.getCell(colL[i]+r);
