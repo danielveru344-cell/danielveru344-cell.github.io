@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261124l";
+window.APP_BUILD = "20261125a";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14681,13 +14681,15 @@ function MtoModulo(props){
 // Un Excel con una hoja por persona; cada hoja trae las actividades que esa persona tiene en el mes.
 var PROG_AZUL="FF17394D",PROG_GRIS="FFD9D9D9",PROG_CELESTE="FFE8F1F4";
 async function progCargarAnio(anio){
-  var res=await Promise.all([cumplCargarPreventivos(anio),cumplCargarInspecciones(anio),cumplCargarOrdenes(anio)]);
+  var res=await Promise.all([cumplCargarPreventivos(anio),cumplCargarInspecciones(anio),cumplCargarOrdenes(anio),
+    aguaCargarAnio(anio).catch(function(){return [];})]);   // si aún no existe la tabla de agua, sigue sin ella
+  res[3]=res[3].filter(function(o){return o.estado!=="rechazada";}).map(function(o){return {key:"a"+o.id,fuente:"agua",mes:o.mes_reprogramado||o.mes,raw:o};});
   var arrastre=[];   // solicitudes asignadas en años anteriores que siguen abiertas
   try{
     var r=await sb.from("solicitudes_mantenimiento").select("*").eq("estado","asignada").lt("asignado_en",new Date(anio,0,1).toISOString()).limit(1000);
     if(!r.error)arrastre=(r.data||[]).map(cumplMapOrden).map(function(t){return Object.assign({},t,{mes:0,arrastre:true});});
   }catch(e){}
-  return res[0].concat(res[1],res[2],arrastre);
+  return res[0].concat(res[1],res[2],res[3],arrastre);
 }
 // Tareas de una persona (o de todas) en un mes. Las solicitudes asignadas antes y todavía abiertas también entran.
 function progTareasMes(tareas,mes){
@@ -14706,6 +14708,11 @@ function progFila(t,anio,mes){
   if(t.fuente==="preventivo"){
     var corr=o.frecuencia==="Correctivo",fq=corr?"Correctivo":(MTTO_FREQ[o.frecuencia]||o.frecuencia||"");
     return [o.equipo_desc||"",o.equipo_codigo||"",o.consecutivo||"",corr?"Mantenimiento correctivo":("Mantenimiento preventivo"+(fq?" "+fq.toLowerCase():"")),fq,o.asignado_a||"",ultimo];
+  }
+  if(t.fuente==="agua"){
+    var fa=["SISTEMA DE AGUA PURIFICADA "+String(o.sistema||"").toUpperCase(),"","",o.actividad+" (SEMANA "+AGUA_ROMANO[(o.semana||1)-1]+")",AGUA_FREQ[o.frecuencia]||o.frecuencia||"",o.asignado_a||"",aguaFinSemana(anio,mes,o.semana||4)];
+    fa.ordenAgua=[aguaOrdenSistema(o.sistema),o.semana||0,o.orden||0];   // sistema (1200, 600, 120) → semana → orden del cronograma
+    return fa;
   }
   if(t.fuente==="inspeccion"){
     var extra=[];
@@ -14755,6 +14762,8 @@ function progCompararCodigo(a,b){
 function progFilasOrdenadas(tareas,anio,mes){
   return tareas.map(function(t){return progFilas(t,anio,mes);})
     .sort(function(a,b){
+      var oa=a[0].ordenAgua,ob=b[0].ordenAgua;
+      if(oa&&ob)return (oa[0]-ob[0])||(oa[1]-ob[1])||(oa[2]-ob[2]);
       return progCompararCodigo(a[0][1],b[0][1])
         ||String(a[0][2]).localeCompare(String(b[0][2]),"es",{numeric:true})   // mismo código, o sin código: por consecutivo
         ||String(a[0][0]).localeCompare(String(b[0][0]),"es",{numeric:true});})
@@ -14796,7 +14805,7 @@ function progEsApoyo(t){
   return t.fuente==="preventivo"&&/APOYO\s*T[EÉ]CNICO/.test(String(t.raw&&t.raw.seccion||"").toUpperCase());
 }
 function progEnSeccion(t,sec){
-  if(sec.fuente==="apoyo")return progEsApoyo(t);
+  if(sec.fuente==="apoyo")return progEsApoyo(t)||t.fuente==="agua";   // apoyo técnico del F-MAN-012 + sistemas de agua (F-MAN-003 / F-MAN-023)
   if(sec.fuente==="preventivo")return t.fuente==="preventivo"&&!progEsApoyo(t);
   return t.fuente===sec.fuente;
 }
@@ -15635,6 +15644,319 @@ function InspeccionesTab(props){
     borrar&&h(MtoBorrarModal,{alcance:borrar.alcance,mesNombre:borrar.mesNombre,anio:anio,filas:filasABorrar(),plural:"inspecciones",rangoTexto:rangoBorrar,borrando:borrando,onConfirmar:confirmarBorrado,onCancelar:function(){setBorrar(null);}}));
 }
 
+// ════════════════════════════════════════════════════════════════════════════════════════════
+// ── Sistemas de agua purificada: cronogramas F-MAN-003 (1200 L/h y 600 L/h) y F-MAN-023 (120 L/h) ──
+// Cada cronograma marca la actividad por SEMANA (I a IV de cada mes). Una marca = una actividad en la app.
+// ════════════════════════════════════════════════════════════════════════════════════════════
+var AGUA_FREQ={SM:"Semanal",Q:"Quincenal",M:"Mensual",B:"Bimestral",T:"Trimestral",S:"Semestral",A:"Anual","2A":"Bienal","3A":"Trienal"};
+var AGUA_FREQ_STYLE={SM:{bg:"#E0F2FE",col:"#0369A1"},Q:{bg:"#E0F7F4",col:"#0B7A75"},M:{bg:"#E5E0FF",col:"#4A3ACF"},B:{bg:"#FDE2F1",col:"#B0337A"},
+  T:{bg:"#D6EBFF",col:"#0A66C2"},S:{bg:"#FFF0D9",col:"#C45200"},A:{bg:"#D1F2E0",col:"#1D7A3E"},"2A":{bg:"#EDE9E3",col:"#6B5B45"},"3A":{bg:"#EDE9E3",col:"#6B5B45"}};
+var AGUA_ROMANO=["I","II","III","IV"];
+var AGUA_CACHE={};
+var AGUA_SQL="create table if not exists public.mtto_agua(\n"+
+"  id bigint generated always as identity primary key,\n"+
+"  anio int not null, mes int not null, semana int not null,\n"+
+"  sistema text not null, formato text, actividad text not null, frecuencia text, orden int,\n"+
+"  estado text not null default 'programado',\n"+
+"  asignado_a text, asignado_por text, fecha_asignacion timestamptz, reasignado boolean default false, asignado_original text,\n"+
+"  fecha_ejecucion date, ejecutor text, observaciones text, mes_reprogramado int,\n"+
+"  motivo_rechazo text, rechazado_por text, rechazado_en timestamptz, fecha_emision timestamptz,\n"+
+"  creado_en timestamptz not null default now());\n"+
+"create unique index if not exists mtto_agua_uq on public.mtto_agua(anio,sistema,actividad,mes,semana);\n"+
+"alter table public.mtto_agua enable row level security;\n"+
+"drop policy if exists acceso_mtto_agua on public.mtto_agua;\n"+
+"create policy acceso_mtto_agua on public.mtto_agua for all to anon, authenticated using (true) with check (true);";
+function aguaEsErrorTablaFaltante(e){var m=String((e&&(e.message||e.code))||e||"");return /mtto_agua|42P01|does not exist|schema cache/i.test(m);}
+function aguaNorm(s){return String(s==null?"":s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/\s+/g," ").trim();}
+// Orden fijo de los sistemas en la app y en los formatos
+function aguaOrdenSistema(s){var n=parseInt(String(s||"").replace(/\D/g,""),10)||0;return -n;}   // 1200, 600, 120
+// Lee uno de los cronogramas (xls, xlsx). Devuelve {anio, sistema, formato, actividades:[{mes,semana,actividad,frecuencia,orden}]}
+function parseCronogramaAgua(arrayBuffer){
+  var wb=XLSX.read(arrayBuffer,{type:"array"});
+  var ws=wb.Sheets[wb.SheetNames[0]];
+  var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
+  var texto=function(v){return v==null?"":String(v).trim();};
+  var anio=new Date().getFullYear(),sistema="",formato="",filaSemanas=-1,c0=-1;
+  rows.forEach(function(row,r){
+    (row||[]).forEach(function(v,c){
+      var t=texto(v),n=aguaNorm(t);
+      var ms=n.match(/AGUA PURIFICADA\s*(\d+)\s*L/);if(ms&&!sistema)sistema=ms[1]+" L/h";
+      var mf=n.match(/C[OÓ]D\.?:?\s*(F-MAN-\d+)/);if(mf)formato=mf[1];
+      if(n==="AÑO"||n==="ANO"){var a=parseInt(texto(row[c+1]),10);if(a>2000)anio=a;}
+      var ma=n.match(/^A[NÑ]O:?\s*(\d{4})$/);if(ma)anio=parseInt(ma[1],10);
+    });
+    // fila de semanas: I, II, III, IV repetidos 12 veces
+    if(filaSemanas<0){
+      var idx=(row||[]).map(function(v){return texto(v).toUpperCase();});
+      var p=idx.indexOf("I");
+      if(p>=0&&idx[p+1]==="II"&&idx[p+2]==="III"&&idx[p+3]==="IV"&&idx[p+44]==="I"&&idx[p+47]==="IV"){filaSemanas=r;c0=p;}
+    }
+  });
+  if(filaSemanas<0)throw new Error("No se encontró la fila de semanas (I, II, III, IV) del cronograma.");
+  if(!sistema)throw new Error("No se encontró el nombre del sistema (por ejemplo \"AGUA PURIFICADA 1200 L/h\").");
+  var acts=[],orden=0,validas=Object.keys(AGUA_FREQ);
+  for(var r=filaSemanas+1;r<rows.length;r++){
+    var row=rows[r]||[];
+    var nombre=texto(row[c0-1]);
+    if(/^OBSERVACIONES/i.test(nombre))break;
+    if(!nombre)continue;
+    var marcas=[];
+    for(var k=0;k<48;k++){
+      var mk=texto(row[c0+k]).toUpperCase().replace(/\s+/g,"");
+      if(validas.indexOf(mk)>=0)marcas.push({mes:Math.floor(k/4)+1,semana:(k%4)+1,frecuencia:mk});
+    }
+    orden++;
+    if(!marcas.length)continue;   // título de sección o actividad sin programar este año
+    marcas.forEach(function(m){acts.push({mes:m.mes,semana:m.semana,actividad:nombre.replace(/\s+/g," "),frecuencia:m.frecuencia,orden:orden});});
+  }
+  return {anio:anio,sistema:sistema,formato:formato||"",actividades:acts};
+}
+async function aguaCargarAnio(anio){
+  var filas=[],desde=0;
+  while(true){
+    var r=await sb.from("mtto_agua").select("*").eq("anio",anio).order("id",{ascending:true}).range(desde,desde+999);
+    if(r.error)throw r.error;
+    filas=filas.concat(r.data||[]);
+    if(!r.data||r.data.length<1000)break;
+    desde+=1000;
+  }
+  return filas.sort(function(a,b){return (a.mes-b.mes)||(aguaOrdenSistema(a.sistema)-aguaOrdenSistema(b.sistema))||(a.semana-b.semana)||((a.orden||0)-(b.orden||0));});
+}
+// Importa uno o varios cronogramas. Lo que ya está (mismo sistema, actividad, mes y semana) no se repite.
+async function aguaImportar(cronos,opc){
+  var anio=cronos[0].anio,hoy=new Date(),hoyK=hoy.getFullYear()*12+hoy.getMonth()+1;
+  var ex=await aguaCargarAnio(anio),ya={};
+  var clave=function(o){return o.sistema+"|"+aguaNorm(o.actividad)+"|"+o.mes+"|"+o.semana;};
+  ex.forEach(function(o){ya[clave(o)]=true;});
+  var nuevas=[];
+  cronos.forEach(function(c){
+    c.actividades.forEach(function(a){
+      var o={anio:c.anio,mes:a.mes,semana:a.semana,sistema:c.sistema,formato:c.formato||null,actividad:a.actividad,frecuencia:a.frecuencia,orden:a.orden,estado:"programado"};
+      if(ya[clave(o)])return;ya[clave(o)]=true;
+      if(opc&&opc.historico&&c.anio*12+a.mes<hoyK){o.estado="ejecutado";o.observaciones="Histórico: se hizo antes de usar la app";}
+      nuevas.push(o);
+    });
+  });
+  for(var i=0;i<nuevas.length;i+=300){
+    var ins=await sb.from("mtto_agua").insert(nuevas.slice(i,i+300));
+    if(ins.error)throw ins.error;
+  }
+  return {insertadas:nuevas.length,historicas:nuevas.filter(function(o){return o.estado==="ejecutado";}).length};
+}
+function aguaFechaHoy(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+// Último día de la semana del cronograma (I = día 7, II = 14, III = 21, IV = fin de mes)
+function aguaFinSemana(anio,mes,semana){var ult=new Date(anio,mes,0).getDate();return new Date(anio,mes-1,semana>=4?ult:Math.min(ult,semana*7));}
+
+// ── Detalle de una actividad ──
+function AguaSheet(props){
+  var it=props.item,currentUser=props.currentUser,usuarios=props.usuarios,onClose=props.onClose,onUpdate=props.onUpdate;
+  var h=React.createElement,S=React.useState;
+  var _m=S(null),modal=_m[0],setModal=_m[1];
+  var _g=S(false),guardando=_g[0],setGuardando=_g[1];
+  var canEdit=currentUser&&["admin","almacenista"].indexOf(currentUser.role)>=0;
+  var yo=currentUser&&(currentUser.nombre||currentUser.username)||"";
+  var puedeEjecutar=canEdit||(!!it.asignado_a&&it.asignado_a===yo);
+  var fq=AGUA_FREQ_STYLE[it.frecuencia]||AGUA_FREQ_STYLE.M;
+  var est=MTTO_ESTADO[it.estado]||MTTO_ESTADO.programado;
+  var hoy=new Date();
+  var vencida=mtoEstadoDe(it,hoy.getMonth()+1,hoy.getFullYear())==="vencida";
+  async function marcar(){
+    setGuardando(true);
+    var r=await onUpdate({estado:"ejecutado",fecha_ejecucion:aguaFechaHoy(),ejecutor:it.asignado_a||yo||null});
+    if(r&&r.ok)registrarHistorial("agua_ejecutada",it.sistema+" · "+it.actividad+" (semana "+AGUA_ROMANO[it.semana-1]+" de "+MTTO_MESES[it.mes-1]+")",it.asignado_a||yo);
+    setGuardando(false);
+  }
+  return h("div",{className:"overlay",onClick:onClose},
+    h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:480}},
+      h("div",{className:"sheet-handle"}),
+      h("div",{className:"sheet-title",style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}},"Agua purificada "+it.sistema,
+        h("span",{className:"badge "+(vencida?"badge-red":est.cls),style:{textTransform:"none"}},vencida?"Vencida":est.label)),
+      h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:14}},
+        h("div",null,
+          h("div",{style:{fontSize:15,fontWeight:700,color:"var(--navy)"}},it.actividad),
+          h("div",{style:{fontSize:12,color:"var(--gray)",marginTop:3,fontWeight:600}},"Sistema de agua purificada "+it.sistema+(it.formato?" · "+it.formato:""))),
+        h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+          h("span",{className:"badge",style:{background:fq.bg,color:fq.col}},AGUA_FREQ[it.frecuencia]||it.frecuencia),
+          h("span",{className:"badge badge-blue"},"Semana "+AGUA_ROMANO[it.semana-1]+" · "+MTTO_MESES[it.mes-1]+" "+it.anio)),
+        h(MtoAsignacion,{etiqueta:"actividad",item:it,usuarios:usuarios,usuarioActual:currentUser,puede:canEdit,final:it.estado==="ejecutado",claves:[["equipo","AGUA "+it.sistema]],
+          onAsignar:function(nombre,meta){return onUpdate({asignado_a:nombre,asignado_por:meta.por,fecha_asignacion:new Date().toISOString(),reasignado:!!meta.reasignado,asignado_original:meta.reasignado?(meta.original||null):null}).then(function(r){asgManejarResultado(r);pushNotificacion(meta.reasignado?"💧 Actividad reasignada":"💧 Actividad asignada","Agua "+it.sistema+" · "+it.actividad+" (semana "+AGUA_ROMANO[it.semana-1]+" de "+MTTO_MESES[it.mes-1]+") → "+nombre);});}}),
+        it.estado==="ejecutado"&&h("div",{style:{background:"#F2FBF6",border:"1px solid #C6EBD6",borderRadius:12,padding:"11px 14px",fontSize:13}},
+          h("div",null,h("b",null,"Ejecutada:")," ",it.fecha_ejecucion||"—"),
+          h("div",null,h("b",null,"Por:")," ",it.ejecutor||"—"),
+          it.observaciones&&h("div",{style:{marginTop:4,color:"#3c5a49"}},it.observaciones)),
+        it.estado==="reprogramado"&&h("div",{style:{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:12,padding:"11px 14px",fontSize:13}},
+          h("div",null,h("b",null,"Nuevo mes:")," ",it.mes_reprogramado?MTTO_MESES[it.mes_reprogramado-1]:"—"),
+          it.observaciones&&h("div",{style:{marginTop:4,color:"#7a5a2e"}},it.observaciones)),
+        h("div",{style:{display:"flex",flexDirection:"column",gap:9}},
+          puedeEjecutar&&(it.estado==="programado"||it.estado==="reprogramado")&&h("button",{className:"ios-btn ios-btn-blue",disabled:guardando,style:{padding:"13px",fontSize:14},onClick:marcar},guardando?"Guardando…":"✓ Marcar como ejecutada"),
+          canEdit&&it.estado==="programado"&&h("button",{className:"ios-btn",style:{padding:"13px",fontSize:14,background:"var(--light)",color:"var(--navy)"},onClick:function(){setModal("reprogramar");}},"↻ Reprogramar"),
+          canEdit&&it.estado==="ejecutado"&&h("button",{className:"ios-btn",style:{padding:"11px",fontSize:13,background:"transparent",color:"#C0001A"},
+            onClick:function(){onUpdate({estado:it.mes_reprogramado?"reprogramado":"programado",fecha_ejecucion:null,ejecutor:null});}},"Revertir a programada"))),
+      modal==="reprogramar"&&h(MttoReprogramarModal,{ord:{mes:it.mes,equipo_codigo:"Agua "+it.sistema,equipo_desc:it.actividad},onClose:function(){setModal(null);},
+        onSave:async function(patch){await onUpdate(patch);setModal(null);}})));
+}
+
+// ── Pestaña "Sistemas de agua purificada": mismo molde que Órdenes e Inspecciones ──
+function AguaTab(props){
+  var anio=props.anio,usuarios=props.usuarios||[],currentUser=props.currentUser,canImport=props.canImport;
+  var h=React.createElement,S=React.useState;
+  var cache0=AGUA_CACHE[anio];
+  var hoy=new Date(),hoyMes=hoy.getMonth()+1,hoyAnio=hoy.getFullYear();
+  var _l=S(cache0||[]),lista=_l[0],setLista=_l[1];
+  var _c=S(!cache0),cargando=_c[0],setCargando=_c[1];
+  var _e=S(null),errorCarga=_e[0],setErrorCarga=_e[1];
+  var _s=S(null),sel=_s[0],setSel=_s[1];
+  var _f=S(null),msg=_f[0],setMsg=_f[1];
+  var _p=S(null),previa=_p[0],setPrevia=_p[1];       // {cronos:[...], errores:[...]}
+  var _i=S(false),importando=_i[0],setImportando=_i[1];
+  var _hi=S(true),historico=_hi[0],setHistorico=_hi[1];
+  var _bo=S(null),borrar=_bo[0],setBorrar=_bo[1];
+  var _bd=S(false),borrando=_bd[0],setBorrando=_bd[1];
+  var _cp=S(false),copiado=_cp[0],setCopiado=_cp[1];
+  var fileRef=React.useRef(null),api=React.useRef(null);
+  function flash(texto,ok){setMsg({texto:texto,ok:ok!==false});setTimeout(function(){setMsg(null);},4500);}
+  async function cargar(silencioso){
+    if(!silencioso)setCargando(true);
+    try{var filas=await aguaCargarAnio(anio);AGUA_CACHE[anio]=filas;setLista(filas);setErrorCarga(null);}
+    catch(e){setErrorCarga(aguaEsErrorTablaFaltante(e)?"tabla":((e&&e.message)||String(e)));}
+    setCargando(false);
+  }
+  React.useEffect(function(){var c=AGUA_CACHE[anio];setLista(c||[]);cargar(!!c);},[anio]);
+  function reemplazar(filas){setLista(function(prev){var porId={};filas.forEach(function(o){porId[o.id]=o;});var n=prev.map(function(o){return porId[o.id]||o;});AGUA_CACHE[anio]=n;return n;});}
+  async function actualizar(it,patch){
+    var r=await sb.from("mtto_agua").update(patch).eq("id",it.id).select();
+    if(r.error){flash("Error: "+r.error.message,false);return {error:r.error.message};}
+    var upd=(r.data&&r.data[0])||Object.assign({},it,patch);
+    reemplazar([upd]);setSel(upd);
+    if(typeof PROG_TAREAS_CACHE!=="undefined")delete PROG_TAREAS_CACHE[anio];
+    if(patch.estado==="ejecutado")flash("Actividad ejecutada ✓");
+    if(patch.estado==="reprogramado")flash("Actividad reprogramada ↻");
+    return {ok:true};
+  }
+  async function asignarLote(ids,patch,info){
+    var r=await sb.from("mtto_agua").update(patch).in("id",ids).select();
+    if(r.error){flash("Error al asignar: "+r.error.message,false);return false;}
+    reemplazar(r.data||[]);
+    if(typeof PROG_TAREAS_CACHE!=="undefined")delete PROG_TAREAS_CACHE[anio];
+    pushNotificacion("💧 Actividades asignadas",ids.length+" actividades de agua purificada de "+info.mesNombre+" → "+info.tecnico);
+    flash(ids.length+" actividades asignadas a "+info.tecnico+" ✓");
+    return true;
+  }
+  async function leerArchivos(ev){
+    var files=Array.prototype.slice.call(ev.target.files||[]);ev.target.value="";
+    if(!files.length)return;
+    await asegurarLibs(["XLSX"]);
+    var cronos=[],errores=[];
+    for(var i=0;i<files.length;i++){
+      try{var c=parseCronogramaAgua(await files[i].arrayBuffer());c.archivo=files[i].name;
+        if(!c.actividades.length)errores.push(files[i].name+": no trae actividades programadas");else cronos.push(c);}
+      catch(e){errores.push(files[i].name+": "+((e&&e.message)||e));}
+    }
+    var anios=Array.from(new Set(cronos.map(function(c){return c.anio;})));
+    if(anios.length>1){errores.push("Los cronogramas son de años distintos ("+anios.join(", ")+"): impórtalos por separado.");cronos=[];}
+    var sist={};cronos=cronos.filter(function(c){if(sist[c.sistema]){errores.push(c.archivo+": el sistema "+c.sistema+" ya viene en otro archivo");return false;}sist[c.sistema]=true;return true;});
+    if(!cronos.length&&errores.length){flash(errores[0],false);return;}
+    cronos.sort(function(a,b){return aguaOrdenSistema(a.sistema)-aguaOrdenSistema(b.sistema);});
+    setHistorico(true);setPrevia({cronos:cronos,errores:errores});
+  }
+  async function confirmarImport(){
+    setImportando(true);
+    try{
+      var r=await aguaImportar(previa.cronos,{historico:historico&&previa.cronos[0].anio===hoyAnio});
+      var anioImp=previa.cronos[0].anio;
+      if(r.insertadas===0)flash("Esos cronogramas ya estaban importados. Sin cambios.");
+      else{
+        flash("Importadas "+r.insertadas+" actividades"+(r.historicas?" · "+r.historicas+" de meses anteriores como ejecutadas":"")+" ✓");
+        registrarHistorial("agua_import","Import cronogramas agua purificada "+anioImp+" ("+previa.cronos.map(function(c){return c.sistema;}).join(", ")+") · "+r.insertadas+" actividades",currentUser&&(currentUser.nombre||currentUser.username));
+      }
+      setPrevia(null);
+      if(typeof PROG_TAREAS_CACHE!=="undefined")delete PROG_TAREAS_CACHE[anioImp];
+      if(anioImp===anio){if(api.current)api.current.irAMeses();await cargar(true);}
+      else if(props.onCambiarAnio)props.onCambiarAnio(anioImp);
+    }catch(e){
+      if(aguaEsErrorTablaFaltante(e)){setPrevia(null);setErrorCarga("tabla");}
+      else flash("Error al importar: "+((e&&e.message)||JSON.stringify(e)),false);
+    }
+    setImportando(false);
+  }
+  function filasABorrar(){return borrar?lista.filter(function(o){return borrar.alcance==="anio"||o.mes===borrar.mes;}):[];}
+  async function confirmarBorrado(){
+    var b=borrar;if(!b)return;
+    setBorrando(true);
+    try{
+      var q=sb.from("mtto_agua").delete({count:"exact"}).eq("anio",anio);
+      if(b.alcance==="mes")q=q.eq("mes",b.mes);
+      var r=await q;if(r.error)throw r.error;
+      var n=(r.count!=null)?r.count:filasABorrar().length;
+      registrarHistorial("agua_borrar","Borradas "+n+" actividades de agua purificada de "+(b.alcance==="mes"?b.mesNombre+" ":"todo el año ")+anio,currentUser&&(currentUser.nombre||currentUser.username));
+      if(typeof PROG_TAREAS_CACHE!=="undefined")delete PROG_TAREAS_CACHE[anio];
+      setBorrar(null);if(api.current)api.current.irAMeses();await cargar(true);
+      flash(n+" actividades borradas ✓");
+    }catch(e){flash("No se pudo borrar: "+((e&&e.message)||JSON.stringify(e)),false);}
+    setBorrando(false);
+  }
+  var campos={
+    titulo:function(o){return o.actividad;},
+    subtitulo:function(o){return "Semana "+AGUA_ROMANO[o.semana-1]+" · Agua "+o.sistema;},
+    codigo:function(o){return "Sem. "+AGUA_ROMANO[o.semana-1];},
+    detalle:function(o){return o.formato||"";},
+    frecuenciaTexto:function(o){return AGUA_FREQ[o.frecuencia]||o.frecuencia||"";},
+    letra:function(o){return o.frecuencia;},
+    estiloLetra:function(o){return AGUA_FREQ_STYLE[o.frecuencia]||AGUA_FREQ_STYLE.M;},
+    grupo:function(o){return "SISTEMA DE AGUA PURIFICADA "+String(o.sistema||"").toUpperCase();},
+    busqueda:function(o){return (o.actividad||"")+" "+(o.sistema||"")+" "+(o.formato||"")+" semana "+AGUA_ROMANO[o.semana-1];},
+    claves:function(o){return [["equipo","AGUA "+o.sistema]];}
+  };
+  var errorNode=errorCarga==="tabla"
+    ?h("div",{className:"mto-vacio"},h("b",null,"Falta crear la tabla de agua purificada"),"Copia este SQL, pégalo en Supabase (SQL Editor), ejecútalo y luego toca Reintentar.",
+        h("pre",{style:{textAlign:"left",background:"var(--lighter)",borderRadius:10,padding:"10px 12px",fontSize:11,maxHeight:220,overflow:"auto",whiteSpace:"pre-wrap",marginTop:10}},AGUA_SQL),
+        h("div",{style:{marginTop:12,display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}},
+          h("button",{type:"button",className:"mto-btn",onClick:function(){try{navigator.clipboard.writeText(AGUA_SQL).then(function(){setCopiado(true);setTimeout(function(){setCopiado(false);},2500);});}catch(e){}}},copiado?"✓ Copiado":"📋 Copiar SQL"),
+          h("button",{type:"button",className:"mto-btn prim",onClick:function(){cargar(false);}},"↻ Reintentar")))
+    :errorCarga?h("div",{className:"mto-vacio",style:{color:"#C0001A"}},"No se pudieron cargar las actividades: "+errorCarga):null;
+  var vacio=h("div",{className:"mto-vacio"},h("b",null,"Aún no hay actividades de agua purificada en "+anio),canImport?"Sube los cronogramas (F-MAN-003 de 1200 L/h y 600 L/h, y F-MAN-023 de 120 L/h) con el botón “Importar cronogramas”. Puedes elegir los tres archivos a la vez.":"Aún no se han importado los cronogramas de este año.");
+  var hayPasados=previa&&previa.cronos.length&&previa.cronos[0].anio===hoyAnio&&hoyMes>1;
+  return h("div",null,
+    msg&&h("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:msg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 18px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},msg.texto),
+    h("input",{ref:fileRef,type:"file",multiple:true,accept:".xls,.xlsx,.xlsm",style:{display:"none"},onChange:leerArchivos}),
+    h(MtoModulo,{api:api,anio:anio,items:lista,usuarios:usuarios,currentUser:currentUser,cargando:cargando,errorNode:errorNode,vacio:vacio,
+      textos:{plural:"actividades",singular:"actividad",columna:"Actividad",programadas:"Programadas",buscar:"Buscar actividad, sistema o semana…"},campos:campos,
+      onAbrir:setSel,asignarLote:asignarLote,
+      renderAccionesMeses:function(ctx){
+        if(!canImport||cargando||errorCarga)return null;
+        return h(React.Fragment,null,
+          h("button",{type:"button",className:"mto-btn"+(lista.length?"":" prim"),onClick:function(){fileRef.current&&fileRef.current.click();}},"⬆ Importar cronogramas"),
+          lista.length>0&&h(ProgPersonaBoton,{anio:anio,currentUser:currentUser}),
+          lista.length>0&&h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"anio"});}},"🗑 Borrar cronograma "+anio));
+      },
+      renderAccionesLista:function(ctx){
+        if(!canImport||!ctx.delMes.length)return null;
+        return h(React.Fragment,null,h(ProgPersonaBoton,{anio:anio,mes:ctx.mes,currentUser:currentUser}),
+          h("button",{type:"button",className:"mto-btn peligro",onClick:function(){setBorrar({alcance:"mes",mes:ctx.mes,mesNombre:ctx.mesNombre});}},"🗑 Borrar "+ctx.mesNombre));
+      }}),
+    sel&&h(AguaSheet,{item:sel,currentUser:currentUser,usuarios:usuarios,onClose:function(){setSel(null);},onUpdate:function(patch){return actualizar(sel,patch);}}),
+    previa&&h("div",{className:"overlay",onClick:function(){if(!importando)setPrevia(null);}},
+      h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:520}},
+        h("div",{className:"sheet-handle"}),
+        h("div",{className:"sheet-title"},"Importar cronogramas de agua purificada · "+(previa.cronos[0]?previa.cronos[0].anio:"")),
+        h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5}},
+          previa.cronos.map(function(c){
+            var porFq={};c.actividades.forEach(function(a){porFq[a.frecuencia]=(porFq[a.frecuencia]||0)+1;});
+            return h("div",{key:c.sistema,style:{background:"var(--lighter)",borderRadius:10,padding:"9px 12px"}},
+              h("div",{style:{fontWeight:700}},"💧 Sistema "+c.sistema+(c.formato?" · "+c.formato:"")),
+              h("div",{style:{fontSize:12.5,color:"var(--gray)"}},c.actividades.length+" actividades en el año · "+Object.keys(porFq).map(function(k){return porFq[k]+" "+(AGUA_FREQ[k]||k).toLowerCase();}).join(", ")),
+              h("div",{style:{fontSize:11.5,color:"var(--gray)"}},c.archivo));
+          }),
+          previa.errores.length>0&&h("div",{style:{fontSize:12.5,color:"#C45200"}},previa.errores.map(function(e,i){return h("div",{key:i},"⚠ "+e);})),
+          hayPasados&&h("label",{style:{display:"flex",gap:9,alignItems:"flex-start",fontSize:12.5,cursor:"pointer"}},
+            h("input",{type:"checkbox",checked:historico,style:{marginTop:3},onChange:function(ev){setHistorico(ev.target.checked);}}),
+            h("span",null,"Las actividades de los meses anteriores a ",h("b",null,MTTO_MESES[hoyMes-1])," se cargan como ",h("b",null,"ya ejecutadas")," (histórico). Si lo desmarcas, quedan pendientes y aparecerán como vencidas.")),
+          h("div",{style:{fontSize:12.5,color:"var(--gray)"}},"Lo que ya esté importado no se repite."),
+          h("button",{className:"ios-btn ios-btn-blue",disabled:importando||!previa.cronos.length,onClick:confirmarImport,style:{padding:"13px",fontSize:14}},importando?"Importando…":"Importar "+previa.cronos.reduce(function(a,c){return a+c.actividades.length;},0)+" actividades"),
+          h("button",{type:"button",disabled:importando,onClick:function(){setPrevia(null);},style:{background:"transparent",border:"none",color:"var(--gray)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",padding:"6px"}},"Cancelar, no importar")))),
+    borrar&&h(MtoBorrarModal,{alcance:borrar.alcance,mesNombre:borrar.mesNombre,anio:anio,filas:filasABorrar(),plural:"actividades",borrando:borrando,onConfirmar:confirmarBorrado,onCancelar:function(){setBorrar(null);}}));
+}
+
 // ── Administrador: plantilla del F-MAN-010 (igual que la del F-MAN-008) ──
 function AdminFMAN010Panel(){
   var h=React.createElement,S=React.useState;
@@ -16056,7 +16378,7 @@ nuevas.forEach(function(a,i){a.consecutivo=String(base+i+1).padStart(3,"0")+"-"+
   return true;
 }
 function updateOrden(_x8,_x9){return _updateOrden.apply(this,arguments);}// ── Derivados ──
-function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee11(ord,patch){var r,upd;return _regenerator().w(function(_context11){while(1)switch(_context11.n){case 0:_context11.n=1;return sb.from("mtto_ordenes").update(patch).eq("id",ord.id).select();case 1:r=_context11.v;if(!r.error){_context11.n=2;break;}flash("Error: "+r.error.message,false);return _context11.a(2,{error:r.error.message});case 2:upd=r.data&&r.data[0];setOrdenes(function(prev){return prev.map(function(o){return o.id===ord.id?upd||Object.assign({},o,patch):o;});});if(upd)setSelOrd(upd);if(patch.estado==="ejecutado"){flash("Orden ejecutada ✓");registrarHistorial("mtto_ejecutada",ord.equipo_codigo+" "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+")",patch.ejecutor);}else if(patch.estado==="reprogramado"){flash("Orden reprogramada ↻");}else if(patch.estado==="rechazada"){flash("Orden rechazada ✕");}case 3:return _context11.a(2,{ok:true});}},_callee11);}));return _updateOrden.apply(this,arguments);}var esVencida=function esVencida(o){return o.estado==="programado"&&o.anio<=hoyAnio&&(o.anio<hoyAnio||o.mes<hoyMes);};var porMes=React.useMemo(function(){var arr=[];for(var m=1;m<=12;m++){var os=ordenes.filter(function(o){return o.mes===m;});arr.push({mes:m,total:os.length,ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,venc:os.filter(esVencida).length,repr:os.filter(function(o){return o.estado==="reprogramado";}).length});}return arr;},[ordenes]);var delMes=React.useMemo(function(){var lista=ordenes.filter(function(o){return o.mes===mes;});if(filtroTec){lista=lista.filter(function(o){return(o.asignado_a||"")===filtroTec;});}if(busca.trim()){var b=busca.trim().toLowerCase();lista=lista.filter(function(o){return(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista;},[ordenes,mes,busca,filtroTec]);var secciones=React.useMemo(function(){var map={};delMes.forEach(function(o){var s=o.seccion||"SIN SECCIÓN";(map[s]=map[s]||[]).push(o);});return Object.keys(map).map(function(s){return{seccion:s,items:map[s]};});},[delMes]);var registroFiltrado=React.useMemo(function(){var lista=ordenes.slice();if(regMes){lista=lista.filter(function(o){return o.mes===parseInt(regMes,10);});}if(regEstado){if(regEstado==="vencida"){lista=lista.filter(esVencida);}else{lista=lista.filter(function(o){return o.estado===regEstado;});}}if(regBusca.trim()){var b=regBusca.trim().toLowerCase();lista=lista.filter(function(o){return(o.consecutivo||"").toLowerCase().indexOf(b)>=0||(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista.sort(function(a,b){return(a.consecutivo||"").localeCompare(b.consecutivo||"");});},[ordenes,regMes,regEstado,regBusca]);function fmtFecha(v){if(!v)return"—";try{var d=new Date(v);if(isNaN(d.getTime()))return String(v).slice(0,10);return d.toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(e){return String(v).slice(0,10);}}var totAnio=ordenes.length;var totEjec=ordenes.filter(function(o){return o.estado==="ejecutado";}).length;var totVenc=ordenes.filter(esVencida).length;return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--lighter)",paddingBottom:40}},/*#__PURE__*/React.createElement("style",null,"\n        .mtto-hdr{background:var(--navy);padding:calc(14px + env(safe-area-inset-top,0px)) 20px 14px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:60;box-shadow:0 2px 12px rgba(13,47,92,0.28);}\n        .mtto-hdr-back{background:rgba(255,255,255,0.12);border:none;border-radius:8px;color:#fff;cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:5px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;flex-shrink:0;}\n        .mtto-hdr-logo{height:40px;width:auto;display:block;border-radius:10px;flex-shrink:0;}\n        .mtto-hdr-title{font-family:Montserrat,sans-serif;font-weight:800;font-size:14px;color:#fff;letter-spacing:0.3px;}\n        .mtto-hdr-sub{font-family:Montserrat,sans-serif;font-size:9px;color:rgba(255,255,255,0.45);letter-spacing:1.5px;text-transform:uppercase;margin-top:1px;}\n        .mtto-hdr-spacer{flex:1;}\n        .mtto-hdr-import{background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);border-radius:8px;color:#fff;cursor:pointer;padding:7px 12px;display:flex;align-items:center;gap:6px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;white-space:nowrap;flex-shrink:0;}\n@media (max-width:767px){\n  .mtto-hdr-import-label{display:none;}\n  .mtto-hdr-import{padding:9px 10px;}\n  .mtto-hdr-title{font-size:13px;}\n  .mtto-hdr-sub{font-size:8px;}\n}\n        .mtto-hdr-import:disabled{opacity:0.65;cursor:default;}\n        .mtto-toolbar{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:2px solid var(--navy);padding:12px 20px 10px;position:sticky;top:calc(60px + env(safe-area-inset-top,0px));z-index:55;}\n      "),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr"},onBack&&/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-back",onClick:onBack},"\u2190 Suite"),/*#__PURE__*/React.createElement("img",{className:"mtto-hdr-logo",src:LOGO_SRC,alt:"Bussi\xE9"}),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-title"},"Mantenimientos"),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-sub"},"Bussi\xE9 \xB7 Preventivos")),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-spacer"}),canImport&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("input",{ref:fileRef,type:"file",accept:".xlsm,.xlsx",style:{display:"none"},onChange:handleImport}),null)),/*#__PURE__*/React.createElement("div",{className:"mtto-toolbar"},/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap"}},({ordenes:"Cronograma preventivo \xB7 F-MAN-012",inspecciones:"Inspecciones locativas \xB7 F-MAN-009",registro:"Registro de \xF3rdenes e inspecciones",cumplimiento:"Cumplimiento del a\xF1o",cumplimiento1:"Cumplimiento del a\xF1o",admin:"Administraci\xF3n"})[tab]),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:anio,style:{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"},onChange:function onChange(ev){setAnio(parseInt(ev.target.value,10));}},[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return/*#__PURE__*/React.createElement("option",{key:a,value:a},a);})),/*#__PURE__*/React.createElement("div",{className:"mtto-tabs",style:{maxWidth:660}},(canImport?[["ordenes","🔧 Mantenimiento\npreventivo de equipos"],["inspecciones","🧱 Inspecciones\nlocativas"],["registro","🗂️ Registro"],["cumplimiento","✅ Cumplimiento"],["cumplimiento1","📊 Cumplimiento1"],["admin","⚙️ Admin"]]:[["ordenes","🔧 Mantenimiento\npreventivo de equipos"],["inspecciones","🧱 Inspecciones\nlocativas"],["registro","🗂️ Registro"],["cumplimiento","✅ Cumplimiento"],["cumplimiento1","📊 Cumplimiento1"]]).map(function(tb){var _p=String(tb[1]).split(" "),_ic=_p.shift();return/*#__PURE__*/React.createElement("button",{key:tb[0],className:"mtto-tab-btn"+(tab===tb[0]?" active":""),onClick:function onClick(){setTab(tb[0]);}},React.createElement("span",{className:"mtto-tab-ic"},_ic),React.createElement("span",{className:"mtto-tab-tx"},_p.join(" ")));})),tab==="cumplimiento"&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginLeft:"auto"}},/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.deleteMonth&&ifr.current.contentWindow.deleteMonth();},style:{background:"#fff",color:"var(--navy)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"🗑 Borrar mes"),/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.exportReport&&ifr.current.contentWindow.exportReport();},style:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"⬇ Exportar informe"),/*#__PURE__*/React.createElement("button",{type:"button",disabled:generandoPptx,onClick:function onClick(){abrirInformeSemanalApp();},style:{background:"#2d7dd2",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:generandoPptx?"default":"pointer",opacity:generandoPptx?0.7:1,whiteSpace:"nowrap"}},generandoPptx?"⏳ Generando…":"📊 Informe PPTX")))),flashMsg&&/*#__PURE__*/React.createElement("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:flashMsg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 20px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},flashMsg.msg),/*#__PURE__*/React.createElement("div",{className:"mto-pagina"},React.createElement("style",null,MTO_CSS),loading?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:60,color:"var(--gray)",fontWeight:600}},"Cargando cronograma\u2026"):/*#__PURE__*/React.createElement(React.Fragment,null,tab==="ordenes"&&React.createElement(OrdenesTab,{anio:anio,ordenes:ordenes,usuarios:usuarios,currentUser:initialUser,canImport:canImport,importing:importing,loading:false,onImportClick:function(){fileRef.current&&fileRef.current.click();},onAbrir:function(o){setSelOrd(o);},onBulkAssign:bulkAsignarOrdenes,onReload:load,flash:flash}),tab==="inspecciones"&&React.createElement(InspeccionesTab,{anio:anio,usuarios:usuarios,currentUser:initialUser,canImport:canImport,onCambiarAnio:setAnio}),tab==="registro"&&React.createElement(RegistroTab,{anio:anio,ordenes:ordenes,usuarios:usuarios,currentUser:initialUser,onAbrirOrden:function(o){setSelOrd(o);}}),tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="cumplimiento1"&&React.createElement("div",{style:{width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement(CumplimientoInterno,{anio:anio,currentUser:initialUser,onCambio:load})),tab==="admin"&&canImport&&React.createElement("div",{className:"mto-admin"},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminFMAN010Panel,null),React.createElement(AdminInstructivosPanel,null),React.createElement("div",{style:{gridColumn:"1/-1"}},React.createElement(ResponsablesPanel,{anio:anio,ordenes:ordenes,usuarios:usuarios,currentUser:initialUser}))))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
+function _updateOrden(){_updateOrden=_asyncToGenerator(/*#__PURE__*/_regenerator().m(function _callee11(ord,patch){var r,upd;return _regenerator().w(function(_context11){while(1)switch(_context11.n){case 0:_context11.n=1;return sb.from("mtto_ordenes").update(patch).eq("id",ord.id).select();case 1:r=_context11.v;if(!r.error){_context11.n=2;break;}flash("Error: "+r.error.message,false);return _context11.a(2,{error:r.error.message});case 2:upd=r.data&&r.data[0];setOrdenes(function(prev){return prev.map(function(o){return o.id===ord.id?upd||Object.assign({},o,patch):o;});});if(upd)setSelOrd(upd);if(patch.estado==="ejecutado"){flash("Orden ejecutada ✓");registrarHistorial("mtto_ejecutada",ord.equipo_codigo+" "+ord.equipo_desc+" ("+MTTO_MESES[ord.mes-1]+")",patch.ejecutor);}else if(patch.estado==="reprogramado"){flash("Orden reprogramada ↻");}else if(patch.estado==="rechazada"){flash("Orden rechazada ✕");}case 3:return _context11.a(2,{ok:true});}},_callee11);}));return _updateOrden.apply(this,arguments);}var esVencida=function esVencida(o){return o.estado==="programado"&&o.anio<=hoyAnio&&(o.anio<hoyAnio||o.mes<hoyMes);};var porMes=React.useMemo(function(){var arr=[];for(var m=1;m<=12;m++){var os=ordenes.filter(function(o){return o.mes===m;});arr.push({mes:m,total:os.length,ejec:os.filter(function(o){return o.estado==="ejecutado";}).length,venc:os.filter(esVencida).length,repr:os.filter(function(o){return o.estado==="reprogramado";}).length});}return arr;},[ordenes]);var delMes=React.useMemo(function(){var lista=ordenes.filter(function(o){return o.mes===mes;});if(filtroTec){lista=lista.filter(function(o){return(o.asignado_a||"")===filtroTec;});}if(busca.trim()){var b=busca.trim().toLowerCase();lista=lista.filter(function(o){return(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista;},[ordenes,mes,busca,filtroTec]);var secciones=React.useMemo(function(){var map={};delMes.forEach(function(o){var s=o.seccion||"SIN SECCIÓN";(map[s]=map[s]||[]).push(o);});return Object.keys(map).map(function(s){return{seccion:s,items:map[s]};});},[delMes]);var registroFiltrado=React.useMemo(function(){var lista=ordenes.slice();if(regMes){lista=lista.filter(function(o){return o.mes===parseInt(regMes,10);});}if(regEstado){if(regEstado==="vencida"){lista=lista.filter(esVencida);}else{lista=lista.filter(function(o){return o.estado===regEstado;});}}if(regBusca.trim()){var b=regBusca.trim().toLowerCase();lista=lista.filter(function(o){return(o.consecutivo||"").toLowerCase().indexOf(b)>=0||(o.equipo_codigo||"").toLowerCase().indexOf(b)>=0||(o.equipo_desc||"").toLowerCase().indexOf(b)>=0||(o.seccion||"").toLowerCase().indexOf(b)>=0;});}return lista.sort(function(a,b){return(a.consecutivo||"").localeCompare(b.consecutivo||"");});},[ordenes,regMes,regEstado,regBusca]);function fmtFecha(v){if(!v)return"—";try{var d=new Date(v);if(isNaN(d.getTime()))return String(v).slice(0,10);return d.toLocaleDateString("es-CO",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(e){return String(v).slice(0,10);}}var totAnio=ordenes.length;var totEjec=ordenes.filter(function(o){return o.estado==="ejecutado";}).length;var totVenc=ordenes.filter(esVencida).length;return/*#__PURE__*/React.createElement("div",{style:{minHeight:"100vh",background:"var(--lighter)",paddingBottom:40}},/*#__PURE__*/React.createElement("style",null,"\n        .mtto-hdr{background:var(--navy);padding:calc(14px + env(safe-area-inset-top,0px)) 20px 14px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:60;box-shadow:0 2px 12px rgba(13,47,92,0.28);}\n        .mtto-hdr-back{background:rgba(255,255,255,0.12);border:none;border-radius:8px;color:#fff;cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:5px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;flex-shrink:0;}\n        .mtto-hdr-logo{height:40px;width:auto;display:block;border-radius:10px;flex-shrink:0;}\n        .mtto-hdr-title{font-family:Montserrat,sans-serif;font-weight:800;font-size:14px;color:#fff;letter-spacing:0.3px;}\n        .mtto-hdr-sub{font-family:Montserrat,sans-serif;font-size:9px;color:rgba(255,255,255,0.45);letter-spacing:1.5px;text-transform:uppercase;margin-top:1px;}\n        .mtto-hdr-spacer{flex:1;}\n        .mtto-hdr-import{background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22);border-radius:8px;color:#fff;cursor:pointer;padding:7px 12px;display:flex;align-items:center;gap:6px;font-family:Montserrat,sans-serif;font-weight:700;font-size:11px;white-space:nowrap;flex-shrink:0;}\n@media (max-width:767px){\n  .mtto-hdr-import-label{display:none;}\n  .mtto-hdr-import{padding:9px 10px;}\n  .mtto-hdr-title{font-size:13px;}\n  .mtto-hdr-sub{font-size:8px;}\n}\n        .mtto-hdr-import:disabled{opacity:0.65;cursor:default;}\n        .mtto-toolbar{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:2px solid var(--navy);padding:12px 20px 10px;position:sticky;top:calc(60px + env(safe-area-inset-top,0px));z-index:55;}\n      "),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr"},onBack&&/*#__PURE__*/React.createElement("button",{className:"mtto-hdr-back",onClick:onBack},"\u2190 Suite"),/*#__PURE__*/React.createElement("img",{className:"mtto-hdr-logo",src:LOGO_SRC,alt:"Bussi\xE9"}),/*#__PURE__*/React.createElement("div",null,/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-title"},"Mantenimientos"),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-sub"},"Bussi\xE9 \xB7 Preventivos")),/*#__PURE__*/React.createElement("div",{className:"mtto-hdr-spacer"}),canImport&&/*#__PURE__*/React.createElement(React.Fragment,null,/*#__PURE__*/React.createElement("input",{ref:fileRef,type:"file",accept:".xlsm,.xlsx",style:{display:"none"},onChange:handleImport}),null)),/*#__PURE__*/React.createElement("div",{className:"mtto-toolbar"},/*#__PURE__*/React.createElement("div",{style:{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}},/*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"var(--gray)",fontWeight:700,textTransform:"uppercase",letterSpacing:0.8,fontFamily:"Montserrat,sans-serif",whiteSpace:"nowrap"}},({ordenes:"Cronograma preventivo \xB7 F-MAN-012",inspecciones:"Inspecciones locativas \xB7 F-MAN-009",agua:"Agua purificada \xB7 F-MAN-003 / F-MAN-023",registro:"Registro de \xF3rdenes e inspecciones",cumplimiento:"Cumplimiento del a\xF1o",cumplimiento1:"Cumplimiento del a\xF1o",admin:"Administraci\xF3n"})[tab]),/*#__PURE__*/React.createElement("select",{className:"ios-input",value:anio,style:{padding:"7px 10px",fontSize:13,fontWeight:700,width:"auto"},onChange:function onChange(ev){setAnio(parseInt(ev.target.value,10));}},[hoyAnio-1,hoyAnio,hoyAnio+1].map(function(a){return/*#__PURE__*/React.createElement("option",{key:a,value:a},a);})),/*#__PURE__*/React.createElement("div",{className:"mtto-tabs",style:{maxWidth:880}},(canImport?[["ordenes","🔧 Mantenimiento\npreventivo de equipos"],["inspecciones","🧱 Inspecciones\nlocativas"],["agua","💧 Sistemas de agua\npurificada"],["registro","🗂️ Registro"],["cumplimiento","✅ Cumplimiento"],["cumplimiento1","📊 Cumplimiento1"],["admin","⚙️ Admin"]]:[["ordenes","🔧 Mantenimiento\npreventivo de equipos"],["inspecciones","🧱 Inspecciones\nlocativas"],["agua","💧 Sistemas de agua\npurificada"],["registro","🗂️ Registro"],["cumplimiento","✅ Cumplimiento"],["cumplimiento1","📊 Cumplimiento1"]]).map(function(tb){var _p=String(tb[1]).split(" "),_ic=_p.shift();return/*#__PURE__*/React.createElement("button",{key:tb[0],className:"mtto-tab-btn"+(tab===tb[0]?" active":""),onClick:function onClick(){setTab(tb[0]);}},React.createElement("span",{className:"mtto-tab-ic"},_ic),React.createElement("span",{className:"mtto-tab-tx"},_p.join(" ")));})),tab==="cumplimiento"&&/*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginLeft:"auto"}},/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.deleteMonth&&ifr.current.contentWindow.deleteMonth();},style:{background:"#fff",color:"var(--navy)",border:"1px solid var(--border)",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"🗑 Borrar mes"),/*#__PURE__*/React.createElement("button",{type:"button",onClick:function onClick(){ifr.current&&ifr.current.contentWindow&&ifr.current.contentWindow.exportReport&&ifr.current.contentWindow.exportReport();},style:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},"⬇ Exportar informe"),/*#__PURE__*/React.createElement("button",{type:"button",disabled:generandoPptx,onClick:function onClick(){abrirInformeSemanalApp();},style:{background:"#2d7dd2",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12,cursor:generandoPptx?"default":"pointer",opacity:generandoPptx?0.7:1,whiteSpace:"nowrap"}},generandoPptx?"⏳ Generando…":"📊 Informe PPTX")))),flashMsg&&/*#__PURE__*/React.createElement("div",{style:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",zIndex:500,background:flashMsg.ok?"var(--navy)":"#C0001A",color:"#fff",padding:"11px 20px",borderRadius:12,fontSize:13,fontWeight:600,boxShadow:"0 8px 30px rgba(0,0,0,0.25)",maxWidth:"90vw"}},flashMsg.msg),/*#__PURE__*/React.createElement("div",{className:"mto-pagina"},React.createElement("style",null,MTO_CSS),loading?/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",padding:60,color:"var(--gray)",fontWeight:600}},"Cargando cronograma\u2026"):/*#__PURE__*/React.createElement(React.Fragment,null,tab==="ordenes"&&React.createElement(OrdenesTab,{anio:anio,ordenes:ordenes,usuarios:usuarios,currentUser:initialUser,canImport:canImport,importing:importing,loading:false,onImportClick:function(){fileRef.current&&fileRef.current.click();},onAbrir:function(o){setSelOrd(o);},onBulkAssign:bulkAsignarOrdenes,onReload:load,flash:flash}),tab==="inspecciones"&&React.createElement(InspeccionesTab,{anio:anio,usuarios:usuarios,currentUser:initialUser,canImport:canImport,onCambiarAnio:setAnio}),tab==="agua"&&React.createElement(AguaTab,{anio:anio,usuarios:usuarios,currentUser:initialUser,canImport:canImport,onCambiarAnio:setAnio}),tab==="registro"&&React.createElement(RegistroTab,{anio:anio,ordenes:ordenes,usuarios:usuarios,currentUser:initialUser,onAbrirOrden:function(o){setSelOrd(o);}}),tab==="cumplimiento"&&React.createElement("div",{style:{minHeight:420,width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement("iframe",{ref:ifr,src:"seguimiento_cumplimiento.html?v=20261027a",title:"Cumplimiento Mantenimientos",style:{width:"100%",height:"calc(100vh - 210px)",minHeight:640,border:"none",display:"block",background:"#fff"}})),tab==="cumplimiento1"&&React.createElement("div",{style:{width:"100vw",position:"relative",left:"50%",right:"50%",marginLeft:"-50vw",marginRight:"-50vw"}},React.createElement(CumplimientoInterno,{anio:anio,currentUser:initialUser,onCambio:load})),tab==="admin"&&canImport&&React.createElement("div",{className:"mto-admin"},React.createElement(AdminFMAN008Panel,null),React.createElement(AdminFMAN010Panel,null),React.createElement(AdminInstructivosPanel,null),React.createElement("div",{style:{gridColumn:"1/-1"}},React.createElement(ResponsablesPanel,{anio:anio,ordenes:ordenes,usuarios:usuarios,currentUser:initialUser}))))),selOrd&&/*#__PURE__*/React.createElement(MttoOrdenSheet,{ord:selOrd,currentUser:initialUser,usuarios:usuarios,onClose:function onClose(){setSelOrd(null);},onUpdate:function onUpdate(patch){return updateOrden(selOrd,patch);}}));}// ── Solicitudes de Mantenimiento — helpers de datos ──────────────────────────
 // Los equipos de producción vienen como "COD-ÁREA-N - NOMBRE" (ej: "EP-322-1 - ENVASADORA PPR").
 // El código de área es todo antes del último "-N". Con ese número final buscamos el
 // nombre real del área en AREAS_LOC ("NOMBRE (322)") para mostrar una etiqueta legible.
