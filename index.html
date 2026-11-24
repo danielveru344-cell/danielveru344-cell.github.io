@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261125b";
+window.APP_BUILD = "20261125c";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -15758,8 +15758,13 @@ async function aguaImportar(cronos,opc){
   return {insertadas:nuevas.length,historicas:nuevas.filter(function(o){return o.estado==="ejecutado";}).length};
 }
 function aguaFechaHoy(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
-// Último día de la semana del cronograma (I = día 7, II = 14, III = 21, IV = fin de mes)
-function aguaFinSemana(anio,mes,semana){var ult=new Date(anio,mes,0).getDate();return new Date(anio,mes-1,semana>=4?ult:Math.min(ult,semana*7));}
+// Fecha máxima de una actividad: el domingo de su semana en el cronograma (semana I = primer domingo del mes,
+// II = segundo, III = tercero, IV = cuarto). Ej.: diciembre 2026 → 6, 13, 20 y 27.
+function aguaFinSemana(anio,mes,semana){
+  var d1=new Date(anio,mes-1,1);
+  var primerDomingo=1+((7-d1.getDay())%7);
+  return new Date(anio,mes-1,primerDomingo+7*(Math.max(1,Math.min(4,semana||1))-1));
+}
 
 // ── Detalle de una actividad ──
 function AguaSheet(props){
@@ -15791,7 +15796,8 @@ function AguaSheet(props){
           h("div",{style:{fontSize:12,color:"var(--gray)",marginTop:3,fontWeight:600}},"Sistema de agua purificada "+it.sistema+(it.formato?" · "+it.formato:""))),
         h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
           h("span",{className:"badge",style:{background:fq.bg,color:fq.col}},AGUA_FREQ[it.frecuencia]||it.frecuencia),
-          h("span",{className:"badge badge-blue"},"Semana "+AGUA_ROMANO[it.semana-1]+" · "+MTTO_MESES[it.mes-1]+" "+it.anio)),
+          h("span",{className:"badge badge-blue"},"Semana "+AGUA_ROMANO[it.semana-1]+" · "+MTTO_MESES[it.mes-1]+" "+it.anio),
+          h("span",{className:"badge",style:{background:"var(--light)",color:"var(--navy)"}},"Fecha máxima: domingo "+aguaFinSemana(it.anio,it.mes,it.semana).getDate())),
         h(MtoAsignacion,{etiqueta:"actividad",item:it,usuarios:usuarios,usuarioActual:currentUser,puede:canEdit,final:it.estado==="ejecutado",claves:[["equipo","AGUA "+it.sistema]],
           onAsignar:function(nombre,meta){return onUpdate({asignado_a:nombre,asignado_por:meta.por,fecha_asignacion:new Date().toISOString(),reasignado:!!meta.reasignado,asignado_original:meta.reasignado?(meta.original||null):null}).then(function(r){asgManejarResultado(r);pushNotificacion(meta.reasignado?"💧 Actividad reasignada":"💧 Actividad asignada","Agua "+it.sistema+" · "+it.actividad+" (semana "+AGUA_ROMANO[it.semana-1]+" de "+MTTO_MESES[it.mes-1]+") → "+nombre);});}}),
         it.estado==="ejecutado"&&h("div",{style:{background:"#F2FBF6",border:"1px solid #C6EBD6",borderRadius:12,padding:"11px 14px",fontSize:13}},
