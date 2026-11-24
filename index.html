@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261124k";
+window.APP_BUILD = "20261124l";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -13406,6 +13406,11 @@ async function plantillaPreparada(templateBuf){
   var ws=wb.worksheets[0];
   var modelo=ws.model;
   modelo.mergeCells=modelo.merges;   // el molde trae las celdas combinadas sin pisar sus estilos
+  // Las celdas "esclavas" de una combinación guardan sus propios bordes (p. ej. la línea derecha de E15:F15 vive en F15).
+  // Al cargar un molde, ExcelJS se salta las celdas de tipo combinación y perdería esos bordes: se pasan a celdas
+  // vacías con su estilo, y al combinarlas después (sin pisar estilos) quedan exactamente como en la plantilla.
+  var TIPO_MERGE=(ExcelJS.ValueType&&ExcelJS.ValueType.Merge)||1,TIPO_NULL=(ExcelJS.ValueType&&ExcelJS.ValueType.Null)||0;
+  (modelo.rows||[]).forEach(function(r){(r.cells||[]).forEach(function(c){if(c.type===TIPO_MERGE){c.type=TIPO_NULL;delete c.master;delete c.value;}});});
   return {modelo:modelo,
     saltos:(ws.rowBreaks||[]).map(function(b){return b.id;}),
     media:(wb.model.media||[]).map(function(m){return {buffer:m.buffer,extension:m.extension};})};
