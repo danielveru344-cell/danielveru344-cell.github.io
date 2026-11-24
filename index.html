@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261124a";
+window.APP_BUILD = "20261124b";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14702,6 +14702,28 @@ function progFila(t,anio,mes){
   var fe=o.fecha_estimada?new Date(String(o.fecha_estimada).slice(0,10)+"T12:00:00"):null;
   return [smResumenSolicitud(o),o.item_codigo||o.area_codigo||"",o.consecutivo||"",(o.descripcion||"").trim()||"Solicitud de mantenimiento","Solicitud",o.asignado_a||"",fe];
 }
+// Filas de una tarea en la programación. Una inspección va en varias filas: el área y, debajo, cada esclusa
+// que se inspecciona en el mismo F-MAN-010 (mismo consecutivo), igual que en el cronograma F-MAN-009.
+function progFilas(t,anio,mes){
+  var f=progFila(t,anio,mes);
+  if(t.fuente!=="inspeccion")return [f];
+  var o=t.raw,filas=[];
+  var sola=o.esclusa_c41&&o.esclusa_c41===o.area_nombre;   // esclusa que se inspecciona sola
+  f[3]=sola?"Inspección locativa de esclusa":"Inspección locativa";
+  filas.push(f);
+  [[sola?null:o.esclusa_c41,"esclusa de personal"],[o.esclusa_c56,"esclusa de materiales"]].forEach(function(e){
+    if(!e[0])return;
+    var cod=(typeof inspPartirNombre==="function"&&inspPartirNombre(e[0]).codigo)||o.area_codigo||"";
+    filas.push([e[0],cod,f[2],"Inspección locativa - "+e[1],f[4],f[5],f[6]]);
+  });
+  return filas;
+}
+// Filas de varias tareas, ordenadas por código y consecutivo sin separar un área de sus esclusas.
+function progFilasOrdenadas(tareas,anio,mes){
+  return tareas.map(function(t){return progFilas(t,anio,mes);})
+    .sort(function(a,b){return String(a[0][1]).localeCompare(String(b[0][1]),"es",{numeric:true})||String(a[0][2]).localeCompare(String(b[0][2]),"es",{numeric:true});})
+    .reduce(function(acc,g){return acc.concat(g);},[]);
+}
 var PROG_SECCIONES=[
   {fuente:"preventivo",titulo:"MANTENIMIENTO PREVENTIVO DE EQUIPOS (F-MAN-012 V01)",col1:"EQUIPO"},
   {fuente:"inspeccion",titulo:"INSPECCIONES LOCATIVAS (F-MAN-009)",col1:"ÁREA"},
@@ -14778,8 +14800,7 @@ async function progGenerarExcel(opc){
       });
       ws.getRow(fila).height=29.5;
       fila++;
-      var filas=sec.items.map(function(x){var f=progFila(x,opc.anio,opc.mes);if(!f[5])f[5]="SIN ASIGNAR";return f;})
-        .sort(function(a,b){return String(a[1]).localeCompare(String(b[1]),"es",{numeric:true})||String(a[2]).localeCompare(String(b[2]),"es",{numeric:true});});
+      var filas=progFilasOrdenadas(sec.items,opc.anio,opc.mes).map(function(f){if(!f[5])f[5]="SIN ASIGNAR";return f;});
       if(!filas.length)filas=[["Sin actividades programadas en el mes","","","","",persona||"",null]];
       filas.forEach(function(vals,k){
         var row=ws.getRow(fila);
@@ -14828,11 +14849,11 @@ var PROG_LIMPIEZA=[
   ["CHILLER 1","AT-604-2"],["EASY HEAT","AT-604-3"],["UNIDAD MANEJADORA DE AIRE 09","AT-605-1"]];
 var PROG_RESP_RUTINA="PABLO FONSECA";
 function progSecciones(opc){
-  var porFuente=function(f){return opc.tareas.filter(function(t){return t.fuente===f;}).map(function(t){return progFila(t,opc.anio,opc.mes);});};
+  var porFuente=function(f){return progFilasOrdenadas(opc.tareas.filter(function(t){return t.fuente===f;}),opc.anio,opc.mes);};
   return [
-    {clave:"equipos",corto:"MANTENIMIENTO DE EQUIPOS",titulo:"MANTENIMIENTO PREVENTIVO DE EQUIPOS (F-MAN-012 V01)",col1:"EQUIPO",filas:porFuente("preventivo")},
+    {clave:"equipos",corto:"MANTENIMIENTO DE EQUIPOS",titulo:"MANTENIMIENTO PREVENTIVO DE EQUIPOS (F-MAN-012 V01)",col1:"EQUIPO",ordenado:true,filas:porFuente("preventivo")},
     {clave:"apoyo",corto:"MANTENIMIENTO APOYO CRÍTICO",titulo:"MANTENIMIENTO PREVENTIVO EQUIPOS APOYO CRÍTICO (F-MAN-003 V02, F-MAN-023 V01)",col1:"EQUIPO",filas:[]},
-    {clave:"inspeccion",corto:"INSPECCIÓN DE ÁREAS",titulo:"INSPECCIÓN PREVENTIVA DE ÁREAS (F-MAN-009 V01)",col1:"NOMBRE DEL ÁREA",filas:porFuente("inspeccion")},
+    {clave:"inspeccion",corto:"INSPECCIÓN DE ÁREAS",titulo:"INSPECCIÓN PREVENTIVA DE ÁREAS (F-MAN-009 V01)",col1:"NOMBRE DEL ÁREA",ordenado:true,filas:porFuente("inspeccion")},
     {clave:"cal_int",corto:"CALIBRACIONES INTERNAS",titulo:"CALIBRACIONES INTERNAS A INSTRUMENTOS (F-MT-013 V02)",col1:"INSTRUMENTO",filas:[]},
     {clave:"cal_ext",corto:"CALIBRACIONES EXTERNAS",titulo:"CALIBRACIONES EXTERNAS A INSTRUMENTOS (F-MT-014 V03)",col1:"INSTRUMENTO",filas:[]},
     {clave:"rutina",corto:"ACTIVIDADES DE RUTINA",titulo:"ACTIVIDADES DE RUTINA",col1:"EQUIPO",fijo:true,
@@ -14914,7 +14935,7 @@ async function progGenerarGeneral(opc){
     ws.getRow(fila).height=29.5;
     fila++;
     var filas=sec.filas.map(function(f){f=f.slice();f[5]=String(f[5]||"SIN ASIGNAR").toUpperCase();return f;});
-    if(!sec.fijo)filas.sort(function(a,b){return String(a[1]).localeCompare(String(b[1]),"es",{numeric:true})||String(a[2]).localeCompare(String(b[2]),"es",{numeric:true});});
+    if(!sec.fijo&&!sec.ordenado)filas.sort(function(a,b){return String(a[1]).localeCompare(String(b[1]),"es",{numeric:true})||String(a[2]).localeCompare(String(b[2]),"es",{numeric:true});});
     var vacia=!filas.length;
     if(vacia)filas=[["","","","","","",""],["","","","","","",""]];   // sección sin datos todavía: quedan filas en blanco
     var ini=fila;
