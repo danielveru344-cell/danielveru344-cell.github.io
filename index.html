@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261123i";
+window.APP_BUILD = "20261124a";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -14803,12 +14803,185 @@ async function progGenerarExcel(opc){
   var sufijo=opc.personas.length===1?"_"+String(opc.personas[0]||"Sin asignar").replace(/\s+/g,"_"):"";
   descargarBuffer(buf2,"Programacion_"+mesTx+"_"+opc.anio+sufijo+".xlsx");
 }
+// ── Programación general (formato completo "PROGRAMACIÓN MENSUAL DE MANTENIMIENTO PLANTA BUSSIE") ──
+// Una sola hoja con las 8 secciones del formato y, a la derecha, el cuadro de actividades por técnico.
+// Apoyo crítico y calibraciones todavía no existen en la app: sus secciones salen vacías. Cuando existan,
+// basta con que su "filas" devuelva las actividades del mes con la forma de progFila.
+var PROG_RUTINA=[
+  ["CALDERA CONTINENTAL","AT-602-1","VERIFICACIÓN DIARIA DE CALDERA"],["COMPRESOR KAESER","AT-601-1","VERIFICACIÓN DIARIA DE COMPRESOR"],
+  ["UNIDAD MANEJADORA DE AIRE 01","AT-223-1","VERIFICACIÓN DIARIA DE UMAS"],["UNIDAD MANEJADORA DE AIRE 08","AT-223-3","VERIFICACIÓN DIARIA DE UMAS"],
+  ["UNIDAD MANEJADORA DE AIRE 02","AT-300-1","VERIFICACIÓN DIARIA DE UMAS"],["UNIDAD MANEJADORA DE AIRE 03","AT-376-6","VERIFICACIÓN DIARIA DE UMAS"],
+  ["UNIDAD MANEJADORA DE AIRE 04","AT-400-1","VERIFICACIÓN DIARIA DE UMAS"],["UNIDAD MANEJADORA DE AIRE 05","AT-485-1","VERIFICACIÓN DIARIA DE UMAS"],
+  ["UNIDAD MANEJADORA DE AIRE 06","AT-539-1","VERIFICACIÓN DIARIA DE UMAS"],["UNIDAD MANEJADORA DE AIRE 07","AT-AP500-1","VERIFICACIÓN DIARIA DE UMAS"],
+  ["UNIDAD MANEJADORA DE AIRE 09","AT-605-1","VERIFICACIÓN DIARIA DE UMAS"],["PLANTA ELÉCTRICA","N/A","VERIFICACIÓN DIARIA DE PLANTA ELÉCTRICA"],
+  ["PLANTA ELÉCTRICA","N/A","VERIFICACIÓN DIARIA DE PLANTA ELÉCTRICA"],["PLANTA DE AGUA PURIFICADA 1200L","PT-145-1","VERIFICACIÓN DIARIA DE AGUA PURIFICADA"],
+  ["PLANTA DE AGUA PURIFICADA 1200L","PT-533-4","VERIFICACIÓN DIARIA DE AGUA PURIFICADA"],["PLANTA DE AGUA PURIFICADA 600L","PT-AT-501-4","VERIFICACIÓN DIARIA DE AGUA PURIFICADA"],
+  ["CHILLER 1","AT-604-1","VERIFICACIÓN DIARIA"],["EASY HEAT","AT-604-3","VERIFICACIÓN DIARIA"],["CHILLER PLANTA DE AGUA","AT-539-4","VERIFICACIÓN DIARIA"],
+  ["CHILLER BLISTEADORA","AT-376-1","VERIFICACIÓN DIARIA"],["CHILLER 1","AT-604-2","VERIFICACIÓN DIARIA"],
+  ["DIFERENCIALES DE PRESIÓN CUARTO PISO RECUBRIMIENTO","N/A","VERIFICACIÓN DIARIA"],["DIFERENCIALES DE PRESIÓN CUARTO PISO APOYO TÉCNICO LECHOS","N/A","VERIFICACIÓN DIARIA"],
+  ["DIFERENCIALES DE PRESIÓN CUARTO PISO ESCLUSA DE MANTENIMIENTO","N/A","VERIFICACIÓN DIARIA"]];
+var PROG_LIMPIEZA=[
+  ["APOYO TÉCNICO HVAC","173"],["APOYO TÉCNICO","223"],["APOYO TÉCNICO A2","300"],["APOYO TÉCNICO B2","376"],["APOYO TÉCNICO A3","400"],
+  ["APOYO TÉCNICO B3","485"],["APOYO TÉCNICO MEZCLA","422"],["APOYO TÉCNICO","451"],["APOYO TÉCNICO 4","539"],["EQUIPO DE AGUA PURIFICADA","533"],
+  ["APOYO TÉCNICO","543"],["APOYO TÉCNICO AP","AP500"],["EQUIPO DE AGUA PURIFICADA AP","AP501"],["COMPRESOR KAESER","AT-601-1"],
+  ["CALDERA CONTINENTAL","AT-602-1"],["COLECTOR BOMBO 300","AT-603-1"],["COLECTOR BOMBO 500","AT-603-2"],["CHILLER 1","AT-604-1"],
+  ["CHILLER 1","AT-604-2"],["EASY HEAT","AT-604-3"],["UNIDAD MANEJADORA DE AIRE 09","AT-605-1"]];
+var PROG_RESP_RUTINA="PABLO FONSECA";
+function progSecciones(opc){
+  var porFuente=function(f){return opc.tareas.filter(function(t){return t.fuente===f;}).map(function(t){return progFila(t,opc.anio,opc.mes);});};
+  return [
+    {clave:"equipos",corto:"MANTENIMIENTO DE EQUIPOS",titulo:"MANTENIMIENTO PREVENTIVO DE EQUIPOS (F-MAN-012 V01)",col1:"EQUIPO",filas:porFuente("preventivo")},
+    {clave:"apoyo",corto:"MANTENIMIENTO APOYO CRÍTICO",titulo:"MANTENIMIENTO PREVENTIVO EQUIPOS APOYO CRÍTICO (F-MAN-003 V02, F-MAN-023 V01)",col1:"EQUIPO",filas:[]},
+    {clave:"inspeccion",corto:"INSPECCIÓN DE ÁREAS",titulo:"INSPECCIÓN PREVENTIVA DE ÁREAS (F-MAN-009 V01)",col1:"NOMBRE DEL ÁREA",filas:porFuente("inspeccion")},
+    {clave:"cal_int",corto:"CALIBRACIONES INTERNAS",titulo:"CALIBRACIONES INTERNAS A INSTRUMENTOS (F-MT-013 V02)",col1:"INSTRUMENTO",filas:[]},
+    {clave:"cal_ext",corto:"CALIBRACIONES EXTERNAS",titulo:"CALIBRACIONES EXTERNAS A INSTRUMENTOS (F-MT-014 V03)",col1:"INSTRUMENTO",filas:[]},
+    {clave:"rutina",corto:"ACTIVIDADES DE RUTINA",titulo:"ACTIVIDADES DE RUTINA",col1:"EQUIPO",fijo:true,
+      filas:PROG_RUTINA.map(function(r){return [r[0],r[1],"",r[2],"DIARIA",PROG_RESP_RUTINA,"DIARIO"];})},
+    {clave:"limpieza",corto:"LIMPIEZA DE EQUIPOS",titulo:"LIMPIEZA DE EQUIPOS",col1:"EQUIPO",fijo:true,
+      filas:PROG_LIMPIEZA.map(function(r){return [r[0],r[1],"","LIMPIEZA EQUIPOS","SEMANAL",PROG_RESP_RUTINA,"SEMANAL"];})},
+    {clave:"ot",corto:"ÓRDENES DE TRABAJO ABIERTAS",titulo:"ÓRDENES DE TRABAJO ABIERTAS",col1:"EQUIPO",colE:"FECHA DE SOLICITUD",
+      filas:(opc.abiertas||[]).map(function(o){
+        var fe=o.fecha_estimada?new Date(String(o.fecha_estimada).slice(0,10)+"T12:00:00"):null;
+        var fs=o.enviado_en?new Date(o.enviado_en):null;
+        return [smResumenSolicitud(o),o.item_codigo||o.area_codigo||"",o.consecutivo||"",(o.descripcion||"").trim()||"Solicitud de mantenimiento",fs,o.asignado_a||"",fe];
+      })}];
+}
+async function progCargarAbiertas(){
+  var r=await sb.from("solicitudes_mantenimiento").select("*").in("estado",["abierta","asignada"]).order("enviado_en",{ascending:true}).limit(2000);
+  if(r.error)throw r.error;
+  return r.data||[];
+}
+async function progGenerarGeneral(opc){
+  // opc: {anio, mes, tareas (ya del mes), abiertas (solicitudes abiertas/asignadas), elaborado, aprobado}
+  await asegurarLibs(["ExcelJS"]);
+  var wb=new ExcelJS.Workbook();
+  var logoId=null;
+  try{
+    var buf=await fetch("/assets/logo_programacion.png").then(function(r){if(!r.ok)throw new Error("logo");return r.arrayBuffer();});
+    logoId=wb.addImage({buffer:buf,extension:"png"});
+  }catch(e){}
+  var med={style:"medium"},thin={style:"thin"};
+  var fuente={name:"Calibri",size:11};
+  var ws=wb.addWorksheet("Programación",{views:[{showGridLines:false,state:"frozen",ySplit:6}],
+    pageSetup:{paperSize:1,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,
+      margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}}});
+  ws.columns=[{width:45.3},{width:12},{width:13},{width:47.2},{width:13.5},{width:24},{width:25.2},{width:3},
+    {width:24},{width:9},{width:14},{width:14},{width:14},{width:14},{width:14},{width:14},{width:14},{width:14}];
+  ws.getRow(1).height=16;
+  ws.mergeCells("A2:F2");
+  var t=ws.getCell("A2");
+  t.value="PROGRAMACIÓN MENSUAL DE MANTENIMIENTO PLANTA BUSSIE";
+  t.font={name:"Calibri",size:16,bold:true,color:{argb:"FFFFFFFF"}};
+  t.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_AZUL}};
+  t.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+  t.border={top:med,left:med,bottom:med,right:med};
+  ws.getRow(2).height=21.5;
+  ws.mergeCells("G2:G6");
+  ws.getCell("G2").border={top:med,left:med,bottom:med,right:med};
+  if(logoId!==null)ws.addImage(logoId,{tl:{col:6.33,row:1.12},ext:{width:70,height:88},editAs:"oneCell"});
+  [["MES DE PROGRAMA:",MTTO_MESES[opc.mes-1].toUpperCase()+" "+opc.anio],["FECHA DE EMISIÓN:",new Date()],
+   ["ELABORADO POR:",(opc.elaborado||"").toUpperCase()],["APROBADO POR:",(opc.aprobado||"").toUpperCase()]].forEach(function(c,i){
+    var r=3+i;
+    ws.mergeCells("B"+r+":F"+r);
+    var a=ws.getCell("A"+r),b=ws.getCell("B"+r);
+    a.value=c[0];b.value=c[1];
+    a.font=Object.assign({},fuente,{bold:true});b.font=Object.assign({},fuente,{bold:true});
+    a.alignment={horizontal:"center",vertical:"middle"};b.alignment={horizontal:"left",vertical:"middle"};
+    a.border={top:med,left:med,bottom:med,right:med};b.border={top:med,left:med,bottom:med,right:med};
+    if(c[1] instanceof Date)b.numFmt="dd/mm/yyyy";
+    ws.getRow(r).height=15;
+  });
+
+  var secs=progSecciones(opc);
+  var fila=7,rangos=[];
+  secs.forEach(function(sec){
+    ws.mergeCells("A"+fila+":G"+fila);
+    var st=ws.getCell("A"+fila);
+    st.value=sec.titulo;
+    st.font=Object.assign({},fuente,{bold:true});
+    st.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_GRIS}};
+    st.alignment={horizontal:"center",vertical:"middle"};
+    st.border={top:med,left:med,bottom:med,right:med};
+    ws.getRow(fila).height=15;
+    fila++;
+    [sec.col1,"CÓDIGO","CONSECUTIVO","ACTIVIDAD PROGRAMADA",sec.colE||"FRECUENCIA","RESPONSABLE","FECHA LÍMITE DE EJECUCIÓN"].forEach(function(v,i){
+      var c=ws.getRow(fila).getCell(i+1);
+      c.value=v;c.font=Object.assign({},fuente,{color:{argb:"FFFFFFFF"}});
+      c.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_AZUL}};
+      c.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+      c.border={top:med,left:med,bottom:med,right:med};
+    });
+    ws.getRow(fila).height=29.5;
+    fila++;
+    var filas=sec.filas.map(function(f){f=f.slice();f[5]=String(f[5]||"SIN ASIGNAR").toUpperCase();return f;});
+    if(!sec.fijo)filas.sort(function(a,b){return String(a[1]).localeCompare(String(b[1]),"es",{numeric:true})||String(a[2]).localeCompare(String(b[2]),"es",{numeric:true});});
+    var vacia=!filas.length;
+    if(vacia)filas=[["","","","","","",""],["","","","","","",""]];   // sección sin datos todavía: quedan filas en blanco
+    var ini=fila;
+    filas.forEach(function(vals,k){
+      var row=ws.getRow(fila);
+      vals.forEach(function(v,i){
+        var c=row.getCell(i+1);
+        c.value=(v===null||v===undefined)?"":v;
+        c.font=fuente;
+        c.alignment={horizontal:(i===0||i===3)?"left":"center",vertical:"middle",wrapText:true};
+        c.border={top:k===0?med:thin,bottom:k===filas.length-1?med:thin,left:i===0?med:thin,right:i===6?med:thin};
+        if(i===5&&!vacia)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:PROG_CELESTE}};
+        if((i===6||i===4)&&v instanceof Date)c.numFmt="dd/mm/yyyy";
+      });
+      fila++;
+    });
+    rangos.push({sec:sec,ini:ini,fin:fila-1});
+    fila++;   // una fila de aire entre secciones
+  });
+  var ultima=fila-2;
+
+  // ── Cuadro de actividades por técnico (I5:R…) con fórmulas, como en el formato ──
+  var nombres={};
+  secs.forEach(function(sec){sec.filas.forEach(function(f){nombres[String(f[5]||"SIN ASIGNAR").toUpperCase()]=true;});});
+  var lista=Object.keys(nombres).sort(function(a,b){if(a==="SIN ASIGNAR")return 1;if(b==="SIN ASIGNAR")return -1;return a.localeCompare(b,"es");});
+  var colL=["K","L","M","N","O","P","Q","R"];
+  var cab=function(c,v,fondo,color){c.value=v;c.font=Object.assign({},fuente,{bold:true,color:{argb:color||"FF000000"}});
+    c.fill={type:"pattern",pattern:"solid",fgColor:{argb:fondo}};c.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+    c.border={top:med,left:med,bottom:med,right:med};};
+  var r0=8,rN=r0+lista.length-1;
+  ws.mergeCells("I5:J5");ws.mergeCells("I6:J6");
+  cab(ws.getCell("I5"),"TOTAL ACTIVIDADES",PROG_GRIS);
+  cab(ws.getCell("I6"),"TOTAL ASIGNADAS",PROG_GRIS);
+  cab(ws.getCell("I7"),"NOMBRE",PROG_AZUL,"FFFFFFFF");
+  cab(ws.getCell("J7"),"TOTAL",PROG_AZUL,"FFFFFFFF");
+  ws.getRow(7).height=Math.max(ws.getRow(7).height||0,45);
+  rangos.forEach(function(rg,i){
+    var L=colL[i];
+    cab(ws.getCell(L+"7"),rg.sec.corto,PROG_AZUL,"FFFFFFFF");
+    var a=ws.getCell(L+"5");a.value={formula:"COUNTA(A"+rg.ini+":A"+rg.fin+")"};
+    var b=ws.getCell(L+"6");b.value={formula:"COUNTA(A"+rg.ini+":A"+rg.fin+")-COUNTIF(F"+rg.ini+":F"+rg.fin+",\"SIN ASIGNAR\")"};   // asignadas = con responsable
+    [a,b].forEach(function(c){c.font=Object.assign({},fuente,{bold:true});c.alignment={horizontal:"center",vertical:"middle"};c.border={top:med,left:med,bottom:med,right:med};});
+  });
+  lista.forEach(function(nombre,k){
+    var r=r0+k;
+    var n=ws.getCell("I"+r);n.value=nombre;
+    var tot=ws.getCell("J"+r);tot.value={formula:"SUM(K"+r+":R"+r+")"};
+    [n,tot].forEach(function(c){c.font=Object.assign({},fuente,{bold:c===tot});c.alignment={horizontal:c===n?"left":"center",vertical:"middle"};
+      c.border={top:k===0?med:thin,bottom:k===lista.length-1?med:thin,left:med,right:med};});
+    rangos.forEach(function(rg,i){
+      var c=ws.getCell(colL[i]+r);
+      c.value={formula:"COUNTIFS($F$"+rg.ini+":$F$"+rg.fin+",$I"+r+")"};
+      c.font=fuente;c.alignment={horizontal:"center",vertical:"middle"};
+      c.border={top:k===0?med:thin,bottom:k===lista.length-1?med:thin,left:thin,right:i===7?med:thin};
+    });
+  });
+  ws.pageSetup.printArea="A1:R"+ultima;
+  ws.pageSetup.printTitlesRow="2:6";
+  var buf2=await wb.xlsx.writeBuffer();
+  descargarBuffer(buf2,"Programacion_General_"+MTTO_MESES[opc.mes-1]+"_"+opc.anio+".xlsx");
+}
 // Botón + ventana: elegir mes y persona(s), y descargar.
 function ProgPersonaBoton(props){
   var h=React.createElement,S=React.useState;
   var _a=S(false),abierto=_a[0],setAbierto=_a[1];
   return h(React.Fragment,null,
-    h("button",{type:"button",className:"mto-btn",onClick:function(){setAbierto(true);},title:"Programación mensual de mantenimiento, una hoja por persona"},"🖨 Programación por persona"),
+    h("button",{type:"button",className:"mto-btn",onClick:function(){setAbierto(true);},title:"Programación mensual de mantenimiento: formato general o una hoja por persona"},"🖨 Programación mensual"),
     abierto&&h(ProgPersonaModal,{anio:props.anio,mes:props.mes,currentUser:props.currentUser,onCerrar:function(){setAbierto(false);}}));
 }
 var PROG_TAREAS_CACHE={};
@@ -14818,6 +14991,7 @@ function ProgPersonaModal(props){
   var mes0=props.mes||(anio===hoy.getFullYear()?hoy.getMonth()+1:1);
   var _m=S(mes0),mes=_m[0],setMes=_m[1];
   var _p=S("__todas"),persona=_p[0],setPersona=_p[1];
+  var _f=S("general"),formato=_f[0],setFormato=_f[1];   // "general" = formato completo · "persona" = una hoja por persona
   var _t=S(PROG_TAREAS_CACHE[anio]||null),tareas=_t[0],setTareas=_t[1];
   var _e=S(null),error=_e[0],setError=_e[1];
   var _g=S(false),generando=_g[0],setGenerando=_g[1];
@@ -14834,11 +15008,15 @@ function ProgPersonaModal(props){
   var delMes=tareas?progTareasMes(tareas,mes):[];
   var personas=progPersonas(delMes);
   var elegidas=persona==="__todas"?personas.map(function(x){return x.nombre;}):[persona];
-  var puede=!!tareas&&!generando&&personas.length>0&&elegidas.length>0;
+  var general=formato==="general";
+  var puede=!!tareas&&!generando&&(general||(personas.length>0&&elegidas.length>0));
   var generar=function(){
     setGenerando(true);setError(null);
     try{localStorage.setItem("prog_elaborado",elaborado);localStorage.setItem("prog_aprobado",aprobado);}catch(e){}
-    progGenerarExcel({anio:anio,mes:mes,tareas:delMes,personas:elegidas,elaborado:elaborado,aprobado:aprobado})
+    var trabajo=general
+      ?progCargarAbiertas().then(function(ab){return progGenerarGeneral({anio:anio,mes:mes,tareas:delMes.filter(function(t){return t.fuente!=="orden";}),abiertas:ab,elaborado:elaborado,aprobado:aprobado});})
+      :progGenerarExcel({anio:anio,mes:mes,tareas:delMes,personas:elegidas,elaborado:elaborado,aprobado:aprobado});
+    trabajo
       .then(function(){setGenerando(false);props.onCerrar();})
       .catch(function(err){console.error(err);setGenerando(false);setError("No se pudo generar el archivo: "+(err&&err.message||err));});
   };
@@ -14846,23 +15024,32 @@ function ProgPersonaModal(props){
   return h("div",{className:"overlay",onClick:function(){if(!generando)props.onCerrar();}},
     h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:480}},
       h("div",{className:"sheet-handle"}),
-      h("div",{className:"sheet-title"},"Programación por persona"),
+      h("div",{className:"sheet-title"},"Programación mensual"),
       h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:12,fontSize:13,color:"var(--navy)",lineHeight:1.5}},
-        h("div",{style:{fontSize:12.5,color:"var(--gray)"}},"Genera el formato de programación mensual con una hoja por persona: preventivos, inspecciones locativas y solicitudes asignadas."),
+        h("div",null,lbl("Formato"),
+          h("div",{style:{display:"flex",gap:8}},
+            [["general","General (todo el equipo)"],["persona","Una hoja por persona"]].map(function(op){
+              var on=formato===op[0];
+              return h("button",{key:op[0],type:"button",onClick:function(){setFormato(op[0]);},style:{flex:1,padding:"10px 8px",borderRadius:10,cursor:"pointer",
+                border:on?"2px solid var(--navy)":"1px solid var(--light)",background:on?"#EEF3F9":"#fff",color:"var(--navy)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5}},op[1]);}))),
+        h("div",{style:{fontSize:12.5,color:"var(--gray)"}},general
+          ?"Formato completo en una hoja: preventivos, inspecciones, actividades de rutina, limpieza y órdenes de trabajo abiertas, con el resumen por técnico. Apoyo crítico y calibraciones salen vacías hasta que estén en la app."
+          :"Genera el formato de programación mensual con una hoja por persona: preventivos, inspecciones locativas y solicitudes asignadas."),
         h("div",null,lbl("Mes"),
           h("select",{className:"ios-input",value:mes,onChange:function(ev){setMes(parseInt(ev.target.value,10));setPersona("__todas");}},
             MTTO_MESES.map(function(n,i){return h("option",{key:i,value:i+1},n+" "+anio);}))),
-        h("div",null,lbl("Persona"),
+        !general&&h("div",null,lbl("Persona"),
           !tareas&&!error?h("div",{style:{fontSize:12.5,color:"var(--gray)"}},"Cargando actividades…"):
           h("select",{className:"ios-input",value:persona,onChange:function(ev){setPersona(ev.target.value);},disabled:!personas.length},
             h("option",{value:"__todas"},"Todas las personas ("+personas.length+")"),
             personas.map(function(x){return h("option",{key:x.nombre||"__sin",value:x.nombre},(x.nombre||"Sin asignar")+" · "+x.n+" actividades");}))),
-        tareas&&!personas.length&&h("div",{style:{fontSize:12.5,color:"#C45200"}},"No hay actividades programadas en "+MTTO_MESES[mes-1]+"."),
+        general&&!tareas&&!error&&h("div",{style:{fontSize:12.5,color:"var(--gray)"}},"Cargando actividades…"),
+        !general&&tareas&&!personas.length&&h("div",{style:{fontSize:12.5,color:"#C45200"}},"No hay actividades programadas en "+MTTO_MESES[mes-1]+"."),
         h("div",null,lbl("Elaborado por"),h("input",{className:"ios-input",value:elaborado,onChange:function(ev){setElaborado(ev.target.value);}})),
         h("div",null,lbl("Aprobado por"),h("input",{className:"ios-input",value:aprobado,onChange:function(ev){setAprobado(ev.target.value);}})),
         error&&h("div",{style:{fontSize:12.5,color:"#C0001A"}},error),
         h("button",{type:"button",disabled:!puede,onClick:generar,style:{background:puede?"var(--navy)":"var(--light)",color:puede?"#fff":"var(--gray)",border:"none",borderRadius:10,padding:"13px",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:14,cursor:puede?"pointer":"default"}},
-          generando?"Generando…":"⬇ Descargar Excel"+(elegidas.length>1?" ("+elegidas.length+" hojas)":"")),
+          generando?"Generando…":"⬇ Descargar Excel"+(!general&&elegidas.length>1?" ("+elegidas.length+" hojas)":"")),
         h("button",{type:"button",disabled:generando,onClick:props.onCerrar,style:{background:"transparent",border:"none",color:"var(--gray)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:13,cursor:"pointer",padding:"6px"}},"Cancelar"))));
 }
 
