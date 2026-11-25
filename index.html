@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261125m";
+window.APP_BUILD = "20261125n";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -16306,11 +16306,138 @@ function AdminFotosPanel(){
       h("button",{type:"button",className:"mto-btn"+(corriendo?"":" prim"),disabled:corriendo,onClick:iniciar},corriendo?"Reduciendo… no cierres esta pantalla":"Reducir fotos guardadas")));
 }
 
+// ── Responsables > Carga por técnico ─────────────────────────────────────────────────────────
+// Por mes: cuántas y cuáles actividades tiene asignadas cada persona (preventivos de equipos, inspecciones,
+// agua purificada y órdenes de trabajo). Global: de qué equipos y áreas es responsable habitual (o de respaldo).
+var CARGA_FUENTES=[
+  {id:"preventivo",ico:"🔧",corto:"Equipos"},{id:"inspeccion",ico:"🧱",corto:"Áreas"},
+  {id:"agua",ico:"💧",corto:"Agua"},{id:"orden",ico:"📋",corto:"Órdenes de trabajo"}];
+function cargaItem(t){
+  var o=t.raw;
+  if(t.fuente==="preventivo")return {cod:o.equipo_codigo||"",txt:o.equipo_desc||"",extra:o.consecutivo||""};
+  if(t.fuente==="inspeccion"){var esc=[];if(o.esclusa_c41&&o.esclusa_c41!==o.area_nombre)esc.push("esclusa personal");if(o.esclusa_c56)esc.push("esclusa materiales");return {cod:o.area_codigo||"",txt:(o.area_nombre||"")+(esc.length?" + "+esc.join(" y "):""),extra:o.consecutivo||""};}
+  if(t.fuente==="agua")return {cod:"Agua "+(o.sistema||""),txt:(o.actividad||"")+" (semana "+(AGUA_ROMANO[(o.semana||1)-1]||"")+")",extra:""};
+  return {cod:o.consecutivo||"",txt:typeof smResumenSolicitud==="function"?smResumenSolicitud(o):(o.descripcion||"Solicitud"),extra:""};
+}
+function cargaHecha(t){var e=t.raw.estado;return e==="ejecutado"||e==="cerrada";}
+function CargaTecnicosPanel(p){
+  var h=React.createElement,S=React.useState;
+  var anio=p.anio,hoy=new Date();
+  var _v=S("mes"),vista=_v[0],setVista=_v[1];
+  var _m=S(anio===hoy.getFullYear()?hoy.getMonth()+1:1),mes=_m[0],setMes=_m[1];
+  var _t=S(PROG_TAREAS_CACHE[anio]||null),tareas=_t[0],setTareas=_t[1];
+  var _e=S(null),error=_e[0],setError=_e[1];
+  var _a=S({}),abiertos=_a[0],setAbiertos=_a[1];
+  var _r=S(null),resp=_r[0],setResp=_r[1];
+  React.useEffect(function(){
+    var vivo=true;
+    progCargarAnio(anio).then(function(t){PROG_TAREAS_CACHE[anio]=t;if(vivo)setTareas(t);}).catch(function(e){if(vivo&&!PROG_TAREAS_CACHE[anio])setError(String(e&&e.message||e));});
+    return function(){vivo=false;};
+  },[anio]);
+  React.useEffect(function(){
+    sb.from("responsables_actividad").select("tipo,clave,principal,respaldo").range(0,4999).then(function(r){setResp(r.error?[]:(r.data||[]));});
+  },[]);
+  function toggle(k){setAbiertos(function(a){var n=Object.assign({},a);n[k]=!n[k];return n;});}
+  var chip=function(on,txt,onClick,key){return h("button",{key:key,type:"button",onClick:onClick,style:{padding:"7px 12px",borderRadius:10,cursor:"pointer",border:on?"2px solid var(--navy)":"1px solid var(--border)",background:on?"#EEF3F9":"#fff",color:"var(--navy)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5}},txt);};
+  var cab=h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
+    chip(vista==="mes","📅 Por mes",function(){setVista("mes");},"m"),
+    chip(vista==="global","🗂️ Global: equipos y áreas a cargo",function(){setVista("global");},"g"));
+  var tarjeta=function(key,titulo,total,resumen,detalle,color){
+    var ab=!!abiertos[key];
+    return h("div",{key:key,style:{border:"1px solid var(--border)",borderRadius:12,background:"#fff",overflow:"hidden"}},
+      h("button",{type:"button",onClick:function(){toggle(key);},style:{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}},
+        h("div",{style:{minWidth:44,height:44,borderRadius:12,background:color||"#EEF3F9",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:17,color:"var(--navy)"}},total),
+        h("div",{style:{flex:1,minWidth:0}},
+          h("div",{style:{fontWeight:800,fontSize:13.5,color:"var(--navy)"}},titulo),
+          h("div",{style:{fontSize:12,color:"var(--gray)",fontWeight:600,marginTop:2}},resumen)),
+        h("span",{style:{color:"var(--gray)",fontSize:12}},ab?"▲":"▼")),
+      ab&&h("div",{style:{borderTop:"1px solid var(--lighter)",padding:"8px 14px 12px",maxHeight:360,overflowY:"auto"}},detalle));
+  };
+  var fila=function(key,cod,txt,extra,estado){return h("div",{key:key,style:{display:"flex",gap:10,fontSize:12.5,padding:"5px 0",borderBottom:"1px solid var(--lighter)",alignItems:"baseline"}},
+    h("span",{style:{minWidth:84,fontWeight:700,color:"var(--navy)"}},cod||"—"),
+    h("span",{style:{flex:1,color:"#2b3a50"}},txt),
+    extra&&h("span",{style:{color:"var(--gray)",fontSize:11.5}},extra),
+    estado&&h("span",{style:{fontSize:11,fontWeight:700,color:estado==="hecha"?"#1D7A3E":"#C45200"}},estado==="hecha"?"✓ hecha":"pendiente"));};
+
+  if(vista==="mes"){
+    if(error)return h("div",null,cab,h("div",{style:{color:"#C0001A",fontSize:13}},"No se pudieron cargar las actividades: "+error));
+    if(!tareas)return h("div",null,cab,h("div",{style:{color:"var(--gray)",fontSize:13}},"Cargando actividades de "+anio+"…"));
+    var delMes=progTareasMes(tareas,mes),porPersona={};
+    delMes.forEach(function(t){var k=t.raw.asignado_a||"";(porPersona[k]=porPersona[k]||[]).push(t);});
+    var personas=Object.keys(porPersona).sort(function(a,b){if(!a)return 1;if(!b)return -1;return porPersona[b].length-porPersona[a].length||a.localeCompare(b,"es");});
+    var maxN=Math.max.apply(null,personas.filter(Boolean).map(function(k){return porPersona[k].length;}).concat([1]));
+    return h("div",null,cab,
+      h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}},MTTO_MESES.map(function(nm,i){return chip(mes===i+1,nm.slice(0,3),function(){setMes(i+1);setAbiertos({});},"mes"+i);})),
+      h("div",{style:{fontSize:12.5,color:"var(--gray)",fontWeight:600,marginBottom:10}},delMes.length+" actividades en "+MTTO_MESES[mes-1]+" "+anio+" · "+personas.filter(Boolean).length+" personas con actividades"+(porPersona[""]?" · "+porPersona[""].length+" sin asignar":"")),
+      h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+        personas.map(function(nombre){
+          var lista=porPersona[nombre],hechas=lista.filter(cargaHecha).length;
+          var resumen=CARGA_FUENTES.map(function(f){var n=lista.filter(function(t){return t.fuente===f.id;}).length;return n?f.ico+" "+n+" "+f.corto.toLowerCase():"";}).filter(Boolean).join(" · ")+" · ✓ "+hechas+" hechas";
+          var detalle=CARGA_FUENTES.map(function(f){
+            var suyas=lista.filter(function(t){return t.fuente===f.id;});
+            if(!suyas.length)return null;
+            return h("div",{key:f.id,style:{marginBottom:8}},
+              h("div",{style:{fontSize:11.5,fontWeight:800,color:"var(--gray)",letterSpacing:.3,margin:"4px 0"}},f.ico+" "+f.corto.toUpperCase()+" ("+suyas.length+")"),
+              suyas.map(function(t,i){var it=cargaItem(t);return fila(f.id+i,it.cod,it.txt,it.extra,cargaHecha(t)?"hecha":"pend");}));
+          });
+          var pct=nombre?Math.round(lista.length/maxN*100):0;
+          var color=!nombre?"#FDECEE":pct>=85?"#FFE8D6":"#EEF3F9";
+          return tarjeta("p_"+nombre,nombre||"⚠️ Sin asignar",lista.length,resumen,detalle,color);
+        }),
+        !personas.length&&h("div",{style:{color:"var(--gray)",fontSize:13}},"No hay actividades en "+MTTO_MESES[mes-1]+".")));
+  }
+
+  // ── Global: responsables habituales
+  if(!resp)return h("div",null,cab,h("div",{style:{color:"var(--gray)",fontSize:13}},"Cargando responsables…"));
+  var nombresEq={},nombresAr={};
+  (tareas||[]).forEach(function(t){
+    if(t.fuente==="preventivo"&&t.raw.equipo_codigo)nombresEq[String(t.raw.equipo_codigo).toUpperCase().replace(/\s+/g,"")]=t.raw.equipo_desc||"";
+    if(t.fuente==="inspeccion"){var c=String(t.raw.area_codigo||t.raw.area_nombre||"").toUpperCase().replace(/\s+/g,"");if(c)nombresAr[c]=t.raw.area_nombre||"";}
+  });
+  var porTec={};
+  resp.forEach(function(x){
+    [["principal",x.principal],["respaldo",x.respaldo]].forEach(function(r){
+      if(!r[1])return;
+      var k=r[1],o=porTec[k]=porTec[k]||{equipo:{principal:[],respaldo:[]},area:{principal:[],respaldo:[]}};
+      var tipo=x.tipo==="area"?"area":"equipo";
+      o[tipo][r[0]].push(x.clave);
+    });
+  });
+  var tecs=Object.keys(porTec).sort(function(a,b){var A=porTec[a],B=porTec[b];return (B.equipo.principal.length+B.area.principal.length)-(A.equipo.principal.length+A.area.principal.length)||a.localeCompare(b,"es");});
+  var nombreDe=function(tipo,clave){var k=String(clave||"").toUpperCase().replace(/\s+/g,"");return (tipo==="area"?nombresAr[k]:nombresEq[k])||"";};
+  var bloque=function(titulo,claves,tipo){
+    if(!claves.length)return null;
+    return h("div",{key:titulo,style:{marginBottom:8}},
+      h("div",{style:{fontSize:11.5,fontWeight:800,color:"var(--gray)",letterSpacing:.3,margin:"4px 0"}},titulo+" ("+claves.length+")"),
+      claves.slice().sort(function(a,b){return progCompararCodigo(a,b);}).map(function(c,i){return fila(titulo+i,c,nombreDe(tipo,c),"",null);}));
+  };
+  return h("div",null,cab,
+    !resp.length?h("div",{style:{color:"var(--gray)",fontSize:13}},"Todavía no hay responsables habituales guardados. Se configuran abajo, en la tabla de Responsables."):
+    h("div",null,
+      h("div",{style:{fontSize:12.5,color:"var(--gray)",fontWeight:600,marginBottom:10}},tecs.length+" personas con equipos o áreas a cargo · "+resp.length+" equipos y áreas con responsable"),
+      h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+        tecs.map(function(nombre){
+          var o=porTec[nombre],tot=o.equipo.principal.length+o.area.principal.length;
+          var resumen="🔧 "+o.equipo.principal.length+" equipos · 🧱 "+o.area.principal.length+" áreas como principal"+((o.equipo.respaldo.length+o.area.respaldo.length)?" · respaldo de "+(o.equipo.respaldo.length+o.area.respaldo.length):"");
+          var detalle=[bloque("🔧 EQUIPOS · PRINCIPAL",o.equipo.principal,"equipo"),bloque("🧱 ÁREAS · PRINCIPAL",o.area.principal,"area"),
+            bloque("🔧 EQUIPOS · RESPALDO",o.equipo.respaldo,"equipo"),bloque("🧱 ÁREAS · RESPALDO",o.area.respaldo,"area")];
+          return tarjeta("g_"+nombre,nombre,tot,resumen,detalle);
+        }))));
+}
+function ResponsablesSeccion(p){
+  var h=React.createElement,S=React.useState;
+  var _s=S("carga"),sub=_s[0],setSub=_s[1];
+  var b=function(id,txt){var on=sub===id;return h("button",{type:"button",onClick:function(){setSub(id);},style:{padding:"8px 14px",border:"none",borderBottom:on?"3px solid var(--navy)":"3px solid transparent",background:"none",cursor:"pointer",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:on?"var(--navy)":"var(--gray)"}},txt);};
+  return h("div",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:16,padding:"14px 18px 20px",boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},
+    h("div",{style:{display:"flex",gap:4,borderBottom:"1px solid var(--lighter)",marginBottom:14}},b("carga","📊 Carga por técnico"),b("tabla","⚙️ Configurar responsables")),
+    sub==="carga"?h(CargaTecnicosPanel,{anio:p.anio,usuarios:p.usuarios}):h(ResponsablesPanel,p));
+}
+
 // ── Mantenimientos > Admin: ordenado por secciones ───────────────────────────────────────────
 var MTO_ADMIN_SECCIONES=[
   {id:"formatos",ico:"📄",titulo:"Formatos de impresión",desc:"Plantillas de Excel que se usan al imprimir las órdenes (F-MAN-008) y las inspecciones locativas (F-MAN-010)."},
   {id:"instructivos",ico:"📋",titulo:"Instructivos",desc:"Actividades de cada instructivo que salen en el F-MAN-008 de cada equipo."},
-  {id:"responsables",ico:"👥",titulo:"Responsables",desc:"Técnico habitual y de respaldo por equipo y área, para asignar con un clic."},
+  {id:"responsables",ico:"👥",titulo:"Responsables",desc:"Carga de trabajo de cada técnico por mes y equipos o áreas a su cargo; y el técnico habitual y de respaldo por equipo y área."},
   {id:"espacio",ico:"💾",titulo:"Espacio y datos",desc:"Cuánto se usa de la base de datos de Supabase y herramientas para liberar espacio."}];
 function MtoAdminSecciones(props){
   var h=React.createElement,S=React.useState;
@@ -16321,7 +16448,7 @@ function MtoAdminSecciones(props){
   var contenido=
     sec==="formatos"?h("div",{className:"mto-admin"},h(AdminFMAN008Panel,null),h(AdminFMAN010Panel,null)):
     sec==="instructivos"?h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(AdminInstructivosPanel,null))):
-    sec==="responsables"?h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(ResponsablesPanel,{anio:props.anio,ordenes:props.ordenes,usuarios:props.usuarios,currentUser:props.currentUser}))):
+    sec==="responsables"?h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(ResponsablesSeccion,{anio:props.anio,ordenes:props.ordenes,usuarios:props.usuarios,currentUser:props.currentUser}))):
     h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(AdminUsoBdPanel,null)),h(AdminBitacoraArchivoPanel,null),h(AdminFotosPanel,null));
   return h("div",null,
     h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}},
