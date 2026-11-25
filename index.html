@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261125e";
+window.APP_BUILD = "20261125f";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -13303,9 +13303,16 @@ var kpiMtbf,kpiMttr,kpiLblMtbf,kpiLblMttr,kpiSub;if(eqSeleccionado&&metricasFilt
 // ── Bitácora: alerta urgente de pendientes ───────────────────────────────────────────────────
 // Al abrir la Bitácora, un técnico con pendientes abiertos debe gestionarlos antes de seguir: cada pendiente
 // queda gestionado hoy si él le agrega un seguimiento, lo cierra, o lo marca como revisado con una nota de por
-// qué sigue abierto. Mañana vuelve a pedirse. No aplica a admin, almacenista ni solicitantes.
+// qué sigue abierto. Mañana vuelve a pedirse. Aplica a técnicos y auxiliares, no a administradores.
 function btkHoyKey(iso){return new Date(iso||Date.now()).toLocaleDateString("en-CA",{timeZone:"America/Bogota"});}
-function btkAlertaAplica(u){return !!u&&["admin","almacenista","solicitante"].indexOf(u.role)<0;}
+// Aplica a los técnicos y auxiliares (marcados como asignables, o por su cargo) que pueden operar la Bitácora.
+// En cada módulo el rol viene "traducido" por permisos (operar → almacenista), por eso se mira el nivel y no el rol.
+function btkAlertaAplica(u){
+  if(!u)return false;
+  var nivel=u._nivel||(u.role==="admin"?"admin":u.role==="solicitante"?"ver":"operar");
+  if(nivel!=="operar")return false;   // administradores y quien solo puede ver, no
+  return typeof accEsAsignable==="function"?accEsAsignable(u,false):true;
+}
 function btkPendienteGestionadoHoy(p,u){
   var hoy=btkHoyKey(),nombre=u.nombre||u.username;
   return (p.seguimientos||[]).some(function(s){return s.tecnico===nombre&&btkHoyKey(s.ts)===hoy;})
