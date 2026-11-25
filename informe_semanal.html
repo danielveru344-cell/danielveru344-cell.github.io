@@ -853,17 +853,34 @@ async function corregirIdsYDescargar(pres, fileName) {
 }
 
 // Historial: cada informe generado queda guardado (uno por fecha de corte; si se genera otra vez el mismo día, reemplaza al anterior)
+// El .pptx se guarda en el almacenamiento de archivos de Supabase (bucket "informes"), que tiene su propio cupo y no
+// ocupa la base de datos; en la tabla queda solo la referencia "storage:informes/AAAA-MM-DD.pptx". Si el bucket todavía
+// no existe, se guarda como antes (el archivo dentro de la tabla) para no perder el historial.
 async function archivarInformeSemanal(blob, fecha, nombre) {
-  const base64 = await new Promise((res, rej) => {
-    const fr = new FileReader();
-    fr.onload = () => res(String(fr.result).split(',')[1]);
-    fr.onerror = () => rej(fr.error);
-    fr.readAsDataURL(blob);
-  });
+  const fila = { fecha, nombre, tamano: blob.size, origen: ORIGEN_APP ? 'cumplimiento1' : 'cumplimiento' };
+  const ruta = `${fecha}.pptx`;
+  let enStorage = false;
+  try {
+    const up = await fetch(`${SUPA_URL}/storage/v1/object/informes/${ruta}`, {
+      method: 'POST',
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'x-upsert': 'true' },
+      body: blob
+    });
+    enStorage = up.ok;
+  } catch (e) { enStorage = false; }
+  if (enStorage) fila.contenido = 'storage:informes/' + ruta;
+  else {
+    fila.contenido = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result).split(',')[1]);
+      fr.onerror = () => rej(fr.error);
+      fr.readAsDataURL(blob);
+    });
+  }
   const r = await fetch(`${SUPA_URL}/rest/v1/informes_semanales?on_conflict=fecha`, {
     method: 'POST',
     headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ fecha, nombre, tamano: blob.size, origen: ORIGEN_APP ? 'cumplimiento1' : 'cumplimiento', contenido: base64 })
+    body: JSON.stringify(fila)
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
 }

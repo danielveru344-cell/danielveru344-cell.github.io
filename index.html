@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261125i";
+window.APP_BUILD = "20261125j";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -17673,24 +17673,58 @@ function CatalogoEquiposPanel(p){
 
 // ── Historial de informes semanales (PowerPoint) ─────────────────────────────────────────────────
 var INFORMES_SQL="create table if not exists public.informes_semanales(\n  id bigint generated always as identity primary key,\n  fecha date not null, nombre text not null, tamano integer, origen text,\n  contenido text not null, creado_en timestamptz not null default now());\ncreate unique index if not exists informes_semanales_fecha_uq on public.informes_semanales(fecha);\nalter table public.informes_semanales enable row level security;\ndrop policy if exists acceso_informes_semanales on public.informes_semanales;\ncreate policy acceso_informes_semanales on public.informes_semanales for all to anon, authenticated using (true) with check (true);";
+// Los .pptx van al almacenamiento de archivos (bucket "informes"), fuera de la base de datos de 500 MB.
+var INFORMES_STORAGE_SQL="insert into storage.buckets (id, name, public) values ('informes', 'informes', false) on conflict (id) do nothing;\n"+
+"drop policy if exists acceso_informes_archivos on storage.objects;\n"+
+"create policy acceso_informes_archivos on storage.objects for all to anon, authenticated\n  using (bucket_id = 'informes') with check (bucket_id = 'informes');";
+function infEnStorage(contenido){return /^storage:informes\//.test(String(contenido||""));}
+async function infBlob(contenido){
+  if(infEnStorage(contenido)){
+    var r=await sb.storage.from("informes").download(String(contenido).replace(/^storage:informes\//,""));
+    if(r.error)throw r.error;return r.data;
+  }
+  var bin=atob(contenido),bytes=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.presentationml.presentation"});
+}
 function InformesGuardadosModal(props){
   var h=React.createElement,S=React.useState;
   var _l=S(null),lista=_l[0],setLista=_l[1];
   var _e=S(null),error=_e[0],setError=_e[1];
   var _d=S(null),descargando=_d[0],setDescargando=_d[1];
-  React.useEffect(function(){
+  var _vj=S([]),viejos=_vj[0],setViejos=_vj[1];          // guardados todavía dentro de la base
+  var _mv=S(null),moviendo=_mv[0],setMoviendo=_mv[1];
+  var _sq=S(false),faltaBucket=_sq[0],setFaltaBucket=_sq[1];
+  function cargarLista(){
     sb.from("informes_semanales").select("id,fecha,nombre,tamano,origen,creado_en").order("fecha",{ascending:false}).then(function(r){
       if(r.error)setError(r.error.message||String(r.error));else setLista(r.data||[]);
     });
-  },[]);
+    sb.from("informes_semanales").select("id,fecha,nombre").not("contenido","like","storage:%").then(function(r){if(!r.error)setViejos(r.data||[]);});
+  }
+  React.useEffect(cargarLista,[]);
+  async function moverAStorage(){
+    setFaltaBucket(false);
+    for(var i=0;i<viejos.length;i++){
+      var inf=viejos[i];setMoviendo((i+1)+" de "+viejos.length);
+      try{
+        var r=await sb.from("informes_semanales").select("contenido").eq("id",inf.id).single();
+        if(r.error)throw r.error;
+        if(infEnStorage(r.data.contenido))continue;
+        var blob=await infBlob(r.data.contenido),ruta=String(inf.fecha).slice(0,10)+".pptx";
+        var up=await sb.storage.from("informes").upload(ruta,blob,{upsert:true,contentType:"application/vnd.openxmlformats-officedocument.presentationml.presentation"});
+        if(up.error){if(/bucket|not found|row-level|policy|403|404/i.test(up.error.message||""))setFaltaBucket(true);else setError("No se pudo mover "+inf.nombre+": "+up.error.message);break;}
+        var u=await sb.from("informes_semanales").update({contenido:"storage:informes/"+ruta}).eq("id",inf.id);
+        if(u.error){setError("No se pudo actualizar "+inf.nombre+": "+u.error.message);break;}
+      }catch(e){setError("No se pudo mover "+inf.nombre+": "+((e&&e.message)||e));break;}
+    }
+    setMoviendo(null);cargarLista();
+  }
   async function descargar(inf){
     setDescargando(inf.id);
     try{
       var r=await sb.from("informes_semanales").select("contenido,nombre").eq("id",inf.id).single();
       if(r.error)throw r.error;
-      var bin=atob(r.data.contenido),bytes=new Uint8Array(bin.length);
-      for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
-      var url=URL.createObjectURL(new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.presentationml.presentation"}));
+      var url=URL.createObjectURL(await infBlob(r.data.contenido));
       var a=document.createElement("a");a.href=url;a.download=r.data.nombre||inf.nombre;document.body.appendChild(a);a.click();a.remove();
       setTimeout(function(){URL.revokeObjectURL(url);},4000);
     }catch(e){setError("No se pudo descargar: "+((e&&e.message)||e));}
@@ -17701,6 +17735,12 @@ function InformesGuardadosModal(props){
       h("div",{className:"sheet-handle"}),h("div",{className:"sheet-title"},"Informes semanales guardados"),
       h("div",{style:{padding:"12px 20px 26px",display:"flex",flexDirection:"column",gap:10,maxHeight:"72vh",overflowY:"auto"}},
         h("div",{style:{fontSize:12.5,color:"var(--gray)",fontWeight:600}},"Cada vez que generas el informe semanal queda guardado aquí, uno por fecha de corte. Si lo generas otra vez el mismo día, reemplaza al anterior."),
+        viejos.length>0&&!error&&h("div",{style:{background:"#FFF7EC",border:"1px solid #F5DDB8",borderRadius:12,padding:"10px 12px",fontSize:12.5,color:"var(--navy)",lineHeight:1.5}},
+          h("div",{style:{fontWeight:700}},"💾 "+viejos.length+" informe"+(viejos.length===1?"":"s")+" guardado"+(viejos.length===1?"":"s")+" dentro de la base de datos"),
+          h("div",{style:{color:"var(--gray)",fontWeight:600,margin:"2px 0 8px"}},"Muévelos al almacenamiento de archivos de Supabase para liberar espacio de la base (los 500 MB). Se siguen descargando igual desde aquí."),
+          faltaBucket&&h("div",{style:{marginBottom:8}},"Falta un paso en Supabase: pega esto en el SQL Editor, dale Run y vuelve a intentarlo.",
+            h("pre",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:8,padding:"8px 10px",fontSize:11.5,whiteSpace:"pre-wrap",margin:"6px 0 0",userSelect:"all"}},INFORMES_STORAGE_SQL)),
+          h("button",{type:"button",className:"mto-btn prim",disabled:!!moviendo,onClick:moverAStorage},moviendo?"Moviendo "+moviendo+"…":"Mover al almacenamiento de archivos")),
         error&&h("div",{style:{background:"#FDECEE",color:"#C0001A",borderRadius:10,padding:"10px 12px",fontSize:12.5,fontWeight:700}},/informes_semanales|relation|schema/i.test(error)?h("div",null,"Falta un paso en Supabase: pega esto en el SQL Editor y dale Run.",h("pre",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:8,padding:"8px 10px",fontSize:11.5,whiteSpace:"pre-wrap",margin:"8px 0 0",color:"var(--navy)",fontWeight:600,userSelect:"all"}},INFORMES_SQL)):error),
         !error&&lista===null&&h("div",{style:{textAlign:"center",padding:24,color:"var(--gray)",fontWeight:600}},"Cargando…"),
         !error&&lista&&!lista.length&&h("div",{style:{textAlign:"center",padding:24,color:"var(--gray)",fontWeight:600}},"Aún no hay informes guardados. Se guardan solos al generar el informe semanal."),
