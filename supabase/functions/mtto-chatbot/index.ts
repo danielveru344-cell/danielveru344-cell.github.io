@@ -20,7 +20,27 @@ const SUPA_ANON_KEY =
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 // Si el modelo deja de existir, el error de la API dice cuál usar (https://ai.google.dev/gemini-api/docs/models)
 const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.6-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+// Modelo de respaldo opcional (secreto GEMINI_MODEL_RESPALDO) para cuando el principal está saturado
+const MODEL_RESPALDO = Deno.env.get("GEMINI_MODEL_RESPALDO") ?? "";
+const urlModelo = (m: string) => `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
+const GEMINI_URL = urlModelo(MODEL);
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Gemini a veces responde 503 ("high demand") o 429 (cupo por minuto): se reintenta solo con pausas cortas
+async function fetchGemini(cuerpo: unknown): Promise<Response> {
+  const modelos = [MODEL, MODEL_RESPALDO].filter(Boolean);
+  let ultima: Response | null = null;
+  for (const m of modelos) {
+    for (let intento = 0; intento < 3; intento++) {
+      const r = await fetch(`${urlModelo(m)}?key=${GEMINI_API_KEY}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo),
+      });
+      if (r.status !== 503 && r.status !== 429 && r.status !== 500) return r;
+      ultima = r;
+      await esperar(800 * Math.pow(2, intento));   // 0,8 s · 1,6 s · 3,2 s
+    }
+  }
+  return ultima!;
+}
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -177,13 +197,10 @@ async function tHistorial(a: any, usuario: any) {
 }
 
 async function tInternet(a: any) {
-  const r = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: String(a.pregunta || "") }] }],
-      systemInstruction: { parts: [{ text: "Responde breve y práctico para un técnico de mantenimiento industrial. Cita las fuentes web con su URL." }] },
-      tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 800 },
-    }),
+  const r = await fetchGemini({
+    contents: [{ role: "user", parts: [{ text: String(a.pregunta || "") }] }],
+    systemInstruction: { parts: [{ text: "Responde breve y práctico para un técnico de mantenimiento industrial. Cita las fuentes web con su URL." }] },
+    tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 800 },
   });
   if (!r.ok) return { error: "La búsqueda web no está disponible ahora (" + r.status + ")." };
   const d = await r.json();
@@ -246,13 +263,10 @@ REGLAS:
 }
 
 async function llamarGemini(contents: any[], system: string) {
-  return await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents, systemInstruction: { parts: [{ text: system }] },
-      tools: [{ functionDeclarations: DECLARACIONES }],
-      generationConfig: { maxOutputTokens: 1500 },
-    }),
+  return await fetchGemini({
+    contents, systemInstruction: { parts: [{ text: system }] },
+    tools: [{ functionDeclarations: DECLARACIONES }],
+    generationConfig: { maxOutputTokens: 1500 },
   });
 }
 
@@ -272,7 +286,11 @@ Deno.serve(async (req: Request) => {
     const usadas: string[] = [];
     for (let ronda = 0; ronda < 5; ronda++) {
       const r = await llamarGemini(contents, system);
-      if (!r.ok) return json({ error: "Error de Gemini (" + r.status + "): " + (await r.text()).slice(0, 400) }, 502);
+      if (!r.ok) {
+        if (r.status === 503 || r.status === 500) return json({ error: "El servicio de Google (Gemini) está saturado en este momento. Espera un minuto y vuelve a preguntar." }, 503);
+        if (r.status === 429) return json({ error: "Se alcanzó el límite de preguntas por minuto del plan gratuito de Gemini. Espera un minuto y vuelve a intentar." }, 429);
+        return json({ error: "Error de Gemini (" + r.status + "): " + (await r.text()).slice(0, 300) }, 502);
+      }
       const d = await r.json();
       const parts: any[] = d?.candidates?.[0]?.content?.parts || [];
       const llamadas = parts.filter((p) => p.functionCall);
