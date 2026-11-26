@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261125n";
+window.APP_BUILD = "20261125o";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -17558,7 +17558,12 @@ function accLegado(u){
   if(r==="almacenista")return{almacen:"operar",bitacora:"operar",mantenimientos:"operar",solicitudes:"admin",usuarios:false};
   return{almacen:"ver",bitacora:"operar",mantenimientos:"ver",solicitudes:"admin",usuarios:false};
 }
-function accPermisos(u){
+// Solo estas cuentas pueden entrar al módulo de Mantenimientos; para todas las demás queda en "ninguno",
+// sin importar lo que diga su rol o sus accesos guardados.
+var ACC_MTTO_PERMITIDOS=["admin","mburgos"];
+function accMttoPermitido(username){return ACC_MTTO_PERMITIDOS.indexOf(String(username||"").toLowerCase())>=0;}
+function accPermisos(u){var r=accPermisosBase(u);if(u&&!accMttoPermitido(u.username))r.mantenimientos="ninguno";else if(u&&u.username==="mburgos")r.mantenimientos="admin";return r;}
+function accPermisosBase(u){
   if(!u)return{almacen:"ninguno",bitacora:"ninguno",mantenimientos:"ninguno",solicitudes:"ninguno",usuarios:false};
   if(u.username==="admin")return{almacen:"admin",bitacora:"admin",mantenimientos:"admin",solicitudes:"admin",usuarios:true};   // la cuenta raíz nunca se queda sin acceso
   var base=accLegado(u),p=(u.permisos&&typeof u.permisos==="object")?u.permisos:null;
@@ -17792,6 +17797,9 @@ function UsuarioAccesosModal(p){
         seccion("Accesos por módulo"),
         ACC_MODULOS.map(function(m){
           var n=f.permisos[m.id]||"ninguno";
+          if(m.id==="mantenimientos"&&!accMttoPermitido(f.username))return h("div",{key:m.id,style:{border:"1px solid var(--border)",borderRadius:12,padding:"10px 12px",background:"var(--lighter)"}},
+            h("div",{style:{fontWeight:800,fontSize:13,color:"var(--navy)"}},m.icono+" "+m.label),
+            h("div",{style:{fontSize:12,color:"var(--gray)",fontWeight:600,marginTop:3}},"🔒 Bloqueado: solo las cuentas "+ACC_MTTO_PERMITIDOS.join(" y ")+" pueden entrar a este módulo."));
           return h("div",{key:m.id,style:{border:"1px solid var(--border)",borderRadius:12,padding:"10px 12px"}},
             h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
               h("div",{style:{fontWeight:800,fontSize:13,color:"var(--navy)",minWidth:170,flex:"1 1 170px"}},m.icono+" "+m.label),
