@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261126g";
+window.APP_BUILD = "20261126h";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -16335,11 +16335,11 @@ function AdminFotosPanel(){
 }
 
 // ── Responsables > Carga por técnico ─────────────────────────────────────────────────────────
-// Por mes: cuántas y cuáles actividades tiene asignadas cada persona (preventivos de equipos, inspecciones,
-// agua purificada y órdenes de trabajo). Global: de qué equipos y áreas es responsable habitual (o de respaldo).
+// Por mes: cuántas y cuáles actividades preventivas tiene asignadas cada persona (equipos, inspecciones y
+// agua purificada; las órdenes de trabajo / solicitudes no cuentan aquí). Global: de qué equipos y áreas es responsable habitual (o de respaldo).
 var CARGA_FUENTES=[
   {id:"preventivo",ico:"🔧",corto:"Equipos"},{id:"inspeccion",ico:"🧱",corto:"Áreas"},
-  {id:"agua",ico:"💧",corto:"Agua"},{id:"orden",ico:"📋",corto:"Órdenes de trabajo"}];
+  {id:"agua",ico:"💧",corto:"Agua"}];
 function cargaItem(t){
   var o=t.raw;
   if(t.fuente==="preventivo")return {cod:o.equipo_codigo||"",txt:o.equipo_desc||"",extra:o.consecutivo||""};
@@ -16412,14 +16412,14 @@ function CargaTecnicosPanel(p){
 
   if(vista==="mes"){
     if(error)return h("div",null,cab,h("div",{style:{color:"#C0001A",fontSize:13}},"No se pudieron cargar las actividades: "+error));
-    if(!tareas)return h("div",null,cab,h("div",{style:{color:"var(--gray)",fontSize:13}},"Cargando actividades de "+anio+"…"));
-    var delMes=progTareasMes(tareas,mes),porPersona={};
+    if(!tareas)return h("div",null,cab,h("div",{style:{color:"var(--gray)",fontSize:13}},"Cargando preventivos de "+anio+"…"));
+    var delMes=progTareasMes(tareas,mes).filter(function(t){return t.fuente!=="orden";}),porPersona={};   // solo preventivos
     delMes.forEach(function(t){var k=t.raw.asignado_a||"";(porPersona[k]=porPersona[k]||[]).push(t);});
     var personas=Object.keys(porPersona).sort(function(a,b){if(!a)return 1;if(!b)return -1;return porPersona[b].length-porPersona[a].length||a.localeCompare(b,"es");});
     var maxN=Math.max.apply(null,personas.filter(Boolean).map(function(k){return porPersona[k].length;}).concat([1]));
     return h("div",null,cab,
       h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}},MTTO_MESES.map(function(nm,i){return chip(mes===i+1,nm.slice(0,3),function(){setMes(i+1);setAbiertos({});},"mes"+i);})),
-      h("div",{style:{fontSize:12.5,color:"var(--gray)",fontWeight:600,marginBottom:10}},delMes.length+" actividades en "+MTTO_MESES[mes-1]+" "+anio+" · "+personas.filter(Boolean).length+" personas"),
+      h("div",{style:{fontSize:12.5,color:"var(--gray)",fontWeight:600,marginBottom:10}},delMes.length+" preventivos en "+MTTO_MESES[mes-1]+" "+anio+" · "+personas.filter(Boolean).length+" personas"),
       hoja,
       h("div",{className:"mto-meses"},
         personas.map(function(nombre){
@@ -16434,7 +16434,7 @@ function CargaTecnicosPanel(p){
           });
           return tarjeta("p_"+nombre,nombre||"Sin asignar",lista.length,hechas+" hechas",detalle,nombre?null:"#FFF5F6",{hechas:hechas,total:lista.length},sub);
         }),
-        !personas.length&&h("div",{style:{color:"var(--gray)",fontSize:13}},"No hay actividades en "+MTTO_MESES[mes-1]+".")));
+        !personas.length&&h("div",{style:{color:"var(--gray)",fontSize:13}},"No hay preventivos en "+MTTO_MESES[mes-1]+".")));
   }
 
   // ── Global: responsables habituales
@@ -16490,7 +16490,7 @@ function ResponsablesSeccion(p){
 var MTO_ADMIN_SECCIONES=[
   {id:"formatos",ico:"📄",titulo:"Formatos de impresión",desc:"Plantillas de Excel que se usan al imprimir las órdenes (F-MAN-008) y las inspecciones locativas (F-MAN-010)."},
   {id:"instructivos",ico:"📋",titulo:"Instructivos",desc:"Actividades de cada instructivo que salen en el F-MAN-008 de cada equipo."},
-  {id:"responsables",ico:"👥",titulo:"Responsables",desc:"Carga de trabajo de cada técnico por mes y equipos o áreas a su cargo; y el técnico habitual y de respaldo por equipo y área."},
+  {id:"responsables",ico:"👥",titulo:"Responsables",desc:"Carga de preventivos de cada técnico por mes y equipos o áreas a su cargo; y el técnico habitual y de respaldo por equipo y área."},
   {id:"espacio",ico:"💾",titulo:"Espacio y datos",desc:"Cuánto se usa de la base de datos de Supabase y herramientas para liberar espacio."}];
 function MtoAdminSecciones(props){
   var h=React.createElement,S=React.useState;
