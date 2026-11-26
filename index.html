@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261126j";
+window.APP_BUILD = "20261126k";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -18162,8 +18162,14 @@ function btkToastWA(texto,ok){
   el.style.cssText="position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:100001;background:"+(ok?"#0D2F5C":"#C0001A")+";color:#fff;padding:11px 18px;border-radius:12px;font:600 13px Montserrat,Arial,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.25);max-width:90vw;text-align:center";
   document.body.appendChild(el);setTimeout(function(){el.remove();},4500);
 }
+// La función puede haber quedado publicada como "wa-pendientes" o con el nombre que Supabase puso solo ("bright-function")
+var WA_FUNCIONES=["wa-pendientes","bright-function"],_waFn=null;
 async function btkWaFuncion(cuerpo){
-  var r=await fetch(SB_URL+"/functions/v1/wa-pendientes",{method:"POST",headers:SB_H,body:JSON.stringify(cuerpo)});
+  var lista=_waFn?[_waFn]:WA_FUNCIONES,r=null;
+  for(var i=0;i<lista.length;i++){
+    r=await fetch(SB_URL+"/functions/v1/"+lista[i],{method:"POST",headers:SB_H,body:JSON.stringify(cuerpo)});
+    if(r.status!==404){_waFn=lista[i];break;}
+  }
   var j={};try{j=await r.json();}catch(e){}
   return Object.assign({http:r.status},j);
 }
