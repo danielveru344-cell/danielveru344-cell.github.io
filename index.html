@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261125o";
+window.APP_BUILD = "20261126a";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -17537,33 +17537,28 @@ var ACC_ORDEN={ninguno:0,ver:1,operar:2,admin:3};
 var ACC_CARGOS=["Administrador","Coordinador","Supervisor","Almacenista","Solicitante Producción","Técnico de Mantenimiento","Técnico Electricista","Técnico de Metrología","Auxiliar de Mantenimiento Locativo"];
 // Punto de partida al crear un usuario según su cargo (se puede ajustar módulo por módulo)
 var ACC_PERFILES={
-  "Administrador":{permisos:{almacen:"admin",bitacora:"admin",mantenimientos:"admin",solicitudes:"admin",usuarios:true},asignable:false},
-  "Coordinador":{permisos:{almacen:"operar",bitacora:"admin",mantenimientos:"admin",solicitudes:"admin",usuarios:false},asignable:false},
-  "Supervisor":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"operar",solicitudes:"admin",usuarios:false},asignable:false},
-  "Almacenista":{permisos:{almacen:"operar",bitacora:"ver",mantenimientos:"operar",solicitudes:"operar",usuarios:false},asignable:false},
+  "Administrador":{permisos:{almacen:"admin",bitacora:"admin",mantenimientos:"ninguno",solicitudes:"admin",usuarios:true},asignable:false},
+  "Coordinador":{permisos:{almacen:"operar",bitacora:"admin",mantenimientos:"ninguno",solicitudes:"admin",usuarios:false},asignable:false},
+  "Supervisor":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ninguno",solicitudes:"admin",usuarios:false},asignable:false},
+  "Almacenista":{permisos:{almacen:"operar",bitacora:"ver",mantenimientos:"ninguno",solicitudes:"operar",usuarios:false},asignable:false},
   "Solicitante Producción":{permisos:{almacen:"ver",bitacora:"ninguno",mantenimientos:"ninguno",solicitudes:"operar",usuarios:false},asignable:false},
-  "Técnico de Mantenimiento":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ver",solicitudes:"operar",usuarios:false},asignable:true},
-  "Técnico Electricista":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ver",solicitudes:"operar",usuarios:false},asignable:true},
-  "Técnico de Metrología":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ver",solicitudes:"operar",usuarios:false},asignable:true},
-  "Auxiliar de Mantenimiento Locativo":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ver",solicitudes:"operar",usuarios:false},asignable:true}
+  "Técnico de Mantenimiento":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ninguno",solicitudes:"operar",usuarios:false},asignable:true},
+  "Técnico Electricista":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ninguno",solicitudes:"operar",usuarios:false},asignable:true},
+  "Técnico de Metrología":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ninguno",solicitudes:"operar",usuarios:false},asignable:true},
+  "Auxiliar de Mantenimiento Locativo":{permisos:{almacen:"ver",bitacora:"operar",mantenimientos:"ninguno",solicitudes:"operar",usuarios:false},asignable:true}
 };
 function accPerfil(cargo){
   var p=ACC_PERFILES[cargo];
-  return p?{permisos:Object.assign({},p.permisos),asignable:p.asignable}:{permisos:{almacen:"ver",bitacora:"ver",mantenimientos:"ver",solicitudes:"ver",usuarios:false},asignable:false};
+  return p?{permisos:Object.assign({},p.permisos),asignable:p.asignable}:{permisos:{almacen:"ver",bitacora:"ver",mantenimientos:"ninguno",solicitudes:"ver",usuarios:false},asignable:false};
 }
 // Lo que cada rol anterior podía hacer: así nadie pierde acceso hasta que se le configure
 function accLegado(u){
   var r=u&&(u._rolReal||u.role);
   if(r==="admin")return{almacen:"admin",bitacora:"admin",mantenimientos:"admin",solicitudes:"admin",usuarios:true};
-  if(r==="almacenista")return{almacen:"operar",bitacora:"operar",mantenimientos:"operar",solicitudes:"admin",usuarios:false};
-  return{almacen:"ver",bitacora:"operar",mantenimientos:"ver",solicitudes:"admin",usuarios:false};
+  if(r==="almacenista")return{almacen:"operar",bitacora:"operar",mantenimientos:"ninguno",solicitudes:"admin",usuarios:false};
+  return{almacen:"ver",bitacora:"operar",mantenimientos:"ninguno",solicitudes:"admin",usuarios:false};
 }
-// Solo estas cuentas pueden entrar al módulo de Mantenimientos; para todas las demás queda en "ninguno",
-// sin importar lo que diga su rol o sus accesos guardados.
-var ACC_MTTO_PERMITIDOS=["admin","mburgos"];
-function accMttoPermitido(username){return ACC_MTTO_PERMITIDOS.indexOf(String(username||"").toLowerCase())>=0;}
-function accPermisos(u){var r=accPermisosBase(u);if(u&&!accMttoPermitido(u.username))r.mantenimientos="ninguno";else if(u&&u.username==="mburgos")r.mantenimientos="admin";return r;}
-function accPermisosBase(u){
+function accPermisos(u){
   if(!u)return{almacen:"ninguno",bitacora:"ninguno",mantenimientos:"ninguno",solicitudes:"ninguno",usuarios:false};
   if(u.username==="admin")return{almacen:"admin",bitacora:"admin",mantenimientos:"admin",solicitudes:"admin",usuarios:true};   // la cuenta raíz nunca se queda sin acceso
   var base=accLegado(u),p=(u.permisos&&typeof u.permisos==="object")?u.permisos:null;
@@ -17797,9 +17792,6 @@ function UsuarioAccesosModal(p){
         seccion("Accesos por módulo"),
         ACC_MODULOS.map(function(m){
           var n=f.permisos[m.id]||"ninguno";
-          if(m.id==="mantenimientos"&&!accMttoPermitido(f.username))return h("div",{key:m.id,style:{border:"1px solid var(--border)",borderRadius:12,padding:"10px 12px",background:"var(--lighter)"}},
-            h("div",{style:{fontWeight:800,fontSize:13,color:"var(--navy)"}},m.icono+" "+m.label),
-            h("div",{style:{fontSize:12,color:"var(--gray)",fontWeight:600,marginTop:3}},"🔒 Bloqueado: solo las cuentas "+ACC_MTTO_PERMITIDOS.join(" y ")+" pueden entrar a este módulo."));
           return h("div",{key:m.id,style:{border:"1px solid var(--border)",borderRadius:12,padding:"10px 12px"}},
             h("div",{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
               h("div",{style:{fontWeight:800,fontSize:13,color:"var(--navy)",minWidth:170,flex:"1 1 170px"}},m.icono+" "+m.label),
