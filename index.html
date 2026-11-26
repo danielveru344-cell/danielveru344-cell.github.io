@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261126f";
+window.APP_BUILD = "20261126g";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -16348,12 +16348,27 @@ function cargaItem(t){
   return {cod:o.consecutivo||"",txt:typeof smResumenSolicitud==="function"?smResumenSolicitud(o):(o.descripcion||"Solicitud"),extra:""};
 }
 function cargaHecha(t){var e=t.raw.estado;return e==="ejecutado"||e==="cerrada";}
+// Arma al instante las tareas del año con lo que la app ya tiene en memoria (órdenes, inspecciones y agua);
+// las órdenes de trabajo (solicitudes) llegan después, cuando termina la carga completa en segundo plano.
+function cargaTareasRapidas(anio,ordenes){
+  var t=[];
+  (ordenes||[]).filter(function(o){return o.anio===anio&&o.estado!=="rechazada";}).forEach(function(o){t.push(cumplMapPreventivo(o));});
+  (INSP_CACHE[anio]||[]).filter(function(o){return o.estado!=="rechazada";}).forEach(function(o){t.push(cumplMapInspeccion(o));});
+  (AGUA_CACHE[anio]||[]).filter(function(o){return o.estado!=="rechazada";}).forEach(function(o){t.push({key:"a"+o.id,fuente:"agua",mes:o.mes_reprogramado||o.mes,raw:o});});
+  return t.length?t:null;
+}
+// Se precarga al entrar a Admin para que Responsables abra sin esperar
+function cargaPrecargar(anio){
+  if(PROG_TAREAS_CACHE[anio]||cargaPrecargar._en===anio)return;
+  cargaPrecargar._en=anio;
+  progCargarAnio(anio).then(function(t){PROG_TAREAS_CACHE[anio]=t;}).catch(function(){}).then(function(){cargaPrecargar._en=null;});
+}
 function CargaTecnicosPanel(p){
   var h=React.createElement,S=React.useState;
   var anio=p.anio,hoy=new Date();
   var _v=S("mes"),vista=_v[0],setVista=_v[1];
   var _m=S(anio===hoy.getFullYear()?hoy.getMonth()+1:1),mes=_m[0],setMes=_m[1];
-  var _t=S(PROG_TAREAS_CACHE[anio]||null),tareas=_t[0],setTareas=_t[1];
+  var _t=S(function(){return PROG_TAREAS_CACHE[anio]||cargaTareasRapidas(anio,p.ordenes);}),tareas=_t[0],setTareas=_t[1];
   var _e=S(null),error=_e[0],setError=_e[1];
   var _a=S({}),abiertos=_a[0],setAbiertos=_a[1];
   var _r=S(null),resp=_r[0],setResp=_r[1];
@@ -16468,7 +16483,7 @@ function ResponsablesSeccion(p){
   var b=function(id,txt){var on=sub===id;return h("button",{type:"button",onClick:function(){setSub(id);},style:{padding:"8px 14px",border:"none",borderBottom:on?"3px solid var(--navy)":"3px solid transparent",background:"none",cursor:"pointer",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:on?"var(--navy)":"var(--gray)"}},txt);};
   return h("div",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:16,padding:"14px 18px 20px",boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},
     h("div",{style:{display:"flex",gap:4,borderBottom:"1px solid var(--lighter)",marginBottom:14}},b("carga","📊 Carga por técnico"),b("tabla","⚙️ Configurar responsables")),
-    sub==="carga"?h(CargaTecnicosPanel,{anio:p.anio,usuarios:p.usuarios}):h(ResponsablesPanel,p));
+    sub==="carga"?h(CargaTecnicosPanel,{anio:p.anio,usuarios:p.usuarios,ordenes:p.ordenes}):h(ResponsablesPanel,p));
 }
 
 // ── Mantenimientos > Admin: ordenado por secciones ───────────────────────────────────────────
@@ -16482,6 +16497,7 @@ function MtoAdminSecciones(props){
   var guardada=null;try{guardada=localStorage.getItem("mto_admin_seccion");}catch(e){}
   var _s=S(MTO_ADMIN_SECCIONES.some(function(x){return x.id===guardada;})?guardada:"formatos"),sec=_s[0],setSec=_s[1];
   function elegir(id){setSec(id);try{localStorage.setItem("mto_admin_seccion",id);}catch(e){}}
+  React.useEffect(function(){cargaPrecargar(props.anio);},[props.anio]);
   var actual=MTO_ADMIN_SECCIONES.filter(function(x){return x.id===sec;})[0];
   var contenido=
     sec==="formatos"?h("div",{className:"mto-admin"},h(AdminFMAN008Panel,null),h(AdminFMAN010Panel,null)):
