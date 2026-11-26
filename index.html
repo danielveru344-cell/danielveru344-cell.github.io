@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261126i";
+window.APP_BUILD = "20261126j";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -18654,10 +18654,18 @@ var lk=React.useRef(0);if(!rootUser)return/*#__PURE__*/React.createElement(Login
   let history = [];
   let sending = false;
 
+  // Las respuestas del asistente traen formato sencillo (**negrita**, listas con * o -): se muestra limpio
+  function formatoBot(t){
+    const esc = String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return esc.split('\n').map(function(l){
+      l = l.replace(/^\s*#{1,6}\s*/, '').replace(/^\s*[\*\-]\s+/, '• ');
+      return l.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<i>$2</i>');
+    }).join('\n');
+  }
   function addMsg(text, who, loading) {
     const d = document.createElement('div');
     d.className = 'bck-msg ' + who + (loading ? ' loading' : '');
-    d.textContent = text;
+    if (who === 'bot' && !loading) d.innerHTML = formatoBot(text); else d.textContent = text;
     msgsEl.appendChild(d);
     msgsEl.scrollTop = msgsEl.scrollHeight;
     return d;
