@@ -129,8 +129,11 @@ function configurado(): { ok: boolean; proveedor: string; falta: string[] } {
   const falta: string[] = [];
   if (prov !== "cloud" && prov !== "callmebot") falta.push("WA_PROVIDER (cloud o callmebot)");
   if (!destinos().length) falta.push("WA_TO");
-  if (prov === "cloud") { if (!env("WA_TOKEN")) falta.push("WA_TOKEN"); if (!env("WA_PHONE_ID")) falta.push("WA_PHONE_ID"); }
-  if (prov === "callmebot" && !env("CALLMEBOT_KEY")) falta.push("CALLMEBOT_KEY");
+  const esCloud = prov === "cloud";
+  const esCallmebot = prov === "callmebot";
+  if (esCloud && !env("WA_TOKEN")) falta.push("WA_TOKEN");
+  if (esCloud && !env("WA_PHONE_ID")) falta.push("WA_PHONE_ID");
+  if (esCallmebot && !env("CALLMEBOT_KEY")) falta.push("CALLMEBOT_KEY");
   return { ok: falta.length === 0, proveedor: prov, falta };
 }
 // Envía el mensaje a todos los destinos; cuenta como enviado si llegó al menos a uno.
@@ -230,5 +233,4 @@ async function handler(req: Request): Promise<Response> {
   return json({ ok: r.ok, enviado: r.ok, pendientes: pends.length, destinos: r.destinos, detalle: r.ok ? undefined : r.detalle }, r.ok ? 200 : 502);
 }
 
-if ((globalThis as any).__PRUEBA__) { (globalThis as any).__handler = handler; }   // solo para las pruebas automáticas
-else if (typeof Deno !== "undefined" && (Deno as any).serve) { Deno.serve(handler); }
+Deno.serve(handler);
