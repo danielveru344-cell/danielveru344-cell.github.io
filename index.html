@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261126d";
+window.APP_BUILD = "20261126e";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -16357,6 +16357,7 @@ function CargaTecnicosPanel(p){
   var _e=S(null),error=_e[0],setError=_e[1];
   var _a=S({}),abiertos=_a[0],setAbiertos=_a[1];
   var _r=S(null),resp=_r[0],setResp=_r[1];
+  var _sel=S(null),sel=_sel[0],setSel=_sel[1];          // cubito abierto: {titulo, sub, detalle}
   React.useEffect(function(){
     var vivo=true;
     progCargarAnio(anio).then(function(t){PROG_TAREAS_CACHE[anio]=t;if(vivo)setTareas(t);}).catch(function(e){if(vivo&&!PROG_TAREAS_CACHE[anio])setError(String(e&&e.message||e));});
@@ -16370,17 +16371,26 @@ function CargaTecnicosPanel(p){
   var cab=h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
     chip(vista==="mes","📅 Por mes",function(){setVista("mes");},"m"),
     chip(vista==="global","🗂️ Global: equipos y áreas a cargo",function(){setVista("global");},"g"));
-  var tarjeta=function(key,titulo,total,resumen,detalle,color){
-    var ab=!!abiertos[key];
-    return h("div",{key:key,style:{border:"1px solid var(--border)",borderRadius:12,background:"#fff",overflow:"hidden"}},
-      h("button",{type:"button",onClick:function(){toggle(key);},style:{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}},
-        h("div",{style:{minWidth:44,height:44,borderRadius:12,background:color||"#EEF3F9",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:17,color:"var(--navy)"}},total),
-        h("div",{style:{flex:1,minWidth:0}},
-          h("div",{style:{fontWeight:800,fontSize:13.5,color:"var(--navy)"}},titulo),
-          h("div",{style:{fontSize:12,color:"var(--gray)",fontWeight:600,marginTop:2}},resumen)),
-        h("span",{style:{color:"var(--gray)",fontSize:12}},ab?"▲":"▼")),
-      ab&&h("div",{style:{borderTop:"1px solid var(--lighter)",padding:"8px 14px 12px",maxHeight:360,overflowY:"auto"}},detalle));
+  // Cubito como los meses del cronograma: nombre, total, desglose y barra de avance. Al tocarlo se abre el detalle.
+  var tarjeta=function(key,titulo,total,resumen,detalle,color,avance){
+    var pct=avance&&avance.total?Math.round(avance.hechas/avance.total*100):null;
+    var ini=String(titulo||"").replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ ]/g,"").trim().split(/\s+/).slice(0,2).map(function(w){return w.charAt(0).toUpperCase();}).join("")||"?";
+    return h("button",{type:"button",key:key,className:"mto-mes",onClick:function(){setSel({titulo:titulo,sub:resumen,detalle:detalle});},style:color?{background:color}:null},
+      h("div",{className:"mto-mes-top",style:{gap:8,justifyContent:"flex-start"}},
+        h("span",{className:"mto-avatar",style:{background:typeof mtoColorAvatar==="function"?mtoColorAvatar(titulo):"#2d7dd2"}},ini),
+        h("span",{className:"mto-mes-nombre",style:{textTransform:"none",letterSpacing:0,fontSize:13,lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},titulo)),
+      h("div",{className:"mto-mes-total"},total),
+      h("div",{className:"mto-mes-det",style:{flexWrap:"wrap",gap:"4px 10px",color:"var(--gray)"}},resumen),
+      pct!==null&&h("div",{className:"mto-mes-cumpl",title:avance.hechas+" de "+avance.total+" hechas"},
+        h("div",{className:"mto-mes-barra"},h("i",{style:{width:pct+"%",background:pct>=100?"#1D9A50":"var(--accent)"}})),
+        h("span",{className:"mto-mes-pct",style:{color:pct>=100?"#1D7A3E":"var(--navy)"}},pct+"%")));
   };
+  var hoja=sel&&h("div",{className:"overlay",onClick:function(){setSel(null);}},
+    h("div",{className:"sheet",onClick:function(ev){ev.stopPropagation();},style:{maxWidth:640,maxHeight:"88vh",display:"flex",flexDirection:"column"}},
+      h("div",{className:"sheet-handle"}),
+      h("div",{className:"sheet-title"},sel.titulo),
+      h("div",{style:{padding:"0 20px 6px",fontSize:12.5,color:"var(--gray)",fontWeight:600,display:"flex",gap:10,flexWrap:"wrap"}},sel.sub),
+      h("div",{style:{overflowY:"auto",padding:"6px 20px 22px"}},sel.detalle)));
   var fila=function(key,cod,txt,extra,estado){return h("div",{key:key,style:{display:"flex",gap:10,fontSize:12.5,padding:"5px 0",borderBottom:"1px solid var(--lighter)",alignItems:"baseline"}},
     h("span",{style:{minWidth:84,fontWeight:700,color:"var(--navy)"}},cod||"—"),
     h("span",{style:{flex:1,color:"#2b3a50"}},txt),
@@ -16396,11 +16406,12 @@ function CargaTecnicosPanel(p){
     var maxN=Math.max.apply(null,personas.filter(Boolean).map(function(k){return porPersona[k].length;}).concat([1]));
     return h("div",null,cab,
       h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}},MTTO_MESES.map(function(nm,i){return chip(mes===i+1,nm.slice(0,3),function(){setMes(i+1);setAbiertos({});},"mes"+i);})),
-      h("div",{style:{fontSize:12.5,color:"var(--gray)",fontWeight:600,marginBottom:10}},delMes.length+" actividades en "+MTTO_MESES[mes-1]+" "+anio+" · "+personas.filter(Boolean).length+" personas con actividades"+(porPersona[""]?" · "+porPersona[""].length+" sin asignar":"")),
-      h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+      h("div",{style:{fontSize:12.5,color:"var(--gray)",fontWeight:600,marginBottom:10}},delMes.length+" actividades en "+MTTO_MESES[mes-1]+" "+anio+" · "+personas.filter(Boolean).length+" personas con actividades"+(porPersona[""]?" · "+porPersona[""].length+" sin asignar":"")+" · 🔧 equipos · 🧱 áreas · 💧 agua · 📋 órdenes · ✓ hechas"),
+      hoja,
+      h("div",{className:"mto-meses"},
         personas.map(function(nombre){
           var lista=porPersona[nombre],hechas=lista.filter(cargaHecha).length;
-          var resumen=CARGA_FUENTES.map(function(f){var n=lista.filter(function(t){return t.fuente===f.id;}).length;return n?f.ico+" "+n+" "+f.corto.toLowerCase():"";}).filter(Boolean).join(" · ")+" · ✓ "+hechas+" hechas";
+          var resumen=CARGA_FUENTES.map(function(f){var n=lista.filter(function(t){return t.fuente===f.id;}).length;return n?h("span",{key:f.id,title:f.corto},f.ico+" "+n):null;}).filter(Boolean).concat([h("span",{key:"ok",style:{color:"#1D7A3E"}},"✓ "+hechas)]);
           var detalle=CARGA_FUENTES.map(function(f){
             var suyas=lista.filter(function(t){return t.fuente===f.id;});
             if(!suyas.length)return null;
@@ -16408,9 +16419,7 @@ function CargaTecnicosPanel(p){
               h("div",{style:{fontSize:11.5,fontWeight:800,color:"var(--gray)",letterSpacing:.3,margin:"4px 0"}},f.ico+" "+f.corto.toUpperCase()+" ("+suyas.length+")"),
               suyas.map(function(t,i){var it=cargaItem(t);return fila(f.id+i,it.cod,it.txt,it.extra,cargaHecha(t)?"hecha":"pend");}));
           });
-          var pct=nombre?Math.round(lista.length/maxN*100):0;
-          var color=!nombre?"#FDECEE":pct>=85?"#FFE8D6":"#EEF3F9";
-          return tarjeta("p_"+nombre,nombre||"⚠️ Sin asignar",lista.length,resumen,detalle,color);
+          return tarjeta("p_"+nombre,nombre||"⚠️ Sin asignar",lista.length,resumen,detalle,nombre?null:"#FFF5F6",{hechas:hechas,total:lista.length});
         }),
         !personas.length&&h("div",{style:{color:"var(--gray)",fontSize:13}},"No hay actividades en "+MTTO_MESES[mes-1]+".")));
   }
@@ -16443,10 +16452,13 @@ function CargaTecnicosPanel(p){
     !resp.length?h("div",{style:{color:"var(--gray)",fontSize:13}},"Todavía no hay responsables habituales guardados. Se configuran abajo, en la tabla de Responsables."):
     h("div",null,
       h("div",{style:{fontSize:12.5,color:"var(--gray)",fontWeight:600,marginBottom:10}},tecs.length+" personas con equipos o áreas a cargo · "+resp.length+" equipos y áreas con responsable"),
-      h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+      hoja,
+      h("div",{style:{fontSize:11.5,color:"var(--gray)",marginBottom:10}},"🔧 equipos y 🧱 áreas como responsable principal · ↺ de respaldo. Toca un técnico para ver cuáles son."),
+      h("div",{className:"mto-meses"},
         tecs.map(function(nombre){
           var o=porTec[nombre],tot=o.equipo.principal.length+o.area.principal.length;
-          var resumen="🔧 "+o.equipo.principal.length+" equipos · 🧱 "+o.area.principal.length+" áreas como principal"+((o.equipo.respaldo.length+o.area.respaldo.length)?" · respaldo de "+(o.equipo.respaldo.length+o.area.respaldo.length):"");
+          var nResp=o.equipo.respaldo.length+o.area.respaldo.length;
+          var resumen=[h("span",{key:"e",title:"Equipos como principal"},"🔧 "+o.equipo.principal.length),h("span",{key:"a",title:"Áreas como principal"},"🧱 "+o.area.principal.length)].concat(nResp?[h("span",{key:"r",title:"De respaldo"},"↺ "+nResp)]:[]);
           var detalle=[bloque("🔧 EQUIPOS · PRINCIPAL",o.equipo.principal,"equipo"),bloque("🧱 ÁREAS · PRINCIPAL",o.area.principal,"area"),
             bloque("🔧 EQUIPOS · RESPALDO",o.equipo.respaldo,"equipo"),bloque("🧱 ÁREAS · RESPALDO",o.area.respaldo,"area")];
           return tarjeta("g_"+nombre,nombre,tot,resumen,detalle);
