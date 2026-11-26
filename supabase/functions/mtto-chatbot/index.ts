@@ -1,12 +1,15 @@
 // ══════════════════════════════════════════════════════════════
-//  mtto-chatbot · Supabase Edge Function
-//  Intermediario seguro entre el chatbot flotante y la API de Google Gemini
-//  (capa gratis — https://ai.google.dev).
-//  1. Busca en los registros internos (bitácora/historial, órdenes de
-//     mantenimiento, solicitudes, notas de seguimiento).
-//  2. Si encuentra algo relevante, se lo pasa a Gemini como contexto.
-//  3. Si no hay nada relevante, deja que Gemini use búsqueda web (grounding).
-//  4. Gemini siempre debe citar de dónde salió cada dato.
+//  mtto-chatbot · Supabase Edge Function  (versión con consultas a la app)
+//  El asistente sabe quién está conectado y consulta los datos de la app con
+//  "herramientas" (function calling de Google Gemini):
+//    · preventivos   → órdenes de equipos, inspecciones locativas y agua purificada
+//    · solicitudes_mantenimiento
+//    · bitacora      → reportes de turno, realizadas y pendientes
+//    · almacen       → artículos e inventario
+//    · solicitudes_material
+//    · historial     → quién hizo qué en la app
+//    · buscar_en_internet → solo para dudas técnicas que no están en la app
+//  Gemini decide qué consultar, recibe los datos y responde citando el módulo.
 // ══════════════════════════════════════════════════════════════
 
 const SUPA_URL = "https://mysqkhttdquwicrsjcmg.supabase.co";
@@ -15,10 +18,8 @@ const SUPA_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im15c3FraHR0ZHF1d2ljcnNqY21nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0OTAxMzMsImV4cCI6MjA5MzA2NjEzM30.RBw3DwjQZvoJUhqBIkR6p3LdYhpc3PVMcyZiIe0uGUE";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-// Actualizado según el error de la API: gemini-2.0-flash fue descontinuado.
-// Si esto vuelve a fallar en el futuro, revisa qué modelo recomienda el error
-// o consulta https://ai.google.dev/gemini-api/docs/models
-const MODEL = "gemini-3.6-flash";
+// Si el modelo deja de existir, el error de la API dice cuál usar (https://ai.google.dev/gemini-api/docs/models)
+const MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.6-flash";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 const CORS_HEADERS = {
@@ -26,220 +27,273 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
-const STOPWORDS = new Set([
-  "el","la","los","las","de","del","un","una","unos","unas","y","o","que","en",
-  "por","para","con","no","se","su","sus","al","es","son","como","porque",
-  "mi","me","muy","tan","ya","pero","si","fue","fueron","esta","esta,","este",
-  "ese","esa","lo","le","les","hay","cuando","donde","desde","hasta"
-]);
-
-function extractKeywords(text: string): string[] {
-  return Array.from(
-    new Set(
-      text
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9\s]/g, " ")
-        .split(/\s+/)
-        .filter((w) => w.length >= 4 && !STOPWORDS.has(w))
-    )
-  ).slice(0, 8);
+// ── utilidades ─────────────────────────────────────────────────
+function norm(s: unknown) {
+  return String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
 }
-
-async function sbSelect(table: string, columns: string, limit = 200) {
-  const r = await fetch(
-    `${SUPA_URL}/rest/v1/${table}?select=${columns}&order=id.desc&limit=${limit}`,
-    { headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` } }
-  );
-  if (!r.ok) return [];
-  try { return await r.json(); } catch { return []; }
+// "M12 · Pablo Fonseca (x)" → "pablo fonseca"
+function normPersona(s: unknown) {
+  const t = String(s ?? "");
+  return norm(t.includes("·") ? t.split("·").pop() : t).replace(/\(.*?\)/g, "").trim();
 }
-
-function matches(row: Record<string, unknown>, fields: string[], keywords: string[]) {
-  const blob = fields.map((f) => String(row[f] ?? "")).join(" ")
-    .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  return keywords.some((k) => blob.includes(k));
+function coincidePersona(valor: unknown, buscado?: string) {
+  if (!buscado) return true;
+  const v = normPersona(valor), b = normPersona(buscado);
+  if (!v || !b) return false;
+  if (v.includes(b) || b.includes(v)) return true;
+  // "cesar" encuentra "cesar pacheco"; "pacheco" también
+  return b.split(" ").every((p) => v.split(" ").some((w) => w.startsWith(p)));
 }
-
-async function buscarContextoInterno(pregunta: string) {
-  const keywords = extractKeywords(pregunta);
-  if (!keywords.length) return { contexto: "", encontrado: false };
-
-  const bloques: string[] = [];
-
-  // 1) Bitácora de turno (tabla bitacora_kv, key='btk_v1' contiene un JSON array)
-  try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/bitacora_kv?key=eq.btk_v1`, {
-      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}` },
+function contiene(blob: unknown, texto?: string) {
+  if (!texto) return true;
+  const b = norm(blob);
+  return norm(texto).split(" ").filter((w) => w.length >= 3).every((w) => b.includes(w));
+}
+function hoyBogota() {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }));
+}
+function iso(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+async function rest(path: string): Promise<any[]> {
+  const out: any[] = [];
+  for (let desde = 0; desde < 20000; desde += 1000) {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
+      headers: { apikey: SUPA_ANON_KEY, Authorization: `Bearer ${SUPA_ANON_KEY}`, Range: `${desde}-${desde + 999}` },
     });
-    if (r.ok) {
-      const rows = await r.json();
-      const entries: any[] = rows.length ? (rows[0].value || []) : [];
-      entries.forEach((e: any) => {
-        const realizadas = e.realizadas || [];
-        const pendientes = e.pendientes || [];
-        const relevantesR = realizadas.filter((a: any) => matches({ blob: [a.area, a.desc].join(" ") }, ["blob"], keywords));
-        const relevantesP = pendientes.filter((p: any) => matches({ blob: [p.area, p.desc].join(" ") }, ["blob"], keywords));
-        const relevanteObs = matches({ blob: e.obs || "" }, ["blob"], keywords);
-        if (relevantesR.length || relevantesP.length || relevanteObs) {
-          bloques.push(
-            `[Bitácora de turno · ${e.tecnico || "—"} · ${e.turno || ""} · ${e.fecha || ""}] ` +
-            (relevantesR.length ? `Realizado: ${relevantesR.map((a:any)=>`${a.area}: ${a.desc||""}`).join(" | ")}. ` : "") +
-            (relevantesP.length ? `Pendiente: ${relevantesP.map((p:any)=>`${p.area}: ${p.desc||""} [${p.p||""}]`).join(" | ")}. ` : "") +
-            (relevanteObs ? `Observaciones: ${e.obs}` : "")
-          );
-        }
-      });
-    }
-  } catch (_e) { /* tabla no disponible, se ignora */ }
+    if (!r.ok) break;
+    const d = await r.json().catch(() => []);
+    if (!Array.isArray(d)) break;
+    out.push(...d);
+    if (d.length < 1000) break;
+  }
+  return out;
+}
+function limitar<T>(arr: T[], n = 60) {
+  return { total: arr.length, mostrando: Math.min(arr.length, n), items: arr.slice(0, n) };
+}
+const yo = (v: unknown, usuario: any) => (v === "yo" ? (usuario?.nombre || usuario?.username || "") : String(v ?? ""));
 
-  // 1b) Historial de eventos (auditoría general: ejecuciones, cambios de estado, etc.)
-  try {
-    const historial = await sbSelect("historial", "id,tipo,descripcion,usuario,created_at", 300);
-    const hits = historial.filter((r: any) => matches(r, ["tipo", "descripcion", "usuario"], keywords)).slice(0, 6);
-    hits.forEach((r: any) => bloques.push(
-      `[Historial #${r.id} · ${r.created_at?.slice(0,10) || ""}] ${r.tipo || ""}: ${r.descripcion || ""} (registrado por ${r.usuario || "—"})`
-    ));
-  } catch (_e) { /* ignore */ }
+// ── herramientas ───────────────────────────────────────────────
+async function tPreventivos(a: any, usuario: any) {
+  const hoy = hoyBogota();
+  const anio = Number(a.anio) || hoy.getFullYear();
+  const mes = a.mes ? Number(a.mes) : null;
+  const tecnico = a.tecnico === "todos" ? "" : (a.tecnico ? yo(a.tecnico, usuario) : (usuario?.nombre || ""));
+  const estado = a.estado || "todos";
+  const tipo = a.tipo || "todos";
+  const filas: any[] = [];
+  const mesDe = (o: any) => o.mes_reprogramado || o.mes;
+  const ok = (o: any) => o.estado !== "rechazada" && (!mes || mesDe(o) === mes) && coincidePersona(o.asignado_a, tecnico) &&
+    (estado === "todos" || (estado === "hechos" ? o.estado === "ejecutado" : o.estado !== "ejecutado"));
+  if (tipo === "todos" || tipo === "equipos") {
+    (await rest(`mtto_ordenes?select=*&anio=eq.${anio}&order=mes`)).filter(ok).forEach((o) => filas.push({
+      tipo: "equipo", mes: MESES[mesDe(o) - 1], codigo: o.equipo_codigo, nombre: o.equipo_desc, consecutivo: o.consecutivo,
+      frecuencia: o.frecuencia, estado: o.estado, asignado_a: o.asignado_a || "sin asignar", ejecutado: o.fecha_ejecucion || undefined }));
+  }
+  if (tipo === "todos" || tipo === "inspecciones") {
+    (await rest(`mtto_inspecciones?select=*&anio=eq.${anio}&order=mes`)).filter(ok).forEach((o) => filas.push({
+      tipo: "inspección locativa", mes: MESES[mesDe(o) - 1], area: o.area_nombre, consecutivo: o.consecutivo,
+      esclusas: [o.esclusa_c41 && o.esclusa_c41 !== o.area_nombre ? o.esclusa_c41 : null, o.esclusa_c56].filter(Boolean).join(", ") || undefined,
+      estado: o.estado, asignado_a: o.asignado_a || "sin asignar", ejecutado: o.fecha_ejecucion || undefined }));
+  }
+  if (tipo === "todos" || tipo === "agua") {
+    (await rest(`mtto_agua?select=*&anio=eq.${anio}&order=mes`)).filter(ok).forEach((o) => filas.push({
+      tipo: "agua purificada", mes: MESES[mesDe(o) - 1], sistema: o.sistema, actividad: o.actividad, semana: o.semana,
+      frecuencia: o.frecuencia, estado: o.estado, asignado_a: o.asignado_a || "sin asignar", ejecutado: o.fecha_ejecucion || undefined }));
+  }
+  const hechos = filas.filter((f) => f.estado === "ejecutado").length;
+  return { filtro: { anio, mes: mes ? MESES[mes - 1] : "todo el año", tecnico: tecnico || "todos", estado, tipo },
+    hechos, pendientes: filas.length - hechos, ...limitar(filas, 80) };
+}
 
-  // 2) Órdenes de mantenimiento preventivo (con observaciones/ejecución)
-  try {
-    const ordenes = await sbSelect(
-      "mtto_ordenes",
-      "id,equipo_codigo,equipo_desc,estado,observaciones,ejecutor,fecha_ejecucion,anio,mes",
-      400
-    );
-    const hits = ordenes.filter((r: any) => matches(r, ["equipo_codigo","equipo_desc","observaciones"], keywords)).slice(0, 6);
-    hits.forEach((r: any) => bloques.push(
-      `[Orden Mtto Preventivo #${r.id} · ${r.equipo_codigo || ""} ${r.equipo_desc || ""} · ${r.estado || ""}] Observaciones: ${r.observaciones || "sin observaciones"} (ejecutor: ${r.ejecutor || "—"}, fecha: ${r.fecha_ejecucion || "—"})`
-    ));
-  } catch (_e) { /* ignore */ }
+async function tSolicitudesMtto(a: any, usuario: any) {
+  const tecnico = !a.tecnico || a.tecnico === "todos" ? "" : yo(a.tecnico, usuario);
+  const estado = a.estado || "pendientes";
+  let filas = await rest(`solicitudes_mantenimiento?select=*&order=enviado_en.desc`);
+  filas = filas.filter((s) =>
+    (estado === "todas" || (estado === "pendientes" ? (s.estado === "abierta" || s.estado === "asignada") : s.estado === estado)) &&
+    coincidePersona(s.asignado_a, tecnico) &&
+    (!a.solicitante || coincidePersona(s.solicitante, yo(a.solicitante, usuario))) &&
+    contiene([s.area_nombre, s.item_nombre, s.descripcion, s.consecutivo].join(" "), a.texto));
+  return { filtro: { estado, tecnico: tecnico || "todos" }, ...limitar(filas.map((s) => ({
+    consecutivo: s.consecutivo, area: s.area_nombre, item: s.item_nombre, descripcion: s.descripcion, estado: s.estado,
+    asignado_a: s.asignado_a || "sin asignar", solicitante: s.solicitante, enviada: String(s.enviado_en || "").slice(0, 10),
+    fecha_estimada: s.fecha_estimada || undefined })), 50) };
+}
 
-  // 3) Solicitudes de mantenimiento
-  try {
-    const solicitudes = await sbSelect(
-      "solicitudes_mantenimiento",
-      "id,consecutivo,tipo,area_nombre,item_nombre,descripcion,estado",
-      300
-    );
-    const hits = solicitudes.filter((r: any) => matches(r, ["area_nombre","item_nombre","descripcion"], keywords)).slice(0, 6);
-    hits.forEach((r: any) => bloques.push(
-      `[Solicitud #${r.consecutivo || r.id} · ${r.area_nombre || ""} / ${r.item_nombre || ""}] ${r.descripcion || ""} (estado: ${r.estado || "—"})`
-    ));
-  } catch (_e) { /* ignore */ }
+async function tBitacora(a: any, usuario: any) {
+  const r = await rest(`bitacora_kv?select=value&key=eq.btk_v1`);
+  const entries: any[] = r.length && Array.isArray(r[0].value) ? r[0].value : [];
+  const desde = a.desde || "0000-00-00", hasta = a.hasta || "9999-99-99";
+  const tecnico = a.tecnico ? yo(a.tecnico, usuario) : "";
+  const filas = entries.filter((e) => {
+    const f = String(e.fecha || e.createdAt || "").slice(0, 10);
+    if (f < desde || f > hasta) return false;
+    if (tecnico && !coincidePersona(e.tecnico, tecnico)) return false;
+    if (a.turno && !contiene(e.turno, a.turno)) return false;
+    if (a.solo_pendientes_abiertos && !(e.pendientes || []).some((p: any) => !p.cerrado)) return false;
+    if (a.texto && !contiene(JSON.stringify([e.realizadas, e.pendientes, e.obs]), a.texto)) return false;
+    return true;
+  }).sort((x, y) => String(y.fecha || y.createdAt).localeCompare(String(x.fecha || x.createdAt)))
+    .map((e) => ({
+      fecha: e.fecha, turno: e.turno, tecnico: String(e.tecnico || "").split("·").pop()!.trim(), tipo: e.tipo,
+      realizadas: (e.realizadas || []).map((x: any) => `${x.hi || ""}${x.hf ? "-" + x.hf : ""} ${x.area || ""}: ${x.desc || ""}`.trim()),
+      pendientes: (e.pendientes || []).map((p: any) => `${p.area || p.equipo || ""}: ${p.desc || ""} [${p.p || "Media"}${p.cerrado ? ", cerrado" : ", abierto"}${(p.seguimientos || []).length ? ", " + p.seguimientos.length + " seguimientos" : ""}]`),
+      observaciones: e.obs || undefined,
+    }));
+  return { filtro: { desde: a.desde, hasta: a.hasta, tecnico: tecnico || undefined, turno: a.turno, texto: a.texto },
+    nota: "Los reportes viejos que se archivaron no se consultan aquí (están en el Archivo de la Bitácora).", ...limitar(filas, 25) };
+}
 
-  // 4) Notas del seguimiento mensual (mtto_meses.notes es un jsonb {taskId: texto})
-  try {
-    const meses = await sbSelect("mtto_meses", "id,mes,tasks,notes", 24);
-    meses.forEach((m: any) => {
-      const tasks: any[] = Array.isArray(m.tasks) ? m.tasks : [];
-      const notes: Record<string, string> = m.notes || {};
-      tasks.forEach((t) => {
-        const nota = notes[String(t.id)];
-        const blobFields = [t.equipo, t.activ, t.codigo, nota].filter(Boolean).join(" ");
-        if (matches({ blob: blobFields }, ["blob"], keywords)) {
-          bloques.push(
-            `[Seguimiento ${m.mes} · ${t.equipo || ""} (${t.codigo || ""})] Actividad: ${t.activ || ""}. ${nota ? "Nota registrada: " + nota : ""} (responsable: ${t.resp || "—"})`
-          );
-        }
-      });
-    });
-  } catch (_e) { /* ignore */ }
+async function tAlmacen(a: any) {
+  let filas = await rest(`articulos?select=code,name,category,quantity,min_stock,unit,location`);
+  filas = filas.filter((x) => contiene([x.code, x.name, x.category, x.location].join(" "), a.texto) &&
+    (!a.solo_bajo_stock || Number(x.quantity) <= Number(x.min_stock || 0)));
+  filas.sort((x, y) => String(x.name).localeCompare(String(y.name)));
+  return limitar(filas, 60);
+}
 
-  return { contexto: bloques.join("\n"), encontrado: bloques.length > 0 };
+async function tSolicitudesMaterial(a: any, usuario: any) {
+  let filas = await rest(`solicitudes?select=*&order=created_at.desc`);
+  filas = filas.filter((s) =>
+    (!a.estado || norm(s.status).includes(norm(a.estado))) &&
+    (!a.solicitante || coincidePersona(s.solicitante_name || s.solicitante, yo(a.solicitante, usuario))) &&
+    contiene([s.item_name, s.item_code, s.reason, s.equipo_name, s.consecutivo].join(" "), a.texto));
+  return limitar(filas.map((s) => ({ consecutivo: s.consecutivo, articulo: s.item_name, codigo: s.item_code, cantidad: s.quantity,
+    unidad: s.unidad || s.unit, estado: s.status, motivo: s.reason, solicitante: s.solicitante_name || s.solicitante,
+    equipo: s.equipo_name || undefined, fecha: String(s.created_at || "").slice(0, 10) })), 50);
+}
+
+async function tHistorial(a: any, usuario: any) {
+  const desde = a.desde ? `&created_at=gte.${a.desde}` : "";
+  let filas = await rest(`movimientos?select=type,item_name,item_code,quantity,usuario,notes,created_at&order=created_at.desc${desde}`);
+  filas = filas.filter((m) => contiene([m.type, m.item_name, m.item_code, m.notes].join(" "), a.texto) &&
+    (!a.usuario || coincidePersona(m.usuario, yo(a.usuario, usuario))));
+  return limitar(filas.map((m) => ({ tipo: m.type, que: m.item_name, codigo: m.item_code || undefined, cantidad: m.quantity || undefined,
+    usuario: m.usuario, nota: m.notes || undefined, cuando: String(m.created_at || "").slice(0, 16).replace("T", " ") })), 40);
+}
+
+async function tInternet(a: any) {
+  const r = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: String(a.pregunta || "") }] }],
+      systemInstruction: { parts: [{ text: "Responde breve y práctico para un técnico de mantenimiento industrial. Cita las fuentes web con su URL." }] },
+      tools: [{ google_search: {} }], generationConfig: { maxOutputTokens: 800 },
+    }),
+  });
+  if (!r.ok) return { error: "La búsqueda web no está disponible ahora (" + r.status + ")." };
+  const d = await r.json();
+  return { respuesta: (d?.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || "").join("\n") };
+}
+
+const HERRAMIENTAS: Record<string, (a: any, u: any) => Promise<any>> = {
+  preventivos: tPreventivos, solicitudes_mantenimiento: tSolicitudesMtto, bitacora: tBitacora,
+  almacen: tAlmacen, solicitudes_material: tSolicitudesMaterial, historial: tHistorial, buscar_en_internet: tInternet,
+};
+
+const S = (description: string) => ({ type: "STRING", description });
+const DECLARACIONES = [
+  { name: "preventivos", description: "Mantenimientos preventivos del cronograma: órdenes de equipos (F-MAN-012), inspecciones locativas (F-MAN-009) y actividades de los sistemas de agua purificada. Para '¿qué mantenimientos tengo?', '¿cuáles me faltan?', la carga de un técnico, etc.",
+    parameters: { type: "OBJECT", properties: {
+      tecnico: S("Nombre del técnico. Vacío o 'yo' = el usuario conectado. 'todos' = sin filtrar por persona."),
+      mes: { type: "INTEGER", description: "Mes 1-12. Omitir para todo el año." },
+      anio: { type: "INTEGER", description: "Año, por defecto el actual." },
+      estado: { type: "STRING", enum: ["todos", "pendientes", "hechos"] },
+      tipo: { type: "STRING", enum: ["todos", "equipos", "inspecciones", "agua"] } } } },
+  { name: "solicitudes_mantenimiento", description: "Solicitudes de mantenimiento (órdenes de trabajo) que pide producción. Pendientes = abiertas o asignadas sin cerrar.",
+    parameters: { type: "OBJECT", properties: {
+      tecnico: S("Técnico asignado. 'yo' = el usuario conectado. Vacío o 'todos' = cualquiera."),
+      estado: { type: "STRING", enum: ["pendientes", "abierta", "asignada", "cerrada", "rechazada", "todas"] },
+      solicitante: S("Quién la pidió; 'yo' = el usuario conectado (opcional)."),
+      texto: S("Palabras a buscar: área, equipo, descripción, consecutivo (opcional).") } } },
+  { name: "bitacora", description: "Reportes de turno de la Bitácora: qué se hizo (actividades con horas), pendientes y observaciones. Para '¿qué hizo César anoche?', buscar fallas de un equipo, ver pendientes abiertos.",
+    parameters: { type: "OBJECT", properties: {
+      tecnico: S("Nombre del técnico; 'yo' = el usuario conectado (opcional)."),
+      desde: S("Fecha inicial AAAA-MM-DD (opcional)."), hasta: S("Fecha final AAAA-MM-DD (opcional)."),
+      turno: S("Turno, ej. 'Turno C' (opcional)."), texto: S("Palabras a buscar, ej. 'caldera' (opcional)."),
+      solo_pendientes_abiertos: { type: "BOOLEAN" } } } },
+  { name: "almacen", description: "Artículos del almacén: existencias, stock mínimo y ubicación.",
+    parameters: { type: "OBJECT", properties: { texto: S("Nombre, código o categoría (opcional)."), solo_bajo_stock: { type: "BOOLEAN" } } } },
+  { name: "solicitudes_material", description: "Solicitudes de material o de compra del almacén y su estado.",
+    parameters: { type: "OBJECT", properties: { texto: S("Artículo, código o equipo (opcional)."), estado: S("Estado (opcional)."), solicitante: S("'yo' o un nombre (opcional).") } } },
+  { name: "historial", description: "Historial de acciones de la app: quién ejecutó, asignó, importó o movió inventario, y cuándo.",
+    parameters: { type: "OBJECT", properties: { texto: S("Palabras a buscar (opcional)."), usuario: S("Persona; 'yo' = el usuario conectado (opcional)."), desde: S("Fecha AAAA-MM-DD (opcional).") } } },
+  { name: "buscar_en_internet", description: "Solo para dudas técnicas generales (fallas, procedimientos) que no están en los datos de la app.",
+    parameters: { type: "OBJECT", properties: { pregunta: S("La pregunta a buscar.") }, required: ["pregunta"] } },
+];
+
+function promptSistema(usuario: any) {
+  const h = hoyBogota();
+  const ayer = new Date(h); ayer.setDate(h.getDate() - 1);
+  const dias = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  return `Eres el asistente de la suite Bussié (mantenimiento de la planta de Laboratorios Bussié). Respondes en español, breve y concreto, como a un técnico en planta.
+
+USUARIO CONECTADO: ${usuario?.nombre || usuario?.username || "desconocido"} (usuario: ${usuario?.username || "—"}, cargo: ${usuario?.cargo || "—"}).
+Cuando diga "yo", "mis", "tengo", "me faltan", se refiere a esta persona.
+HOY: ${dias[h.getDay()]} ${iso(h)}, hora Colombia ${String(h.getHours()).padStart(2, "0")}:${String(h.getMinutes()).padStart(2, "0")}. AYER: ${iso(ayer)}.
+Turnos: A 6:00-14:00, B 14:00-22:00, C 22:00-6:00. "Anoche" normalmente es el turno C que empezó ayer (busca ayer y hoy) o el turno B de ayer.
+
+REGLAS:
+1. Para cualquier pregunta sobre datos de la app (mantenimientos, inspecciones, agua purificada, solicitudes, bitácora, almacén, historial) USA LAS HERRAMIENTAS. Nunca inventes datos.
+2. Responde con conteos y listas cortas (máximo unos 15 renglones). Si hay más, di cuántos son y muestra los más importantes.
+3. Di de qué módulo sale la información (ej. "Según la Bitácora…", "En Mantenimiento preventivo…").
+4. Si una herramienta no trae resultados, dilo claramente y sugiere cómo preguntar mejor.
+5. Solo usa buscar_en_internet para dudas técnicas generales, y cita las fuentes.`;
+}
+
+async function llamarGemini(contents: any[], system: string) {
+  return await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents, systemInstruction: { parts: [{ text: system }] },
+      tools: [{ functionDeclarations: DECLARACIONES }],
+      generationConfig: { maxOutputTokens: 1500 },
+    }),
+  });
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: CORS_HEADERS });
-  }
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Método no permitido" }), {
-      status: 405, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
-  }
-  if (!GEMINI_API_KEY) {
-    return new Response(JSON.stringify({ error: "Falta configurar GEMINI_API_KEY en los secretos de la función." }), {
-      status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
-  }
-
+  const json = (obj: unknown, status = 200) =>
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
+  if (req.method !== "POST") return json({ error: "Método no permitido" }, 405);
+  if (!GEMINI_API_KEY) return json({ error: "Falta configurar GEMINI_API_KEY en los secretos de la función." }, 500);
   try {
-    const { message, history } = await req.json();
-    if (!message || typeof message !== "string") {
-      return new Response(JSON.stringify({ error: "Falta el mensaje." }), {
-        status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-
-    const { contexto, encontrado } = await buscarContextoInterno(message);
-
-    const systemPrompt = `Eres el asistente de mantenimiento industrial de la planta Bussié (suite de gestión Bussié). Ayudas a técnicos y supervisores con dudas sobre equipos, fallas, y procedimientos.
-
-REGLAS IMPORTANTES:
-1. Primero revisa el <contexto_interno> de abajo (viene de la bitácora, órdenes de mantenimiento preventivo, solicitudes y notas de seguimiento de la planta).
-2. Si el contexto interno tiene información relevante para responder, básate en ella PRIMERO y cita exactamente el registro (ej: "Según la Orden Mtto Preventivo #123 del [equipo]..." o "Según la Bitácora de turno del [fecha]...").
-3. Si el contexto interno NO tiene nada relevante o es insuficiente, usa la búsqueda de Google para investigar posibles causas y soluciones (piensa en manuales técnicos, foros de mantenimiento industrial, fabricantes). Cita SIEMPRE la fuente web con su URL.
-4. Nunca mezcles ambas fuentes sin aclarar cuál es cuál. Al final de tu respuesta agrega una línea "📎 Fuente(s): ..." listando de dónde salió la información (interno y/o web).
-5. Si de verdad no encuentras nada ni interno ni en la web, dilo con honestidad y sugiere pasos generales de diagnóstico.
-6. Sé breve, concreto y práctico — estás hablando con un técnico en planta, no escribas ensayos.
-
-<contexto_interno>
-${encontrado ? contexto : "(No se encontraron registros internos relacionados con esta pregunta.)"}
-</contexto_interno>`;
-
-    // Gemini usa roles "user"/"model" y el formato contents:[{role, parts:[{text}]}]
-    const contents = (Array.isArray(history) ? history.slice(-10) : []).map((h: any) => ({
-      role: h.role === "assistant" ? "model" : "user",
-      parts: [{ text: String(h.content ?? "") }],
-    }));
+    const { message, history, usuario } = await req.json();
+    if (!message || typeof message !== "string") return json({ error: "Falta el mensaje." }, 400);
+    const system = promptSistema(usuario);
+    const contents: any[] = (Array.isArray(history) ? history.slice(-10) : []).map((h: any) => ({
+      role: h.role === "assistant" ? "model" : "user", parts: [{ text: String(h.content ?? "") }] }));
     contents.push({ role: "user", parts: [{ text: message }] });
-
-    async function llamarGemini(conTools: boolean) {
-      return await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents,
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          ...(conTools ? { tools: [{ google_search: {} }] } : {}),
-          generationConfig: { maxOutputTokens: 1200 },
-        }),
-      });
+    const usadas: string[] = [];
+    for (let ronda = 0; ronda < 5; ronda++) {
+      const r = await llamarGemini(contents, system);
+      if (!r.ok) return json({ error: "Error de Gemini (" + r.status + "): " + (await r.text()).slice(0, 400) }, 502);
+      const d = await r.json();
+      const parts: any[] = d?.candidates?.[0]?.content?.parts || [];
+      const llamadas = parts.filter((p) => p.functionCall);
+      if (!llamadas.length) {
+        const answer = parts.map((p) => p.text || "").join("\n").trim() || "No obtuve una respuesta.";
+        return json({ answer, herramientas: usadas });
+      }
+      contents.push({ role: "model", parts });   // se devuelve tal cual (incluye las firmas que pide Gemini)
+      const respuestas: any[] = [];
+      for (const p of llamadas) {
+        const { name, args } = p.functionCall;
+        usadas.push(name);
+        let resultado: any;
+        try { resultado = HERRAMIENTAS[name] ? await HERRAMIENTAS[name](args || {}, usuario) : { error: "Herramienta desconocida" }; }
+        catch (e) { resultado = { error: String(e) }; }
+        respuestas.push({ functionResponse: { name, response: { content: resultado } } });
+      }
+      contents.push({ role: "user", parts: respuestas });
     }
-
-    let geminiRes = await llamarGemini(true);
-    let sinBusquedaWeb = false;
-
-    // Si falla por cupo (429) probablemente sea la búsqueda web la que está
-    // limitada/requiere facturación. Reintentamos sin ella para no dejar al
-    // usuario sin respuesta — al menos contestará con el contexto interno.
-    if (geminiRes.status === 429) {
-      geminiRes = await llamarGemini(false);
-      sinBusquedaWeb = true;
-    }
-
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      return new Response(JSON.stringify({ error: "Error de Gemini: " + errText }), {
-        status: 502, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-
-    const data = await geminiRes.json();
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    let answer = parts.map((p: any) => p.text || "").join("\n\n").trim() || "No obtuve una respuesta.";
-    if (sinBusquedaWeb) {
-      answer += "\n\n(⚠️ La búsqueda web no está disponible en este momento — cupo gratis agotado o requiere facturación. Esta respuesta se basó solo en registros internos.)";
-    }
-
-    return new Response(JSON.stringify({ answer, usedInternalContext: encontrado, sinBusquedaWeb }), {
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
+    return json({ answer: "La consulta fue muy larga; intenta preguntarlo de forma más específica.", herramientas: usadas });
   } catch (e) {
-    return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
+    return json({ error: String(e) }, 500);
   }
 });

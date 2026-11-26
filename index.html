@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261126h";
+window.APP_BUILD = "20261126i";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -13439,7 +13439,7 @@ function btkGrupoCargo(cargo){
   return null;
 }
 var BTK_GRUPO_NOMBRE={equipos:"técnicos de equipos",apoyo:"técnicos de apoyo crítico",locativo:"auxiliares locativos"};
-function btkNormNombre(t){return String(t||"").replace(/\(.*?\)/g,"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();}
+function btkNormNombre(t){t=String(t||"");if(t.indexOf("·")>=0)t=t.split("·").pop();return String(t||"").replace(/\(.*?\)/g,"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();}
 // cargoPorNombre: nombre o usuario normalizado → cargo. Si no se sabe quién lo reportó, el pendiente le sale a todos los grupos.
 function btkPendientesPorGestionar(entries,u,cargoPorNombre){
   var orden={Alta:0,Media:1,Baja:2},out=[];
@@ -18581,7 +18581,7 @@ function SolAsignacion(p){
     onRechazar:(sol.asignado_a||sol.estado==="asignada"||sol.estado==="cerrada")?null:function(motivo,meta){return p.onRechazar(sol,motivo,meta);}}));
 }
 
-function RootApp(){var s=React.useState(null);var mod=s[0];var setMod=s[1];var u=React.useState(null);var rootUser=u[0];var setRootUser=u[1];React.useEffect(function(){if(mod){window.history.pushState({bussie:"module",mod:mod},"");var handler=function handler(e){setMod(null);window.history.pushState({bussie:"suite"},"");};window.addEventListener("popstate",handler);return function(){window.removeEventListener("popstate",handler);};}else{if(!window.history.state||!window.history.state.bussie){window.history.replaceState({bussie:"suite"},"");}}},[mod]);var modOk=!!mod&&accModuloPermitido(rootUser,mod);
+function RootApp(){var s=React.useState(null);var mod=s[0];var setMod=s[1];var u=React.useState(null);var rootUser=u[0];var setRootUser=u[1];window.__currentUser=rootUser;React.useEffect(function(){if(mod){window.history.pushState({bussie:"module",mod:mod},"");var handler=function handler(e){setMod(null);window.history.pushState({bussie:"suite"},"");};window.addEventListener("popstate",handler);return function(){window.removeEventListener("popstate",handler);};}else{if(!window.history.state||!window.history.state.bussie){window.history.replaceState({bussie:"suite"},"");}}},[mod]);var modOk=!!mod&&accModuloPermitido(rootUser,mod);
 React.useEffect(function(){if(mod&&rootUser&&!modOk)setMod(null);},[mod,modOk,rootUser]);
 var userMod=React.useMemo(function(){if(!rootUser)return rootUser;var mapa={almacen:"almacen",bitacora:"bitacora",mantenimientos:"mantenimientos",solicitudes_metrologia:"solicitudes"};return mapa[mod]?accUsuarioParaModulo(rootUser,mapa[mod]):rootUser;},[rootUser,mod]);
 var lk=React.useRef(0);if(!rootUser)return/*#__PURE__*/React.createElement(LoginScreen,{key:lk.current,onLogin:function onLogin(user){setMod(null);setRootUser(user);}});if(!modOk)return/*#__PURE__*/React.createElement(SuiteSelector,{onSelect:setMod,currentUser:rootUser,onLogout:function onLogout(){lk.current++;setRootUser(null);setMod(null);}});function handleLogout(){lk.current++;setRootUser(null);setMod(null);}if(mod==="almacen")return/*#__PURE__*/React.createElement(AlmacenApp,{onBack:function onBack(){setMod(null);},initialUser:userMod});if(mod==="bitacora")return/*#__PURE__*/React.createElement(BitacoraApp,{onBack:function onBack(){setMod(null);},initialUser:userMod});if(mod==="mantenimientos")return/*#__PURE__*/React.createElement(MantenimientosApp,{onBack:function onBack(){setMod(null);},initialUser:userMod});if(mod==="solicitudes_metrologia")return/*#__PURE__*/React.createElement(SolicitudesMetrologiaApp,{onBack:function onBack(){setMod(null);},initialUser:userMod});if(mod==="usuarios_accesos")return/*#__PURE__*/React.createElement(UsuariosModuloApp,{onBack:function onBack(){setMod(null);},initialUser:rootUser});if(mod==="indicadores")return/*#__PURE__*/React.createElement(IndicadoresApp,{onBack:function onBack(){setMod(null);},initialUser:rootUser});return null;}ReactDOM.render(React.createElement(RootApp),document.getElementById("root"));// ── Swipe-down global para cerrar cualquier .sheet ───────────────────────────
@@ -18631,7 +18631,7 @@ var lk=React.useRef(0);if(!rootUser)return/*#__PURE__*/React.createElement(Login
   <div id="bck-hdr">
     <div>
       <div class="t">🤖 Asistente Bussié</div>
-      <div class="s">Bitácora · Preventivos · Solicitudes · Web</div>
+      <div class="s">Pregúntame por tus mantenimientos, solicitudes, bitácora o almacén</div>
     </div>
     <button id="bck-hide" title="Ocultar la burbuja">Ocultar</button>
     <button id="bck-close">✕</button>
@@ -18664,7 +18664,7 @@ var lk=React.useRef(0);if(!rootUser)return/*#__PURE__*/React.createElement(Login
   }
 
   if (!msgsEl.childElementCount) {
-    addMsg('¡Hola! Soy el asistente de mantenimiento de Bussié. Pregúntame sobre fallas de equipos, órdenes, solicitudes o la bitácora — reviso primero los registros de la planta y, si no encuentro nada, busco en internet (siempre te digo de dónde salió la info).', 'bot');
+    addMsg('¡Hola! Soy el asistente de Bussié. Puedo consultar la app por ti, por ejemplo:\n• ¿Qué mantenimientos tengo este mes? ¿Cuáles me faltan?\n• ¿Qué solicitudes de mantenimiento tengo pendientes?\n• ¿Qué hizo César anoche en el turno?\n• Busca en la bitácora fallas de la caldera\n• ¿Hay artículos con stock bajo en el almacén?', 'bot');
   }
 
   async function enviar() {
@@ -18675,12 +18675,12 @@ var lk=React.useRef(0);if(!rootUser)return/*#__PURE__*/React.createElement(Login
     addMsg(text, 'user');
     history.push({ role: 'user', content: text });
     input.value = '';
-    const loadingEl = addMsg('Buscando en bitácora, preventivos y solicitudes…', 'bot', true);
+    const loadingEl = addMsg('Consultando la app…', 'bot', true);
     try {
       const res = await fetch(CHAT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history: history.slice(0, -1) })
+        body: JSON.stringify({ message: text, history: history.slice(0, -1), usuario: (function(u){ return u ? { nombre: u.nombre || u.username, username: u.username, cargo: u.cargo || '' } : null; })(window.__currentUser) })
       });
       const data = await res.json();
       loadingEl.remove();
