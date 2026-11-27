@@ -1127,7 +1127,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261127a";
+window.APP_BUILD = "20261127b";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -16494,18 +16494,22 @@ var ASIG_TABLAS=[
   {id:"ordenes",tabla:"mtto_ordenes",nombre:"Equipos",claves:function(o){return [["equipo",o.equipo_codigo]];},txt:function(o){return (o.equipo_codigo||"")+" · "+(o.equipo_desc||"");}},
   {id:"inspecciones",tabla:"mtto_inspecciones",nombre:"Áreas",claves:function(o){return [["area",o.area_codigo||o.area_nombre]];},txt:function(o){return (o.area_nombre||"")+(o.consecutivo?" · "+o.consecutivo:"");}},
   {id:"agua",tabla:"mtto_agua",nombre:"Agua purificada",claves:function(o){return [["equipo","AGUA "+o.sistema]];},txt:function(o){return "Agua "+o.sistema+" · "+o.actividad+" (sem. "+(AGUA_ROMANO[(o.semana||1)-1]||"")+")";}}];
-async function asigCargarAnio(anio){
+// Solo lo pendiente del mes, con las columnas necesarias y las tres tablas a la vez (antes era todo el año, una tras otra)
+var ASIG_COLS={ordenes:"equipo_codigo,equipo_desc",inspecciones:"area_codigo,area_nombre,consecutivo",agua:"sistema,actividad,semana"};
+async function asigCargarMes(anio,mes){
   var res={};
-  for(var i=0;i<ASIG_TABLAS.length;i++){
-    var t=ASIG_TABLAS[i],filas=[],desde=0;
-    while(true){
-      var r=await sb.from(t.tabla).select("*").eq("anio",anio).order("id").range(desde,desde+999);
-      if(r.error){filas=null;break;}
-      filas=filas.concat(r.data||[]);if(!r.data||r.data.length<1000)break;desde+=1000;
-    }
-    res[t.id]=filas||[];
-  }
+  await Promise.all(ASIG_TABLAS.map(async function(t){
+    var r=await sb.from(t.tabla).select("id,anio,mes,mes_reprogramado,estado,asignado_a,"+ASIG_COLS[t.id])
+      .eq("anio",anio).or("mes.eq."+mes+",mes_reprogramado.eq."+mes).not("estado","in","(ejecutado,rechazada)").range(0,4999);
+    res[t.id]=r.error?[]:(r.data||[]);
+  }));
   return res;
+}
+// Lo que ya está en memoria (pestañas abiertas) se muestra al instante mientras llega lo del servidor
+function asigDesdeMemoria(anio,ordenes){
+  var o=(ordenes||[]).filter(function(x){return x.anio===anio;});
+  var i=typeof INSP_CACHE!=="undefined"?INSP_CACHE[anio]:null,a=typeof AGUA_CACHE!=="undefined"?AGUA_CACHE[anio]:null;
+  return o.length&&i?{ordenes:o,inspecciones:i,agua:a||[]}:null;
 }
 function asigPendientesMes(datos,mes){
   var out=[];
@@ -16520,8 +16524,8 @@ function AsignacionMesPanel(p){
   var anio=p.anio,hoy=new Date(),me=p.currentUser;
   var quien=me&&(me.nombre||me.username)||null;
   var _m=S(anio===hoy.getFullYear()?hoy.getMonth()+1:1),mes=_m[0],setMes=_m[1];
-  var _d=S(null),datos=_d[0],setDatos=_d[1];
-  var _r=S(false),respOk=_r[0],setRespOk=_r[1];
+  var _d=S(function(){return asigDesdeMemoria(anio,p.ordenes);}),datos=_d[0],setDatos=_d[1];
+  var _r=S(!!RESP_CACHE),respOk=_r[0],setRespOk=_r[1];
   var _o=S(false),reemplazar=_o[0],setReemplazar=_o[1];
   var _b=S(null),ocupado=_b[0],setOcupado=_b[1];
   var _msg=S(null),msg=_msg[0],setMsg=_msg[1];
@@ -16532,13 +16536,14 @@ function AsignacionMesPanel(p){
   var _nf=S(""),plan=_nf[0],setPlan=_nf[1];                  // a quién van las que no tienen respaldo
   var _hi=S([]),novedades=_hi[0],setNovedades=_hi[1];
   var nombres=(p.usuarios||[]).map(function(u){return u.nombre||u.username;}).filter(Boolean).sort(function(a,b){return a.localeCompare(b,"es");});
+  var pedido=React.useRef(0);
   function cargar(){
-    setDatos(null);
-    asigCargarAnio(anio).then(setDatos);
-    sb.from("movimientos").select("item_name,usuario,created_at").eq("type","asignacion_novedad").order("created_at",{ascending:false}).limit(15).then(function(r){setNovedades(r.data||[]);});
+    var n=++pedido.current;
+    asigCargarMes(anio,mes).then(function(d){if(n===pedido.current)setDatos(d);});
   }
-  React.useEffect(function(){respCargar(true).then(function(){setRespOk(true);});},[]);
-  React.useEffect(cargar,[anio]);
+  React.useEffect(function(){Promise.resolve(respCargar(true)).then(function(){setRespOk(true);});
+    sb.from("movimientos").select("item_name,usuario,created_at").eq("type","asignacion_novedad").order("created_at",{ascending:false}).limit(15).then(function(r){setNovedades(r.data||[]);});},[]);
+  React.useEffect(cargar,[anio,mes]);
   function aviso(t,ok){setMsg({t:t,ok:ok!==false});setTimeout(function(){setMsg(null);},5000);}
   async function aplicar(grupos,etiqueta){
     // grupos: {tabla: {destino: {ids:[], extra:{}}}}
@@ -16665,7 +16670,7 @@ function MtoAdminSecciones(props){
   var contenido=
     sec==="formatos"?h("div",{className:"mto-admin"},h(AdminFMAN008Panel,null),h(AdminFMAN010Panel,null)):
     sec==="instructivos"?h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(AdminInstructivosPanel,null))):
-    sec==="asignacion"?h(AsignacionMesPanel,{anio:props.anio,usuarios:props.usuarios,currentUser:props.currentUser,onRecargar:props.onRecargar}):
+    sec==="asignacion"?h(AsignacionMesPanel,{anio:props.anio,ordenes:props.ordenes,usuarios:props.usuarios,currentUser:props.currentUser,onRecargar:props.onRecargar}):
     sec==="responsables"?h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(ResponsablesSeccion,{anio:props.anio,ordenes:props.ordenes,usuarios:props.usuarios,currentUser:props.currentUser}))):
     h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(AdminUsoBdPanel,null)),h(AdminBitacoraArchivoPanel,null),h(AdminFotosPanel,null));
   return h("div",null,
