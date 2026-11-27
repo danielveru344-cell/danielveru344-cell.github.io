@@ -83,12 +83,23 @@
       ]
     };
   };
+  // La configuración se guarda también en Supabase (bitacora_kv, clave "almacen_email_cfg") para que sea la MISMA
+  // en todos los computadores y celulares: el correo sale desde el navegador de quien pasa la solicitud a "Para Compra".
   window.setEmailConfig = function(cfg) {
     localStorage.setItem(EMAIL_CONFIG_KEY, JSON.stringify(cfg));
+    try { if (typeof btkSet === "function") btkSet("almacen_email_cfg", cfg); } catch(e) {}
+  };
+  window.cargarEmailConfigServidor = async function() {
+    try {
+      if (typeof btkGet !== "function") return window.getEmailConfig();
+      const v = await btkGet("almacen_email_cfg");
+      if (v && Array.isArray(v.correos)) { localStorage.setItem(EMAIL_CONFIG_KEY, JSON.stringify(v)); return v; }
+    } catch(e) {}
+    return window.getEmailConfig();
   };
 
   window.notificarCompra = async function(soli) {
-    const cfg = window.getEmailConfig();
+    const cfg = await window.cargarEmailConfigServidor();
     if (!cfg.habilitado) { console.log("📭 Notificación de correo desactivada."); return; }
     const destinos = (cfg.correos||[]).filter(c => c.activo && c.email && c.email.includes("@"));
     if (destinos.length === 0) { console.warn("⚠️ Sin correos destino activos."); return; }
@@ -1127,7 +1138,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261127b";
+window.APP_BUILD = "20261127c";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -7080,6 +7091,12 @@ function EmailConfigCard(_ref55) {
     setCfg(next);
     window.setEmailConfig(next);
   };
+  React.useEffect(function () {
+    if (!window.cargarEmailConfigServidor) return;
+    window.cargarEmailConfigServidor().then(function (v) {
+      if (v && v.correos) { setCfg(v); setEdits(v.correos.map(function (c) { return c.email; })); }
+    });
+  }, []);
   var toggleGlobal = function toggleGlobal() {
     var next = _objectSpread(_objectSpread({}, cfg), {}, {
       habilitado: !cfg.habilitado
