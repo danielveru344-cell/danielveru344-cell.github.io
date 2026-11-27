@@ -1138,7 +1138,7 @@ input,select,textarea,button{font-family:inherit;outline:none;}
 </style>
 <script>
 // Versión de la app: si en el servidor hay una más nueva, se recarga sola una vez (evita quedarse con la versión en caché).
-window.APP_BUILD = "20261127c";
+window.APP_BUILD = "20261127d";
 // ExcelJS y SheetJS (~1,8 MB) se cargan en diferido para que la app abra más rápido; antes de usarlas, la función espera a que estén listas.
 function asegurarLibs(nombres) {
   return new Promise(function (res) {
@@ -16380,6 +16380,56 @@ function cargaPrecargar(anio){
   cargaPrecargar._en=anio;
   progCargarAnio(anio).then(function(t){PROG_TAREAS_CACHE[anio]=t;}).catch(function(){}).then(function(){cargaPrecargar._en=null;});
 }
+// Ventana "Sin asignar" de Carga por técnico: deja escoger el técnico de cada actividad y guardar ahí mismo.
+var CARGA_TABLA={preventivo:"mtto_ordenes",inspeccion:"mtto_inspecciones",agua:"mtto_agua"};
+var CARGA_CLAVES={preventivo:function(o){return [["equipo",o.equipo_codigo]];},inspeccion:function(o){return [["area",o.area_codigo||o.area_nombre]];},agua:function(o){return [["equipo","AGUA "+o.sistema]];}};
+function CargaSinAsignar(p){
+  var h=React.createElement,S=React.useState;
+  var lista=(p.lista||[]).filter(function(t){return CARGA_TABLA[t.fuente];});
+  var nombres=(p.usuarios||[]).filter(function(u){return typeof accEsAsignable!=="function"||accEsAsignable(u,true);}).map(function(u){return u.nombre||u.username;}).filter(Boolean).sort(function(a,b){return a.localeCompare(b,"es");});
+  var _e=S(function(){var m={};lista.forEach(function(t){var hab=typeof respHabitual==="function"?respHabitual(CARGA_CLAVES[t.fuente](t.raw)):null;m[t.key]=hab&&hab.principal||"";});return m;}),elegido=_e[0],setElegido=_e[1];
+  var _g=S(false),guardando=_g[0],setGuardando=_g[1];
+  var _m=S(null),msg=_m[0],setMsg=_m[1];
+  var listos=lista.filter(function(t){return elegido[t.key];});
+  function todosA(n){if(!n)return;var m={};lista.forEach(function(t){m[t.key]=n;});setElegido(m);}
+  async function guardar(){
+    if(!listos.length)return;
+    setGuardando(true);setMsg(null);
+    var quien=window.__currentUser&&(window.__currentUser.nombre||window.__currentUser.username)||null,ahora=new Date().toISOString();
+    try{
+      var grupos={};
+      listos.forEach(function(t){var k=CARGA_TABLA[t.fuente]+"|"+elegido[t.key];(grupos[k]=grupos[k]||[]).push(t.raw.id);});
+      for(var k in grupos){
+        var par=k.split("|"),ids=grupos[k];
+        for(var i=0;i<ids.length;i+=200){
+          var r=await sb.from(par[0]).update({asignado_a:par[1],asignado_por:quien,fecha_asignacion:ahora}).in("id",ids.slice(i,i+200));
+          if(r.error)throw r.error;
+        }
+      }
+      registrarHistorial("asignacion_mes","Asignadas "+listos.length+" actividades sin asignar desde Carga por técnico",quien);
+      if(p.onGuardado)p.onGuardado(listos.length);
+    }catch(e){setMsg("No se pudo guardar: "+((e&&e.message)||e));}
+    setGuardando(false);
+  }
+  var selStyle={padding:"6px 8px",borderRadius:8,border:"1px solid var(--border)",fontFamily:"inherit",fontSize:12.5,background:"#fff",maxWidth:200};
+  return h("div",null,
+    h("div",{style:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",margin:"4px 0 10px"}},
+      h("span",{style:{fontSize:12.5,fontWeight:700,color:"var(--navy)"}},"Asignar todas a:"),
+      h("select",{value:"",onChange:function(ev){todosA(ev.target.value);},style:selStyle},[h("option",{key:"_",value:""},"Elegir…")].concat(nombres.map(function(n){return h("option",{key:n,value:n},n);})))),
+    h("div",{style:{fontSize:11.5,color:"var(--gray)",marginBottom:8}},"Si el equipo o área tiene responsable definido, ya viene escogido."),
+    lista.map(function(t){
+      var it=cargaItem(t);
+      return h("div",{key:t.key,style:{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:"1px solid var(--lighter)",fontSize:12.5}},
+        h("span",{style:{minWidth:80,fontWeight:700,color:"var(--navy)"}},it.cod||"—"),
+        h("span",{style:{flex:1,color:"#2b3a50"}},it.txt),
+        h("select",{value:elegido[t.key]||"",onChange:function(ev){var v=ev.target.value;setElegido(function(m){var n=Object.assign({},m);n[t.key]=v;return n;});},style:selStyle},
+          [h("option",{key:"_",value:""},"Sin asignar")].concat(nombres.map(function(n){return h("option",{key:n,value:n},n);}))));
+    }),
+    msg&&h("div",{style:{color:"#C0001A",fontSize:12.5,marginTop:8}},msg),
+    h("div",{style:{position:"sticky",bottom:0,background:"#fff",paddingTop:12,marginTop:6}},
+      h("button",{type:"button",className:"mto-btn prim",disabled:!listos.length||guardando,onClick:guardar,style:{width:"100%"}},guardando?"Guardando…":"Guardar ("+listos.length+" de "+lista.length+")")));
+}
+
 function CargaTecnicosPanel(p){
   var h=React.createElement,S=React.useState;
   var anio=p.anio,hoy=new Date();
@@ -16399,6 +16449,12 @@ function CargaTecnicosPanel(p){
     sb.from("responsables_actividad").select("tipo,clave,principal,respaldo").range(0,4999).then(function(r){setResp(r.error?[]:(r.data||[]));});
   },[]);
   function toggle(k){setAbiertos(function(a){var n=Object.assign({},a);n[k]=!n[k];return n;});}
+  function recargarTras(n){
+    setSel(null);
+    delete PROG_TAREAS_CACHE[anio];if(typeof INSP_CACHE!=="undefined")delete INSP_CACHE[anio];if(typeof AGUA_CACHE!=="undefined")delete AGUA_CACHE[anio];
+    progCargarAnio(anio).then(function(t){PROG_TAREAS_CACHE[anio]=t;setTareas(t);});
+    if(p.onRecargar)p.onRecargar();
+  }
   var chip=function(on,txt,onClick,key){return h("button",{key:key,type:"button",onClick:onClick,style:{padding:"7px 12px",borderRadius:10,cursor:"pointer",border:on?"2px solid var(--navy)":"1px solid var(--border)",background:on?"#EEF3F9":"#fff",color:"var(--navy)",fontFamily:"Montserrat,sans-serif",fontWeight:700,fontSize:12.5}},txt);};
   var cab=h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
     chip(vista==="mes","📅 Por mes",function(){setVista("mes");},"m"),
@@ -16449,7 +16505,8 @@ function CargaTecnicosPanel(p){
               h("div",{style:{fontSize:11.5,fontWeight:800,color:"var(--gray)",letterSpacing:.3,margin:"4px 0"}},f.ico+" "+f.corto.toUpperCase()+" ("+suyas.length+")"),
               suyas.map(function(t,i){var it=cargaItem(t);return fila(f.id+i,it.cod,it.txt,it.extra,cargaHecha(t)?"hecha":"pend");}));
           });
-          return tarjeta("p_"+nombre,nombre||"Sin asignar",lista.length,hechas+" hechas",detalle,nombre?null:"#FFF5F6",{hechas:hechas,total:lista.length},sub);
+          if(!nombre)detalle=h(CargaSinAsignar,{lista:lista.filter(function(t){return !cargaHecha(t);}),usuarios:p.usuarios,onGuardado:recargarTras});
+          return tarjeta("p_"+nombre,nombre||"Sin asignar",lista.length,hechas+" hechas",detalle,nombre?null:"#FFF5F6",{hechas:hechas,total:lista.length},nombre?sub:"Escoge el técnico de cada una y guarda");
         }),
         !personas.length&&h("div",{style:{color:"var(--gray)",fontSize:13}},"No hay preventivos en "+MTTO_MESES[mes-1]+".")));
   }
@@ -16500,7 +16557,7 @@ function ResponsablesSeccion(p){
   var b=function(id,txt){var on=sub===id;return h("button",{type:"button",onClick:function(){setSub(id);},style:{padding:"8px 14px",border:"none",borderBottom:on?"3px solid var(--navy)":"3px solid transparent",background:"none",cursor:"pointer",fontFamily:"Montserrat,sans-serif",fontWeight:800,fontSize:13,color:on?"var(--navy)":"var(--gray)"}},txt);};
   return h("div",{style:{background:"#fff",border:"1px solid var(--border)",borderRadius:16,padding:"14px 18px 20px",boxShadow:"0 1px 8px rgba(13,47,92,0.05)"}},
     h("div",{style:{display:"flex",gap:4,borderBottom:"1px solid var(--lighter)",marginBottom:14}},b("carga","📊 Carga por técnico"),b("tabla","⚙️ Configurar responsables")),
-    sub==="carga"?h(CargaTecnicosPanel,{anio:p.anio,usuarios:p.usuarios,ordenes:p.ordenes}):h(ResponsablesPanel,p));
+    sub==="carga"?h(CargaTecnicosPanel,{anio:p.anio,usuarios:p.usuarios,ordenes:p.ordenes,onRecargar:p.onRecargar}):h(ResponsablesPanel,p));
 }
 
 // ── Admin > Asignación: se asigna todo desde aquí ────────────────────────────────────────────
@@ -16688,7 +16745,7 @@ function MtoAdminSecciones(props){
     sec==="formatos"?h("div",{className:"mto-admin"},h(AdminFMAN008Panel,null),h(AdminFMAN010Panel,null)):
     sec==="instructivos"?h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(AdminInstructivosPanel,null))):
     sec==="asignacion"?h(AsignacionMesPanel,{anio:props.anio,ordenes:props.ordenes,usuarios:props.usuarios,currentUser:props.currentUser,onRecargar:props.onRecargar}):
-    sec==="responsables"?h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(ResponsablesSeccion,{anio:props.anio,ordenes:props.ordenes,usuarios:props.usuarios,currentUser:props.currentUser}))):
+    sec==="responsables"?h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(ResponsablesSeccion,{anio:props.anio,ordenes:props.ordenes,usuarios:props.usuarios,currentUser:props.currentUser,onRecargar:props.onRecargar}))):
     h("div",{className:"mto-admin"},h("div",{style:{gridColumn:"1/-1"}},h(AdminUsoBdPanel,null)),h(AdminBitacoraArchivoPanel,null),h(AdminFotosPanel,null));
   return h("div",null,
     h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}},
